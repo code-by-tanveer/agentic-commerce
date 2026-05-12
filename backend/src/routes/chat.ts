@@ -8,6 +8,7 @@ import { ToolRegistry } from '../services/toolRegistry.js';
 import { compareProductsTool } from '../services/tools/compareProducts.js';
 import { getPreferencesTool } from '../services/tools/getPreferences.js';
 import { getProductDetailsTool } from '../services/tools/getProductDetails.js';
+import { recommendOutfitTool } from '../services/tools/recommendOutfit.js';
 import { savePreferenceTool } from '../services/tools/savePreference.js';
 import { searchCatalogTool } from '../services/tools/searchCatalog.js';
 import { SseWriter } from '../stream/sseWriter.js';
@@ -35,7 +36,8 @@ const registry = new ToolRegistry()
   .register(getProductDetailsTool)
   .register(compareProductsTool)
   .register(savePreferenceTool)
-  .register(getPreferencesTool);
+  .register(getPreferencesTool)
+  .register(recommendOutfitTool);
 
 export async function chatRoutes(app: FastifyInstance) {
   app.post('/api/chat', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
@@ -79,11 +81,27 @@ export async function chatRoutes(app: FastifyInstance) {
     const writer = new SseWriter(reply);
     const controller = new AbortController();
 
-    const onClose = () => {
+    let abortedAlready = false;
+    const onClose = (reason: string) => {
+      if (abortedAlready) return;
+      abortedAlready = true;
+      // Architect carry-over verification (cycle-3.md): logs the FE-disconnect
+      // path so we can confirm abort propagation end-to-end. We listen on
+      // both `request.raw` and the underlying socket because Node's
+      // `IncomingMessage.on('close')` is not reliable for streaming POSTs in
+      // every environment (e.g. WSL2 kernels can deliver the FIN to the
+      // socket without re-emitting on the request).
+      request.log.info(
+        { sessionId: session.id, reason },
+        'client disconnected; aborting agent loop',
+      );
       controller.abort();
       writer.close();
     };
-    request.raw.on('close', onClose);
+    const onReqClose = () => onClose('req.close');
+    const onSocketClose = () => onClose('socket.close');
+    request.raw.on('close', onReqClose);
+    request.raw.socket?.on('close', onSocketClose);
 
     // Shape the FE-supplied messages into Groq's ChatCompletionMessageParam.
     // Cycle 1 only sends user + assistant text; richer shapes land later.
@@ -127,7 +145,8 @@ export async function chatRoutes(app: FastifyInstance) {
         // ignore
       }
     } finally {
-      request.raw.off('close', onClose);
+      request.raw.off('close', onReqClose);
+      request.raw.socket?.off('close', onSocketClose);
       writer.close();
     }
   });

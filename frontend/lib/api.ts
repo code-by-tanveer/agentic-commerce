@@ -1,4 +1,10 @@
-import type { Product } from '@/types/product';
+import type {
+  Product,
+  SavedOutfit,
+  ShortlistItem,
+  ShortlistLane,
+  ViewMode,
+} from '@/types/product';
 
 // ---------------------------------------------------------------------------
 // REST helpers around the Fastify backend. The streaming `/api/chat` endpoint
@@ -196,6 +202,195 @@ export async function deletePreference(
   if (!res.ok) {
     const body = await safeJson(res);
     throw new ApiError(res.status, body?.message ?? 'preference delete failed');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shortlist (Cycle 3) — three-lane (love/maybe/skip) drawer.
+//
+// The backend stores a `product_snapshot_json` per row so the share page
+// survives a merchant delist (ARCH §4); the FE always sends the snapshot
+// on PUT.
+// ---------------------------------------------------------------------------
+
+export async function fetchShortlist(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<ShortlistItem[]> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/shortlist`,
+    { signal },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'shortlist fetch failed');
+  }
+  const json = (await res.json()) as unknown;
+  // Tolerate either `{items: [...]}` or a bare array — small contract drift
+  // shouldn't kill the drawer.
+  if (Array.isArray(json)) return json as ShortlistItem[];
+  if (json && typeof json === 'object' && 'items' in (json as object)) {
+    return ((json as { items: ShortlistItem[] }).items) ?? [];
+  }
+  return [];
+}
+
+export async function putShortlistItem(
+  sessionId: string,
+  productId: string,
+  body: { lane: ShortlistLane; snapshot: Product },
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/shortlist/${encodeURIComponent(productId)}`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const errBody = await safeJson(res);
+    throw new ApiError(res.status, errBody?.message ?? 'shortlist write failed');
+  }
+}
+
+export async function deleteShortlistItem(
+  sessionId: string,
+  productId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/shortlist/${encodeURIComponent(productId)}`,
+    { method: 'DELETE', signal },
+  );
+  if (!res.ok) {
+    const errBody = await safeJson(res);
+    throw new ApiError(res.status, errBody?.message ?? 'shortlist delete failed');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Saved outfits (Cycle 3).
+// ---------------------------------------------------------------------------
+
+export async function fetchOutfits(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<SavedOutfit[]> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/outfits`,
+    { signal },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'outfits fetch failed');
+  }
+  const json = (await res.json()) as unknown;
+  if (Array.isArray(json)) return json as SavedOutfit[];
+  if (json && typeof json === 'object' && 'outfits' in (json as object)) {
+    return ((json as { outfits: SavedOutfit[] }).outfits) ?? [];
+  }
+  return [];
+}
+
+export interface PostOutfitBody {
+  anchorProductId: string;
+  items: Product[];
+  rationale?: string;
+}
+
+export async function postOutfit(
+  sessionId: string,
+  body: PostOutfitBody,
+  signal?: AbortSignal,
+): Promise<SavedOutfit> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/outfits`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const errBody = await safeJson(res);
+    throw new ApiError(res.status, errBody?.message ?? 'outfit save failed');
+  }
+  const json = (await res.json()) as unknown;
+  // Tolerate either `{outfit: {...}}` or a bare object.
+  if (json && typeof json === 'object' && 'outfit' in (json as object)) {
+    return (json as { outfit: SavedOutfit }).outfit;
+  }
+  return json as SavedOutfit;
+}
+
+export async function deleteOutfit(
+  sessionId: string,
+  outfitId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/outfits/${encodeURIComponent(outfitId)}`,
+    { method: 'DELETE', signal },
+  );
+  if (!res.ok) {
+    const errBody = await safeJson(res);
+    throw new ApiError(res.status, errBody?.message ?? 'outfit delete failed');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// View mode (Cycle 3) — persists across reloads via `sessions.view_mode`.
+// ---------------------------------------------------------------------------
+
+export async function getViewMode(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<ViewMode> {
+  // The backend exposes `viewMode` on the session record; we re-use the same
+  // endpoint the conversation panel hits on mount.
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}`,
+    { signal },
+  );
+  if (!res.ok) {
+    // Don't throw — the panel falls back to 'list'. Mode is a UX preference.
+    return 'list';
+  }
+  const json = (await res.json()) as unknown;
+  // Tolerate either `{session: {viewMode}}` or `{viewMode}` at root.
+  let mode: unknown;
+  if (json && typeof json === 'object') {
+    const obj = json as Record<string, unknown>;
+    if (obj.session && typeof obj.session === 'object') {
+      mode = (obj.session as Record<string, unknown>).viewMode;
+    } else {
+      mode = obj.viewMode;
+    }
+  }
+  return mode === 'collage' ? 'collage' : 'list';
+}
+
+export async function putViewMode(
+  sessionId: string,
+  mode: ViewMode,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/view-mode`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode }),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const errBody = await safeJson(res);
+    throw new ApiError(res.status, errBody?.message ?? 'view-mode write failed');
   }
 }
 

@@ -51,6 +51,18 @@ export interface ComparisonBlock {
   axes: string[];
 }
 
+// Cycle 3 — `outfit` SSE events render as a single OutfitBundle inside the
+// assistant message. The bundle is composition (anchor + 2-4 complementary
+// items + per-bundle rationale); per-item rationale strings ride on the
+// product's `reasoningChips` from the backend's `recommend_outfit` tool.
+export interface OutfitBlock {
+  type: 'outfit';
+  toolCallId: string;
+  anchorProductId: string;
+  items: NormalizedProduct[];
+  rationale: string;
+}
+
 export interface ErrorBlock {
   type: 'error';
   code: string;
@@ -63,6 +75,7 @@ export type Block =
   | ToolStatusBlock
   | ProductsBlock
   | ComparisonBlock
+  | OutfitBlock
   | ErrorBlock;
 
 export type MessageStatus = 'streaming' | 'done' | 'error';
@@ -212,6 +225,23 @@ function reducer(state: State, action: Action): State {
                   },
                 ],
               };
+            case 'outfit':
+              // Cycle 3 — push as a sub-block on the assistant message. Do
+              // NOT route through Shortlist; the user's explicit Save Outfit
+              // action is what persists items to the Love lane.
+              return {
+                ...m,
+                blocks: [
+                  ...m.blocks,
+                  {
+                    type: 'outfit',
+                    toolCallId: event.toolCallId,
+                    anchorProductId: event.anchorProductId,
+                    items: event.items,
+                    rationale: event.rationale,
+                  },
+                ],
+              };
             case 'error':
               return {
                 ...m,
@@ -226,7 +256,7 @@ function reducer(state: State, action: Action): State {
                   },
                 ],
               };
-            // 'done' handled by 'finalize'; 'preference_update', 'outfit',
+            // 'done' handled by 'finalize'; 'preference_update' forwarded above;
             // 'moodboard', 'reasoning_chip' arrive in later cycles — ignore.
             default:
               return m;

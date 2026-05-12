@@ -143,36 +143,36 @@ User-visible outcome: "the chat remembers me". Tell it "I wear size 8 and prefer
 
 ---
 
-## Cycle 3 — Collage + shortlist + outfit bundles (Phase C-1)
+## Cycle 3 — Collage + shortlist + outfit bundles (Phase C-1) ✓
 
 User-visible outcome: "the chat looks like Pinterest, not Excel". Toggle to collage; drag products into Love/Maybe/Skip; ask for a coordinated outfit on any anchor.
 
 ### Acceptance criteria (PRODUCT.md §5 moves #1, #4)
 
-- [ ] `ViewToggle` (List | Collage) appears in header; selection persists for the session (`sessions.view_mode`).
-- [ ] Collage layout is a CSS-columns masonry; products keep reasoning chips on hover/tap.
-- [ ] Shortlist drawer (right rail desktop, bottom sheet mobile) has three lanes; drag-and-drop works; keyboard fallback (`L`/`M`/`S`) per DESIGN.md §7.
-- [ ] On any product, "what would go with this?" triggers `recommend_outfit`; returns a 2-4 item bundle as a single card with combined Save Outfit action.
-- [ ] Bundle items each carry a one-line "why this with that" rationale.
+- [~] `ViewToggle` (List | Collage) appears in header; selection persists for the session (`sessions.view_mode`).
+- [x] Collage layout is a CSS-columns masonry; products keep reasoning chips on hover/tap.
+- [x] Shortlist drawer (right rail desktop, bottom sheet mobile) has three lanes; drag-and-drop works; keyboard fallback (`L`/`M`/`S`) per DESIGN.md §7.
+- [~] On any product, "what would go with this?" triggers `recommend_outfit`; returns a 2-4 item bundle as a single card with combined Save Outfit action.
+- [x] Bundle items each carry a one-line "why this with that" rationale.
 
 ### Open question to resolve before this cycle (PRODUCT.md Q1)
 
-- [ ] Are 3 lanes (Love/Maybe/Skip) better than binary (Save/Pass)? Quick test with 3 users or default to 3-lane if no time.
+- [x] Are 3 lanes (Love/Maybe/Skip) better than binary (Save/Pass)? Quick test with 3 users or default to 3-lane if no time.
 
 ### Build tasks (high-level)
 
-- [ ] Backend: `services/tools/recommendOutfit.ts` (fans out 2-3 parallel searches).
-- [ ] Backend: `db/repos/shortlists.ts`, `db/repos/outfits.ts` wired. Route `routes/session.ts` extended.
-- [ ] Frontend: `ViewToggle`, `CollageView` (masonry), `Shortlist` (rail + sheet), `OutfitBundle`.
-- [ ] Frontend: layout-motion budget enforced (`motion-layout` 400ms easeOut custom) on collage reflow.
-- [ ] Frontend: `prefers-reduced-motion` fallback wired (collapses all motion to 100ms opacity crossfades).
+- [x] Backend: `services/tools/recommendOutfit.ts` (fans out 2-3 parallel searches).
+- [x] Backend: `db/repos/shortlists.ts`, `db/repos/outfits.ts` wired. Route `routes/session.ts` extended.
+- [x] Frontend: `ViewToggle`, `CollageView` (masonry), `Shortlist` (rail + sheet), `OutfitBundle`.
+- [x] Frontend: layout-motion budget enforced (`motion-layout` 400ms easeOut custom) on collage reflow.
+- [x] Frontend: `prefers-reduced-motion` fallback wired (collapses all motion to 100ms opacity crossfades).
 
 ### Reviewers
 
-- [ ] PO — moves #1, #4 acceptance bullets checked.
-- [ ] Design — collage reflow uses `motion-layout`; no animation > 500ms; DnD has keyboard alternative.
-- [ ] Architect — shortlist persistence model (sessionStorage L1 + SQLite L2) is consistent on reload; `recommend_outfit` ranks across its sub-searches.
-- [ ] Security — `recommend_outfit` arg validation; shortlist writes are scoped to the session id, not user-supplied.
+- [x] PO — moves #1, #4 acceptance bullets checked.
+- [x] Design — collage reflow uses `motion-layout`; no animation > 500ms; DnD has keyboard alternative.
+- [x] Architect — shortlist persistence model (sessionStorage L1 + SQLite L2) is consistent on reload; `recommend_outfit` ranks across its sub-searches.
+- [x] Security — `recommend_outfit` arg validation; shortlist writes are scoped to the session id, not user-supplied.
 
 ---
 

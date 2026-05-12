@@ -6,6 +6,11 @@ import { ChevronDown, ExternalLink, Store } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
+import {
+  DRAG_MIME,
+  encodeDragPayload,
+  useOptionalShortlist,
+} from '@/hooks/useShortlist';
 import { ProductImage } from './ProductImage';
 import { VariantPicker } from './VariantPicker';
 import { ReasoningChips } from './ReasoningChips';
@@ -24,6 +29,11 @@ export function ProductCard({ product, index = 0 }: Props) {
   // DESIGN.md §6 / §7 — prefers-reduced-motion collapses all motion to a 100ms
   // opacity-only crossfade. Wired at the ProductCard level per the Cycle 1 brief.
   const reduce = useReducedMotion();
+  // Cycle 3 — DnD source + keyboard fallback L/M/S (DESIGN.md §7). Optional
+  // because tests / story environments may mount cards without a
+  // ShortlistProvider; the keyboard handler simply no-ops in that case.
+  const shortlist = useOptionalShortlist();
+  const [ariaMsg, setAriaMsg] = useState('');
 
   const selectedVariant = product.variants?.find((v) => v.id === selectedVariantId);
   const checkoutUrl = selectedVariant?.checkoutUrl || product.checkoutUrl;
@@ -45,20 +55,70 @@ export function ProductCard({ product, index = 0 }: Props) {
     ? { duration: 0.1 }
     : { duration: 0.3, delay: Math.min(index, 5) * 0.04, ease: 'easeOut' as const };
 
+  function onNativeDragStart(e: React.DragEvent<HTMLElement>) {
+    e.dataTransfer.setData(
+      DRAG_MIME,
+      encodeDragPayload({ productId: product.id, snapshot: product }),
+    );
+    e.dataTransfer.effectAllowed = 'copy';
+  }
+  // Framer Motion overloads `onDragStart` for its own pointer-drag gesture
+  // (signature `(event, info) => void`), which trips TS even though we never
+  // enable `drag`. Forward the native handler through a spread so framer
+  // doesn't see it on the typed prop bag — it still lands on the DOM node
+  // because motion forwards unrecognised props.
+  const dndProps = {
+    draggable: true,
+    onDragStart: onNativeDragStart,
+  } as unknown as Record<string, unknown>;
+
+  function onCardKeyDown(e: React.KeyboardEvent<HTMLElement>) {
+    // Don't hijack keys inside a focused input or button — `e.target` is the
+    // article itself when the user is on the card stop. The inner expand
+    // <button> handles Enter/Space natively; we only need the L/M/S fallback.
+    const target = e.target as HTMLElement | null;
+    const isCardSelf = target === e.currentTarget;
+    if (!isCardSelf) return;
+    if (e.key === 'L' || e.key === 'M' || e.key === 'S') {
+      if (!shortlist) return;
+      const lane = e.key === 'L' ? 'love' : e.key === 'M' ? 'maybe' : 'skip';
+      e.preventDefault();
+      void shortlist.addToLane(product.id, lane, product);
+      setAriaMsg(
+        `Saved to ${lane === 'love' ? 'Love' : lane === 'maybe' ? 'Maybe' : 'Skip'}`,
+      );
+    }
+  }
+
   return (
     <motion.article
       layout={!reduce}
       initial={entryInitial}
       animate={entryAnimate}
       transition={entryTransition}
+      // Cycle 3 — drag source (native HTML5 DnD, no extra dep) + keyboard
+      // fallback. The card itself is focusable so `L`/`M`/`S` work the moment
+      // the user tabs to it. `dndProps` are spread via a type-bypass because
+      // framer's `onDragStart` is its own gesture (see comment above).
+      {...dndProps}
+      tabIndex={0}
+      onKeyDown={onCardKeyDown}
       className={cn(
         'group overflow-hidden rounded-2xl bg-white shadow-soft transition hover:shadow-lift',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
       )}
     >
+      {/* aria-live region for the L/M/S fallback (DESIGN.md §7). */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {ariaMsg}
+      </span>
       <button
         onClick={() => setExpanded((x) => !x)}
         className="flex w-full items-stretch gap-3 p-3 text-left"
         aria-expanded={expanded}
+        // The card is the keyboard / drag entrypoint. The expand button stays
+        // tabbable (Enter/Space) but is not a drag source itself.
+        draggable={false}
       >
         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
           <ProductImage src={product.images[0]} alt={product.title} />

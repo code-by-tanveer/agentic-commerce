@@ -4,6 +4,7 @@ import { AlertCircle, RotateCcw } from 'lucide-react';
 import type { Block } from '@/hooks/useConversation';
 import { ProductCardGroup } from '../product/ProductCardGroup';
 import { ComparisonTable } from '../product/ComparisonTable';
+import { OutfitBundle } from '../product/OutfitBundle';
 import { ToolStatus } from './ToolStatus';
 
 // Stateless. Walks blocks in arrival order and dispatches each to its
@@ -27,7 +28,12 @@ export function MessageRenderer({ blocks, onRetry }: Props) {
 }
 
 function blockKey(b: Block, i: number): string {
-  if (b.type === 'tool_status' || b.type === 'products' || b.type === 'comparison') {
+  if (
+    b.type === 'tool_status' ||
+    b.type === 'products' ||
+    b.type === 'comparison' ||
+    b.type === 'outfit'
+  ) {
     return `${b.type}:${b.toolCallId}`;
   }
   return `${b.type}:${i}`;
@@ -61,6 +67,17 @@ function BlockView({ block, onRetry }: { block: Block; onRetry?: () => void }) {
 
     case 'comparison':
       return <ComparisonTable products={block.products} axes={block.axes} />;
+
+    case 'outfit':
+      // OutfitBundle expects the existing FE Product shape; NormalizedProduct
+      // is structurally compatible (matches Cycle 1's product-block coercion).
+      return (
+        <OutfitBundle
+          anchorProductId={block.anchorProductId}
+          items={block.items as never}
+          rationale={block.rationale}
+        />
+      );
 
     case 'error':
       return (

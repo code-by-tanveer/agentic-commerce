@@ -4,12 +4,12 @@ This file is the resume key for the multi-agent build loop. Both the in-session 
 
 | field | value |
 |---|---|
-| `cycle` | 2 |
+| `cycle` | 3 |
 | `step` | ready_for_next_cycle |
-| `ready_at` | 2026-05-12T19:35:00Z |
-| `last_updated` | 2026-05-12T19:35:00Z |
+| `ready_at` | 2026-05-12T19:53:00Z |
+| `last_updated` | 2026-05-12T19:53:00Z |
 | `last_actor` | process-manager |
-| `next_action` | Pacer advances to Cycle 3 (Phase C-1: collage view + shortlist + outfit bundles) on its next firing (≥60s after `ready_at`). |
+| `next_action` | Backend + frontend engineers dispatched in parallel for Phase C-1. On return: QA (include architect-carry-over disconnect smoke), then 4 reviewers, must-fixes, retrospective, commit. |
 | `pacer` | recurring cron 99ac7dfc every 3 min (`2,5,8,…,59`); advances loop only when `step: ready_for_next_cycle` AND `ready_at` ≥ 60s old. |
 
 ## Cycle history (latest first)

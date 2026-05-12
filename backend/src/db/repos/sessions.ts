@@ -89,3 +89,24 @@ export async function touchSession(id: string): Promise<void> {
   touchStmt().run(new Date().toISOString(), id);
   return Promise.resolve();
 }
+
+const selectViewModeStmt = () =>
+  db.prepare<[string]>('SELECT view_mode FROM sessions WHERE id = ?');
+const updateViewModeStmt = () =>
+  db.prepare<[string, string, string]>(
+    'UPDATE sessions SET view_mode = ?, updated_at = ? WHERE id = ?',
+  );
+
+export async function getViewMode(sessionId: string): Promise<'list' | 'collage'> {
+  const row = selectViewModeStmt().get(sessionId) as { view_mode: string } | undefined;
+  if (!row) return Promise.resolve('list');
+  return Promise.resolve(row.view_mode === 'collage' ? 'collage' : 'list');
+}
+
+export async function setViewMode(
+  sessionId: string,
+  mode: 'list' | 'collage',
+): Promise<void> {
+  updateViewModeStmt().run(mode, new Date().toISOString(), sessionId);
+  return Promise.resolve();
+}

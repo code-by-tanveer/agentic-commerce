@@ -10,6 +10,7 @@ import {
   PREFERENCE_LABEL,
   usePreferences,
 } from '@/hooks/usePreferences';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 // ---------------------------------------------------------------------------
 // PreferencesCard — Cycle 2.
@@ -453,52 +454,10 @@ function BottomSheet({
   const sheetRef = useRef<HTMLDivElement | null>(null);
 
   // Modal a11y per DESIGN.md §7: focus trap + Escape to close + restore focus
-  // to the previously-focused element on unmount. Cycle 2 design-review fix.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    function focusables(): HTMLElement[] {
-      if (!sheetRef.current) return [];
-      return Array.from(
-        sheetRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      );
-    }
-
-    // Move focus into the sheet on open — last focusable (the "Done" button)
-    // is the most useful starting point on mobile keyboards.
-    const items = focusables();
-    items[items.length - 1]?.focus();
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const fs = focusables();
-      if (fs.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = fs[0];
-      const last = fs[fs.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previouslyFocused?.focus?.();
-    };
-  }, [onClose]);
+  // to the previously-focused element on unmount. Cycle 2 landed this inline;
+  // Cycle 3 refactor extracts the pattern into `useFocusTrap` so the
+  // Shortlist mobile sheet can reuse it verbatim.
+  useFocusTrap(sheetRef, { enabled: true, onClose, initialFocus: 'last' });
 
   const scrimT = reduced ? { duration: 0.1 } : { duration: 0.2, ease: 'easeOut' as const };
   const sheetT = reduced ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const };

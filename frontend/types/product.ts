@@ -61,3 +61,29 @@ export interface Product {
   reasoningChips?: ReasoningChip[];
   merchantInfo?: MerchantInfo;
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 3 — Shortlist / view-mode / outfits.
+// ---------------------------------------------------------------------------
+
+export type ShortlistLane = 'love' | 'maybe' | 'skip';
+
+export interface ShortlistItem {
+  productId: string;
+  lane: ShortlistLane;
+  snapshot: Product;
+  // Wire layout: backend persists `addedAt` as an ISO string. We keep the
+  // wire shape permissive (string | number) so a future change to epoch ms
+  // doesn't break the panel render.
+  addedAt: string | number;
+}
+
+export interface SavedOutfit {
+  id: string;
+  anchorProductId: string;
+  items: Product[];
+  savedAt: string | number;
+  rationale?: string;
+}
+
+export type ViewMode = 'list' | 'collage';

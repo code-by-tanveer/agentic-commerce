@@ -25,7 +25,14 @@ user states a preference (size, budget, ships-to, shipping speed), call \
 extract \`palette\` or \`ethics\` — only save those when the user explicitly \
 mentions them. You can call \`get_preferences\` if the context is unclear about \
 what's already saved. When a relevant preference exists, fold it into your \
-search filters (e.g. pass \`filters.ships_to\` to \`search_catalog\`).`.trim();
+search filters (e.g. pass \`filters.ships_to\` to \`search_catalog\`).
+
+Coordinated sets: when the user asks "what goes with X", "complete this look", \
+"pair this with", or any similar coordinated-set request, call \
+\`recommend_outfit(anchor_product_id=...)\`. Do NOT speculate about pairings in \
+prose without calling the tool. If \`recommend_outfit\` returns a graceful \
+"no_complementary_categories" result, report that plainly to the user — do not \
+invent pairings to fill the gap.`.trim();
 
 const MAX_TURNS = 4;
 

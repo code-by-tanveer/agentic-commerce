@@ -18,6 +18,15 @@ export class SseWriter {
     // Send headers eagerly so the client opens the stream now, not after the
     // first byte of data.
     reply.raw.flushHeaders?.();
+    // Emit an opening comment line so Node treats the response body as
+    // started — this is what makes the underlying socket's 'close' event
+    // fire reliably when the client disconnects mid-stream (vs being
+    // buffered indefinitely until the first real write).
+    try {
+      reply.raw.write(': open\n\n');
+    } catch {
+      // best effort
+    }
 
     this.pingTimer = setInterval(() => {
       if (this.closed) return;
