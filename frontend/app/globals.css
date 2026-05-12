@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  color-scheme: light;
+}
+
+html, body {
+  background: #f7f7f5;
+  color: #101010;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer utilities {
+  .grain {
+    position: relative;
+  }
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: multiply;
+    background-image:
+      radial-gradient(rgba(16, 16, 16, 1) 1px, transparent 1px),
+      radial-gradient(rgba(16, 16, 16, 1) 1px, transparent 1px);
+    background-size: 3px 3px, 7px 7px;
+    background-position: 0 0, 1px 2px;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(16, 16, 16, 0.12);
+    border-radius: 999px;
+  }
+}
