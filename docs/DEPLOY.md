@@ -59,7 +59,7 @@ Answer the prompts:
 ### Persistent volume for SQLite
 
 ```bash
-fly volumes create agentic_data --size 1 --region <same-region-as-app>
+fly volumes create agentic_data --size 3 --region <same-region-as-app>
 ```
 
 Then in `backend/fly.toml` add a mount stanza (Fly may have prefilled most of this):
@@ -71,6 +71,8 @@ Then in `backend/fly.toml` add a mount stanza (Fly may have prefilled most of th
 ```
 
 The destination `/data` matches the `DB_PATH` and `UPLOAD_DIR` env values below. Migrations run automatically on boot; the SQLite file lands at `/data/agentic.db` and uploads at `/data/uploads`.
+
+**Sizing rationale.** 3 GB is the floor per the architect-ops Round-1 audit: the SQLite file at the 90-day TTL ceiling plus 24 hours of peak uploads (8 MB × 5 req/min/IP × N IPs) fits well under 3 GB but blows past 1 GB on a bad-actor day. Cheap on Fly; would rather over-provision once than fight a runtime `ENOSPC` while the emergency-purge path is firing.
 
 ### Backups & disaster recovery
 
@@ -85,7 +87,7 @@ Stage 1 leans on Fly's built-in volume snapshots. polish-round-2 T2.18 makes the
 - **Restore.** Create a new volume from the snapshot id, then swap the app's mount:
   ```bash
   fly volumes create agentic_data_restore \
-    --snapshot-id <snapshot-id> --size 1 --region <region>
+    --snapshot-id <snapshot-id> --size 3 --region <region>
   ```
   Update `fly.toml`'s `[[mounts]] source` to the restored volume name and `fly deploy`.
 - **Stage-2 trigger.** If RPO/RTO requirements tighten (sub-day recovery, off-region durability), add `litestream` replication of `/data/agentic.db` to S3. Cheap enough at Stage 2; overkill today.
@@ -103,6 +105,12 @@ fly secrets set \
 ```
 
 `IP_HASH_SALT` and `UPLOAD_SIGNING_SECRET` are independent (see ADR / ARCHITECTURE §9). Do not reuse the same value across both.
+
+**Secret rotation procedure.**
+
+- **`UPLOAD_SIGNING_SECRET`** can be rotated freely. The only side effect: every signed-image URL minted before the rotation will fail verification (24h TTL on every URL anyway, so impact is bounded to the next 24h of pasted-image sessions, which will see a single "image expired, paste again" error). Rotate with: `fly secrets set UPLOAD_SIGNING_SECRET=$(openssl rand -hex 32) && fly deploy`.
+- **`IP_HASH_SALT`** is a **one-way break**. Rotating it severs the correspondence between historical `sessions.ip_hash` values and post-rotation log lines — abuse forensics across the rotation boundary becomes impossible. Plan rotation only at user-data-purge boundaries (e.g. when a Stage-2 ADR re-opens the 90-day TTL). A two-salt window with `salt_epoch INTEGER` on `sessions` is the long-term answer; not required at Stage 1.
+- **`GROQ_API_KEY`** rotates instantly via `fly secrets set` — no DB-side coupling, no restart-loop concern beyond a single graceful-restart cycle.
 
 ### Non-secret env
 
@@ -133,6 +141,16 @@ Fly's default `[[services.http_checks]]` should hit `/health`. If `fly launch` d
 ```
 
 The backend exposes `GET /health` returning `{ ok: true }`. This is **liveness-only** — it confirms the Fastify process is up, nothing more. A richer `/ready` probe (Groq + MCP reachability with 1s timeouts, 10s cache) is a Stage-2 add.
+
+### Runbook — Groq daily quota exhausted
+
+Symptoms: every `POST /api/chat` returns the sanitized "Something went wrong on our side. Try again?" error block; backend logs show repeated `429 Too Many Requests` from Groq with a `retry-after` pointing to the next UTC reset (typically 09:10 UTC). The healthcheck stays green because `/health` doesn't touch Groq — only chat traffic fails.
+
+Operator playbook (in order):
+1. **Confirm it's quota, not a key issue.** `fly logs | grep "groq"` — look for `429` with `retry-after`. If it's `401`, rotate `GROQ_API_KEY` (`fly secrets set GROQ_API_KEY=…`) instead.
+2. **Status page banner.** Set `STATUS_BANNER="Search is briefly rate-limited — back shortly."` via `fly secrets set` so the frontend renders it inline above the InputBar; clear it once traffic recovers.
+3. **Bridge with the 8B fallback.** `fly secrets set GROQ_MODEL=llama-3.1-8b-instant` to swap the primary off the 70B quota; reverse once the 70B quota resets. Quality drops noticeably for `style` intents; acceptable for a quota window, not a steady state.
+4. **If we keep hitting this in a single week**, file a Groq paid-tier upgrade ticket — Stage-2 trigger per `ARCHITECTURE.md` §7. Don't normalize the fallback model as the primary; the 8B path is a relief valve, not a destination.
 
 ### Auto-scaling — keep it single-machine for now
 

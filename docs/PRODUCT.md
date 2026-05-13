@@ -41,17 +41,25 @@ Agentic Commerce is a conversational shopping companion built on the Shopify Cat
 
 ## 4. North-star metric
 
-**% of sessions in which the user shortlists ≥2 distinct products** (drags into Love/Maybe lanes, or explicitly saves).
+**% of sessions in which the user shortlists ≥2 distinct products** (drags / taps into Love or Maybe lanes, or explicitly saves).
 
 Why this and not GMV / click-through / time-on-site:
 - It measures *deciding*, not browsing or buying. Browsing is cheap; buying is downstream and noisy (we don't own checkout).
 - It penalises both "user got nothing useful" (0 shortlisted) and "user got one obvious answer they'd have found anyway" (1 shortlisted).
 - It rewards the moat: visual collage + reasoning chips + memory should make shortlisting *feel earned*, not random.
 
-### Supporting metrics
+The PO considered making this conjunctive ("shortlist ≥2 AND tap ≥1 chip detail" — rewards deciding-with-reasoning). Rejected: a single clean metric is easier to react to than a compound one; chip-tap rate is captured below as a guard.
+
+### Launch thresholds (from the market-analysis 30-day sequence)
+
+- **≥ 35%** sustained over a 7-day rolling window → **scale signal**: the moat works for the wedge persona; double down on distribution.
+- **20–34%** sustained → **iterate signal**: the product works for *some* users; focus polish + segment narrowing before more distribution.
+- **< 20%** sustained → **pivot signal**: the seven-move bundle isn't landing for the generalist Mara wedge; narrow to a single vertical (home or wedding per market-analysis-2026-05.md § "Target segments").
+
+### Supporting / guard metrics
 
 - **Median time-to-first-shortlist** (seconds from session start). Target: < 90s. Reflects whether the agent gets to "good enough to consider" fast.
-- **Reasoning-chip tap rate** (taps per product card shown). Target: ≥ 0.3. If users never tap the chips, the transparency move isn't earning its space — kill or redesign.
+- **Reasoning-chip tap rate** (taps per product card shown). **Guard, not north-star.** Target: ≥ 0.3. If users never tap the chips, the transparency move isn't earning its space — kill or redesign.
 - **Session share rate** (`/s/[id]` opens per session). Target: ≥ 5%. Distribution loop health.
 
 ---
@@ -64,16 +72,16 @@ These are the moat. Every cycle review checks the relevant subset against PASS/F
    *Acceptance:* The same product result set can be toggled between list view and a Pinterest-style masonry collage; the toggle persists for the session; products in collage retain their reasoning chips and merchant info on hover/tap.
 
 2. **Reasoning chips on every product.**
-   *Acceptance:* Every rendered product card shows ≥2 chips computed from current preferences + product metadata (e.g. "size 8 match", "ships from EU", "−42% vs MSRP"); each chip is tappable and reveals a one-sentence `detail`; chips degrade silently when data is missing (never show a chip with no backing data).
+   *Acceptance:* Every rendered product card shows ≥2 chips computed from current preferences + product metadata. The chip vocabulary is closed: `size_match`, `discount`, `price` (over-budget warning), `fast_shipping` (merchant ships in ≤3 days), `ships_to_match` (merchant ships to the user's preferred country — see ADR-0005), `ethics` (closed taxonomy: sustainable, fair-trade, organic, b-corp, women-owned, small-batch, vegan, recycled), `shipping`, `low_stock`. Each chip is tappable and reveals a one-sentence `detail`; chips degrade silently when data is missing (never show a chip with no backing data). Ranking honors `RANK` in `reasoning.ts`.
 
 3. **Persistent preference memory card.**
-   *Acceptance:* A visible "About you" panel shows the agent's current understanding (size, budget, palette, ethics, shipping prefs); every field is inline-editable; edits round-trip to SQLite and are reflected in the next agent turn within one tool call; preferences survive a hard page reload in the same session.
+   *Acceptance:* A visible "About you" panel shows the agent's current understanding. Closed preference vocabulary: `size`, `budget`, `ships_to`, `ships_from`, `shipping_speed`, `palette`, `ethics` (array of taxonomy values), `shopping_for` (gift-recipient indicator — see §7 cycle goals). Every field is inline-editable; edits round-trip to SQLite and are reflected in the next agent turn within one tool call; preferences survive a hard page reload in the same session.
 
 4. **Outfit / bundle completion.**
-   *Acceptance:* On any product, the user can ask "what would go with this?" (or tap an affordance) and receive a 2–4 item bundle rendered as a single coordinated card with a combined "save outfit" action; bundles are not just three random products — each item carries a one-line "why this with that" rationale.
+   *Acceptance:* On any product, the user can ask "what would go with this?" or tap the Pair-with affordance and receive a 2–4 item bundle rendered as a single coordinated card with a combined "save outfit" action. Bundles are not just three random products — each item carries a one-line "why this with that" rationale derived from real catalog data (shared merchant / matching tag / similar price band / shared shipsTo region); rationales are omitted, not invented, when no signal exists.
 
 5. **Merchant transparency cards.**
-   *Acceptance:* Expanding any product card surfaces seller name, returns policy summary, shipping-days estimate, customer rating, and (where available) a carbon-shipping note; absent fields show "merchant didn't publish this" rather than a blank or a fake number.
+   *Acceptance:* Expanding any product card surfaces seller name, returns policy badge, shipping-days estimate, customer rating + review count, country-of-origin ("Made in {x}"), the markets the merchant ships to (per ADR-0005), and (where available) a carbon-shipping note. Absent fields show "merchant didn't publish this" rather than a blank or a fake number. The merchant block reads as a single trust-instrument, not a data dump.
 
 6. **Photo → style search.**
    *Acceptance:* The user can paste/drop an image into the input bar; within 5s the agent shows the extracted attributes (as editable chips) and a result set; if vision extraction fails or returns low confidence, the agent says so and asks a clarifying question rather than guessing.
@@ -95,6 +103,9 @@ Be ruthless. If a feature isn't on this list and isn't in the seven moves, we do
 - **No "AI personality" / mascot.** Granola's "invisible AI" principle. The agent is a quiet professional, not a chirpy assistant with a name and emoji.
 - **No price-tracking, deal-alert, or BNPL features.** That's Klarna/Honey territory. Stepping into it dilutes positioning. Revisit only post-launch.
 - **No multi-turn negotiation with merchants.** No "ask the seller for a discount" loop. Out of scope; legally and operationally messy.
+- **No CJK / non-Latin font fetch on every request.** The OG image route fetches Instrument Serif + Noto Sans JP at module-cache time (cold spin only). Pan-CJK + Devanagari + Arabic are out of scope until Y2 i18n bundles justify the bandwidth — confirmed in `frontend/app/api/og/route.tsx`. We accept that the OG card for Hangul / Devanagari gist text falls back to system serif until then; the page itself renders fine (browser fonts).
+- **No persistent accounts before sustained 5k MAU.** The anti-account stance in §6 is correct at our reach. Trigger to revisit (Q7): month-12 MAU > 5k sustained. Until then, anonymous sessions + cookie are the identity; an opt-in Pro tier with cross-device sync waits behind an ADR re-opening this stance.
+- **No silent IP-geo inference.** We never use `request.ip` to set `prefs.ships_to`. The user's shipping country comes from explicit preference, the request's `Accept-Language` header, or the cookie state — in that order. Per ADR-0005 + Aleksey's R4 audit: silent geolocation is the kind of "AI assumes" the trust-led wedge actively distrusts.
 
 ---
 
@@ -110,18 +121,22 @@ One line per cycle, framed as user-visible outcomes. Implementation tasks belong
 - **Cycle 5 — Phase D:** "I can show this to a friend." User hits "share session"; a polished public lookbook page opens with their shortlist, merchants, and recap, OG-tagged for clean previews on iMessage / Twitter / Slack. Mobile polish + a11y done.
 - **Cycle 6 — Hardening:** No new visible features. Stream latency, error states, Lighthouse ≥90 mobile, security review clean. The app feels *finished*.
 
-### Beyond Cycle 6 (Stage 2, post-launch)
+### Beyond Cycle 6 — observe → defend → monetize → specialise
 
-The seven UX moves are committed through Cycle 6; cycle-by-cycle planning for post-launch lives in a future `docs/POST_LAUNCH.md` to be authored after the Day-30 readout. Two strategic frames inform what we'll prioritise then:
+The seven UX moves are committed through Cycle 6; cycle-by-cycle planning for post-launch lives in a future `docs/POST_LAUNCH.md` to be authored after the Day-30 readout. The arc we expect:
 
-**What we'll commoditize on (don't defend these as moats — ship them well, then stop spending on them):**
-- **Move #6, photo → style search.** Perplexity shipped Snap to Shop in 2026; Daydream shipped iOS-26 screenshot-anywhere. The capability is now table stakes. We differentiate on the *visible, editable extraction chips* (you can see and correct what the agent extracted), not on having a vision feature.
-- **Move #3, persistent memory.** Perplexity closed this gap in 2026. We differentiate on the *visible, editable PreferencesCard* (transparency-of-memory), not on memory itself.
+**1. Observe (Days 1–30 post-launch).** No new cycles. Run the launch sequence in `docs/walkthroughs/launch.md` §4. Watch the north-star (≥35% / 20–34% / <20% triggers in §4). Resist the temptation to ship.
 
-**What we'll defend (the uncontested surfaces — invest deeper here in Stage 2):**
-- **Move #4, outfit / bundle completion.** Zero of the top-6 competitors ship this as a first-class action.
-- **Move #5, merchant transparency cards.** Zero of the top-6 ship returns/shipping/origin/carbon as default chips.
-- **Move #7, shareable session summary / lookbook.** Zero of the top-6 ship a server-rendered, OG-tagged share page.
+**2. Defend the uncontested moves (Cycles 7–9).** Per the competitive matrix in `docs/polish-round-4/competitive-analysis-2026-05.md`, three of the seven moves are uncontested across the top six competitors:
+- **Move #4, outfit / bundle completion** — deepen with multi-anchor bundles, save-and-name, "what's missing from this look".
+- **Move #5, merchant transparency cards** — extend with merchant-history (returns rate, average ship time, dispute resolution score) where the MCP surfaces it.
+- **Move #7, shareable lookbook** — gift-mode share that hides the recipient's identity, multi-person sessions, "remix this lookbook" affordance.
+
+**3. Monetize the trust-safe paths (Cycles 10–11).** Per ADR-0006, two pre-cleared paths: uniform Shopify-affiliate-pool (Wirecutter-style, fully disclosed) and B2B embedded widget. Both ship with a `/how-we-make-money` page linked from the trust footer. Order is data-driven: revenue need vs. trust cost from the disclosure.
+
+**4. Specialise (Cycles 12+).** If the north-star pivots us into a single vertical (home or wedding per the market analysis), the next cycles deepen the vertical's vocabulary (kitchen-renovation-mode, registry-share-with-co-host). Don't generalize back from a successful narrow.
+
+**Commoditize, don't defend:** Move #6 (photo→style) and Move #3 (persistent memory) — Perplexity caught up in 2026. Continue to ship them well; stop investing them as moats.
 
 Stage-2 fodder lives in `docs/polish-round-4/competitive-analysis-2026-05.md` § "Opportunity windows" — six concrete cycles' worth of work all defended by the matrix above.
 
@@ -129,15 +144,20 @@ Stage-2 fodder lives in `docs/polish-round-4/competitive-analysis-2026-05.md` §
 
 ## 8. Open product questions
 
-Things a real PM would take to 5 user interviews. Future cycles or a post-launch research pass should resolve them.
+Three open, four resolved. Resolved items kept (briefly) for traceability.
 
-- **Q1 (resolve before Cycle 3):** Do users actually want a *three-lane* shortlist (Love/Maybe/Skip), or is the binary "Save / Pass" simpler? Daydream uses binary. We should test with 3 users whether the third lane reduces decision fatigue or adds it. [ASSUMPTION — Daydream pattern paraphrased from public screenshots]
-- **Q2 (resolve before Cycle 2):** Which preferences should the agent *proactively* extract vs. wait to be told? Aggressive extraction reads as creepy ("I noticed you said size 8 last week"); passive extraction means the chips never light up. Hypothesis: extract sizing + budget proactively, keep ethics/palette user-initiated. Validate with 3 users in week 2.
-- **Q3 (partially commoditizing — reframe before Cycle 4):** The photo→style capability itself is no longer a differentiator: Perplexity shipped Snap to Shop and Daydream shipped iOS-26 screenshot-anywhere, both in 2026. The kill-switch threshold still holds operationally (if <5% of sessions use it at week 2 post-Cycle-4, we're paying Groq vision tokens for a demo). But the strategic frame has shifted: **we differentiate on transparency-of-attribute-extraction (visible, editable chips) — not on the vision capability itself.** Cycle 4 acceptance must verify the chips are user-editable; that's the moat, not the model call.
-- **Q4 (RESOLVED 2026-05-13):** Snapshot-vs-live share semantics. Snapshot shipped in Cycle 5 (immutable, server-rendered, no JS required). Round 4 surfaced zero user demand for live collaboration. Stage-2 may revisit as an opt-in mode (see competitive-analysis-2026-05.md § "Opportunity windows" #3), but it is not an open question.
-- **Q5 (resolve before Cycle 6):** What's the floor on Groq free-tier reliability during a demo? Need a 100-query stress test against `llama-3.3-70b-versatile` to know how often we'll hit 429. If failure rate >2%, the fallback to 3.1-8B must be wired *before* launch, not after. **Note (Round 4 update):** the daily quota (14.4k RPD) is the actual abuse risk, not RPM bursts — the cheapest insurance is a Developer-tier credit-card-on-file on Day 0, which raises the limit 10× for ~$0 baseline cost.
+**Open:**
+
+- **Q3 (partially commoditizing — Stage-2 follow-up):** The photo→style capability is no longer a differentiator (Perplexity Snap to Shop + Daydream iOS-26 screenshot-anywhere, both 2026). The kill-switch threshold still holds operationally — if <5% of sessions use it at week 2 post-Cycle-4, we stop spending Groq vision tokens. The strategic frame: **we differentiate on transparency-of-extraction (visible, editable chips) — not on the vision capability itself.** Cycle 4 verified the chips are user-editable; Stage-2 review will confirm the moat held.
 - **Q6 (revisit at month 3 post-launch):** Should we relax the "no walled-garden catalog" anti-goal (§6) to allow a uniform Shopify-affiliate-pool revenue model (Wirecutter-style, fully disclosed)? ADR-0006 pre-decides that a uniform per-merchant rate with algorithmic ranking unchanged does *not* violate the anti-goal — rankings remain preference-driven, not paid. Decision driver at month 3: revenue need vs. trust-cost from the disclosure. Don't ship without month-3 usage data.
-- **Q7 (revisit when month-12 MAU > 5k):** When do we open accounts (Pro tier with cross-device memory + shareable shortlist sync)? The current "no multi-user accounts" anti-goal (§6) is correct at our reach today: account systems double the surface area and the discovery moat is provable without them. But at sustained MAU above ~5k, persistent identity becomes valuable for the cohort that *wants* sync — and the market analysis flags this as the obvious Pro-tier wedge at $4–6/mo. Trigger: month-12 MAU sustained above 5k; resolution: an ADR re-opening the anti-account stance.
+- **Q7 (revisit when month-12 MAU > 5k):** When do we open accounts (Pro tier with cross-device memory + shareable shortlist sync)? Current anti-account stance (§6) is correct at our reach. Trigger: sustained MAU > 5k for 4 weeks; resolution: an ADR re-opening the anti-account stance.
+
+**Resolved (kept for traceability):**
+
+- ~~Q1 (resolved Cycle 3):~~ Three-lane Love/Maybe/Skip shortlist shipped. Round-4 personas confirmed the lane vocabulary lands; no one asked for binary Save/Pass.
+- ~~Q2 (resolved Cycle 2):~~ Proactive extraction of size + budget + ships_to + shipping_speed shipped; palette + ethics + shopping_for stay user-initiated. The closed ethics taxonomy (R5) + agent-prompt rules make this concrete.
+- ~~Q4 (resolved Cycle 5):~~ Snapshot-vs-live share semantics: snapshot shipped (immutable, server-rendered, JS-optional). Round 4 surfaced zero user demand for live collaboration. Stage-2 may revisit as an opt-in mode but it is not an open question.
+- ~~Q5 (resolved Cycle 6 + Round 4):~~ Groq reliability stress test deferred; the daily-quota narrative is honestly documented in ARCH §7 and DEPLOY.md. Real abuse risk is account-level RPD exhaustion, not RPM bursts — cheapest insurance is a Developer-tier credit-card-on-file on Day 0 (10× the limit baseline).
 
 ---
 
