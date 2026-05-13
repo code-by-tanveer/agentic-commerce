@@ -2,12 +2,19 @@ import { nanoid } from 'nanoid';
 import { db } from '../sqlite.js';
 
 export type MessageRole = 'user' | 'assistant' | 'tool';
+export type MessageStatus = 'done' | 'truncated' | 'error';
 
 export interface MessageInput {
   role: MessageRole;
   blocks: unknown; // serialized to JSON
   toolName?: string | null;
   toolCallId?: string | null;
+  /**
+   * polish-round-2 T2.1: ADR-0002 compliance. Defaults to 'done'.
+   * `truncated` is used by the BE agent loop on FE-abort / mid-stream error;
+   * `error` is reserved for explicit failure persistence.
+   */
+  status?: MessageStatus;
 }
 
 export interface Message {
@@ -18,6 +25,7 @@ export interface Message {
   blocks: unknown;
   toolName: string | null;
   toolCallId: string | null;
+  status: MessageStatus;
   createdAt: string;
 }
 
@@ -29,6 +37,7 @@ interface MessageRow {
   blocks_json: string;
   tool_name: string | null;
   tool_call_id: string | null;
+  status: string | null;
   created_at: string;
 }
 
@@ -39,6 +48,8 @@ function rowToMessage(r: MessageRow): Message {
   } catch {
     blocks = r.blocks_json;
   }
+  const status: MessageStatus =
+    r.status === 'truncated' || r.status === 'error' ? r.status : 'done';
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -47,14 +58,15 @@ function rowToMessage(r: MessageRow): Message {
     blocks,
     toolName: r.tool_name,
     toolCallId: r.tool_call_id,
+    status,
     createdAt: r.created_at,
   };
 }
 
 const insertStmt = () =>
   db.prepare(
-    `INSERT INTO messages(id, session_id, role, ordinal, blocks_json, tool_name, tool_call_id, created_at)
-     VALUES (@id, @session_id, @role, @ordinal, @blocks_json, @tool_name, @tool_call_id, @created_at)`,
+    `INSERT INTO messages(id, session_id, role, ordinal, blocks_json, tool_name, tool_call_id, status, created_at)
+     VALUES (@id, @session_id, @role, @ordinal, @blocks_json, @tool_name, @tool_call_id, @status, @created_at)`,
   );
 
 const nextOrdinalStmt = () =>
@@ -74,6 +86,7 @@ export async function appendMessage(
   const next = (nextOrdinalStmt().get(sessionId) as { next: number }).next;
   const id = nanoid();
   const createdAt = new Date().toISOString();
+  const status: MessageStatus = message.status ?? 'done';
   insertStmt().run({
     id,
     session_id: sessionId,
@@ -82,6 +95,7 @@ export async function appendMessage(
     blocks_json: JSON.stringify(message.blocks ?? null),
     tool_name: message.toolName ?? null,
     tool_call_id: message.toolCallId ?? null,
+    status,
     created_at: createdAt,
   });
   return Promise.resolve({
@@ -92,6 +106,7 @@ export async function appendMessage(
     blocks: message.blocks,
     toolName: message.toolName ?? null,
     toolCallId: message.toolCallId ?? null,
+    status,
     createdAt,
   });
 }

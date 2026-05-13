@@ -32,6 +32,10 @@ import { ProductImage } from '../product/ProductImage';
 //     motion: opacity crossfade only, ≤100ms.
 //   - §7: drag-over `accent-50` flash 100ms linear; keyboard fallback is
 //     handled at the ProductCard / CollageCard source (`L`/`M`/`S`).
+//   - §5 (R2/T2.7): rail-vs-sheet switch lives at the `lg:` breakpoint
+//     (1024px). Phones (≤640) and tablets (641–1024) both get the bottom
+//     sheet — the desktop rail would otherwise overlap the `max-w-3xl`
+//     canvas on iPad-portrait widths.
 // ---------------------------------------------------------------------------
 
 // T1.1 — copy reflects the tap affordance. Heart icon (lucide-react) is
@@ -90,7 +94,7 @@ export function Shortlist() {
             transition={reduce ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const }}
             aria-label="Shortlist"
             className={cn(
-              'fixed right-0 top-0 z-30 hidden h-dvh w-[320px] flex-col bg-white shadow-soft sm:flex',
+              'fixed right-0 top-0 z-30 hidden h-dvh w-[320px] flex-col bg-white shadow-soft lg:flex',
             )}
           >
             <RailHeader onClose={closeDrawer} />
@@ -161,7 +165,8 @@ interface RailLaneProps {
 }
 
 function RailLane({ lane, label, Icon, emptyHint }: RailLaneProps) {
-  const { shortlist, addToLane, remove } = useShortlist();
+  const { shortlist, addToLane, remove, isLoading } = useShortlist();
+  const reduced = useReducedMotion();
   const items = shortlist.filter((i) => i.lane === lane);
   const [isOver, setIsOver] = useState(false);
 
@@ -204,7 +209,11 @@ function RailLane({ lane, label, Icon, emptyHint }: RailLaneProps) {
           <span className="text-[11px] text-ink-400">{items.length}</span>
         </div>
       </header>
-      {items.length === 0 ? (
+      {isLoading && items.length === 0 ? (
+        // T2.9 — skeleton while hydrating, distinguished from the
+        // post-hydrate empty hint below. Single placeholder lane-item.
+        <LaneSkeleton reduced={!!reduced} />
+      ) : items.length === 0 ? (
         <p className="text-[11px] text-ink-400">{emptyHint}</p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -214,6 +223,20 @@ function RailLane({ lane, label, Icon, emptyHint }: RailLaneProps) {
         </ul>
       )}
     </section>
+  );
+}
+
+// T2.9 — single skeleton lane-item used by both the rail and the mobile sheet.
+// `animate-pulse` is suppressed under `prefers-reduced-motion`.
+function LaneSkeleton({ reduced }: { reduced: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        'h-12 w-full rounded-lg bg-ink-100',
+        reduced ? '' : 'animate-pulse',
+      )}
+    />
   );
 }
 
@@ -273,7 +296,7 @@ function MobileSheet({
   return (
     <div
       ref={sheetRef}
-      className="fixed inset-0 z-40 sm:hidden"
+      className="fixed inset-0 z-40 lg:hidden"
       role="dialog"
       aria-modal
       aria-label="Shortlist"
