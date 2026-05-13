@@ -162,7 +162,7 @@ function EmptyPrompt() {
 // ---------------------------------------------------------------------------
 
 function ChipRow({ className }: { className?: string }) {
-  const { prefs, set, remove } = usePreferences();
+  const { prefs, set, remove, lastRevert } = usePreferences();
   // Tracks which key is currently being edited; null = none.
   const [editingKey, setEditingKey] = useState<PreferenceKey | null>(null);
   // Locally-staged "new" keys — chips that haven't been saved yet. Adding a
@@ -186,7 +186,8 @@ function ChipRow({ className }: { className?: string }) {
   );
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+    <div className={cn('flex flex-col gap-2', className)}>
+      <div className="flex flex-wrap items-center gap-2">
       {activeKeys.map((key) => {
         const isStaged = prefs[key] == null;
         return (
@@ -243,6 +244,16 @@ function ChipRow({ className }: { className?: string }) {
             <Plus className="h-3 w-3" aria-hidden /> Add
           </button>
         )
+      ) : null}
+      </div>
+      {/* T1.33 — inline revert affordance. Renders directly under the chip
+          row, scoped to the failing key, auto-clears after 3s. No global
+          toast. */}
+      {lastRevert.key ? (
+        <p role="alert" className="text-xs text-rose-700">
+          <span className="font-medium">{PREFERENCE_LABEL[lastRevert.key]}:</span>{' '}
+          {lastRevert.message}
+        </p>
       ) : null}
     </div>
   );

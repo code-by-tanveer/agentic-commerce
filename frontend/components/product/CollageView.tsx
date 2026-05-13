@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronDown, ExternalLink, Store } from 'lucide-react';
+import { ChevronDown, ExternalLink, Heart, Store } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
@@ -92,10 +92,22 @@ function CollageCard({ product, index }: CardProps) {
   const price = selectedVariant?.price ?? product.price;
   const currency = selectedVariant?.currency ?? product.currency;
   const canBuy = !!checkoutUrl;
+  // T1.1 — heart fill state.
+  const isLoved = shortlist?.shortlist.some(
+    (i) => i.productId === product.id && i.lane === 'love',
+  );
 
   function buy() {
     if (!checkoutUrl) return;
     window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  // T1.1 — tap-to-save. Heart sits over the image.
+  function saveLove(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!shortlist) return;
+    void shortlist.addToLane(product.id, 'love', product);
+    setAriaMsg('Saved to Love');
   }
 
   function onNativeDragStart(e: React.DragEvent<HTMLElement>) {
@@ -112,12 +124,12 @@ function CollageCard({ product, index }: CardProps) {
   } as unknown as Record<string, unknown>;
 
   function onKeyDown(e: React.KeyboardEvent<HTMLElement>) {
-    // `L`/`M`/`S` — uppercase only (DESIGN.md §7 keyboard fallback) so we
-    // don't fight with lowercase letters the user might be typing into a
-    // nested input (there are none in collapsed state, but defense-in-depth).
-    if (e.key === 'L' || e.key === 'M' || e.key === 'S') {
+    // T1.15 — case-insensitive lane keys. Lowercase l/m/s now work as well
+    // as uppercase; caps-lock no longer required.
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (key === 'l' || key === 'm' || key === 's') {
       if (!shortlist) return;
-      const lane = e.key === 'L' ? 'love' : e.key === 'M' ? 'maybe' : 'skip';
+      const lane = key === 'l' ? 'love' : key === 'm' ? 'maybe' : 'skip';
       e.preventDefault();
       void shortlist.addToLane(product.id, lane, product);
       setAriaMsg(`Saved to ${lane === 'love' ? 'Love' : lane === 'maybe' ? 'Maybe' : 'Skip'}`);
@@ -169,6 +181,27 @@ function CollageCard({ product, index }: CardProps) {
       <span role="status" aria-live="polite" className="sr-only">
         {ariaMsg}
       </span>
+
+      {/* T1.1 — heart-icon tap-to-save (touch always visible, fade-in on
+          hover for fine pointers). */}
+      <button
+        type="button"
+        onClick={saveLove}
+        aria-label={isLoved ? 'Saved to Love' : 'Save to Love'}
+        aria-pressed={isLoved}
+        className={cn(
+          'absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
+          'hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+          '[@media(hover:none)]:opacity-100',
+          '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100',
+          isLoved && 'text-rose-500 [@media(hover:hover)]:opacity-100',
+        )}
+      >
+        <Heart
+          className={cn('h-4 w-4', isLoved && 'fill-rose-500')}
+          aria-hidden
+        />
+      </button>
 
       <button
         type="button"
@@ -263,6 +296,9 @@ function CollageCard({ product, index }: CardProps) {
                 <p className="text-base font-semibold text-ink-900">
                   {formatMoney(price, currency)}
                 </p>
+                {/* T1.6 — Collage variant uses "Open at {merchant}" wording
+                    (the card is image-first; "Buy" felt transactional).
+                    T1.29 — focus-visible:shadow-glow on the primary CTA. */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -270,14 +306,16 @@ function CollageCard({ product, index }: CardProps) {
                     if (canBuy) buy();
                   }}
                   disabled={!canBuy}
+                  aria-label={canBuy ? `Open at ${product.merchant}` : 'Unavailable'}
                   className={cn(
                     'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition',
+                    'focus:outline-none focus-visible:shadow-glow',
                     canBuy
-                      ? 'bg-accent-500 text-white hover:bg-accent-600 focus:outline-none focus-visible:shadow-glow'
+                      ? 'bg-accent-500 text-white hover:bg-accent-600'
                       : 'cursor-not-allowed bg-ink-100 text-ink-400',
                   )}
                 >
-                  Buy
+                  Open at {product.merchant}
                   <ExternalLink className="h-3 w-3" aria-hidden />
                 </button>
               </div>

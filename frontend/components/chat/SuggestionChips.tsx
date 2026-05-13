@@ -20,7 +20,8 @@ export function SuggestionChips({ suggestions, onPick }: Props) {
         <button
           key={s}
           onClick={() => onPick(s)}
-          className="rounded-full border border-ink-200 bg-white px-3.5 py-1.5 text-xs text-ink-600 transition hover:border-ink-400 hover:text-ink-900"
+          // T1.30 — drop decimal spacing (px-3.5/py-1.5 → px-3/py-2).
+          className="rounded-full border border-ink-200 bg-white px-3 py-2 text-xs text-ink-600 transition hover:border-ink-400 hover:text-ink-900"
         >
           {s}
         </button>

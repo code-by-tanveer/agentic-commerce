@@ -44,12 +44,21 @@ import { useSession } from './useSession';
 // limiter (60/min/IP) is comfortable.
 // ---------------------------------------------------------------------------
 
+// T1.33 — last optimistic-revert. `scope` lets the UI scope the visible line
+// to the offending control (a lane / a product / an outfit).
+export interface ShortlistRevertError {
+  scope: string | null; // productId, outfitId, or null for generic
+  message: string;
+  at: number;
+}
+
 interface State {
   shortlist: ShortlistItem[];
   viewMode: ViewMode;
   isOpen: boolean;
   savedOutfits: SavedOutfit[];
   isLoading: boolean;
+  lastRevert: ShortlistRevertError;
 }
 
 type Action =
@@ -62,7 +71,9 @@ type Action =
   | { type: 'replace_shortlist'; items: ShortlistItem[] }
   | { type: 'add_outfit'; outfit: SavedOutfit }
   | { type: 'remove_outfit'; outfitId: string }
-  | { type: 'replace_outfits'; outfits: SavedOutfit[] };
+  | { type: 'replace_outfits'; outfits: SavedOutfit[] }
+  | { type: 'revert'; scope: string | null; message: string }
+  | { type: 'clear_revert' };
 
 const initialState: State = {
   shortlist: [],
@@ -70,6 +81,7 @@ const initialState: State = {
   isOpen: false,
   savedOutfits: [],
   isLoading: true,
+  lastRevert: { scope: null, message: '', at: 0 },
 };
 
 function reducer(state: State, action: Action): State {
@@ -111,6 +123,13 @@ function reducer(state: State, action: Action): State {
       };
     case 'replace_outfits':
       return { ...state, savedOutfits: action.outfits };
+    case 'revert':
+      return {
+        ...state,
+        lastRevert: { scope: action.scope, message: action.message, at: Date.now() },
+      };
+    case 'clear_revert':
+      return { ...state, lastRevert: { scope: null, message: '', at: 0 } };
     default:
       return state;
   }
@@ -130,6 +149,8 @@ export interface ShortlistContextValue {
   setViewMode: (mode: ViewMode) => Promise<void>;
   saveOutfit: (body: PostOutfitBody) => Promise<SavedOutfit | null>;
   removeOutfit: (outfitId: string) => Promise<void>;
+  // T1.33 — inline revert error (auto-clears after 3s).
+  lastRevert: ShortlistRevertError;
 }
 
 const ShortlistContext = createContext<ShortlistContextValue | null>(null);
@@ -142,6 +163,13 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
   const itemSnapshots = useRef<Map<string, ShortlistItem | undefined>>(new Map());
   const viewModeSnapshot = useRef<ViewMode>('list');
   const hydrated = useRef(false);
+
+  // T1.33 — auto-clear the inline revert affordance after 3s.
+  useEffect(() => {
+    if (!state.lastRevert.at) return;
+    const t = setTimeout(() => dispatch({ type: 'clear_revert' }), 3000);
+    return () => clearTimeout(t);
+  }, [state.lastRevert.at]);
 
   // Hydrate from the BE once.
   useEffect(() => {
@@ -184,13 +212,18 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
       try {
         await putShortlistItem(sessionId, productId, { lane, snapshot });
       } catch {
-        // Revert.
+        // Revert + inline error (T1.33).
         const revert = itemSnapshots.current.get(productId);
         if (revert === undefined) {
           dispatch({ type: 'remove_item', productId });
         } else {
           dispatch({ type: 'upsert_item', item: revert });
         }
+        dispatch({
+          type: 'revert',
+          scope: productId,
+          message: "Could not save — we'll keep trying",
+        });
       }
     },
     [sessionId, state.shortlist],
@@ -219,6 +252,11 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
         if (revert) {
           dispatch({ type: 'upsert_item', item: revert });
         }
+        dispatch({
+          type: 'revert',
+          scope: productId,
+          message: 'Could not remove — try again',
+        });
       }
     },
     [sessionId, state.shortlist],
@@ -275,6 +313,11 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
         await apiDeleteOutfit(sessionId, outfitId);
       } catch {
         if (prior) dispatch({ type: 'add_outfit', outfit: prior });
+        dispatch({
+          type: 'revert',
+          scope: outfitId,
+          message: 'Could not remove outfit — try again',
+        });
       }
     },
     [sessionId, state.savedOutfits],
@@ -295,6 +338,7 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
       setViewMode,
       saveOutfit,
       removeOutfit,
+      lastRevert: state.lastRevert,
     }),
     [
       state.shortlist,
@@ -302,6 +346,7 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
       state.isOpen,
       state.isLoading,
       state.savedOutfits,
+      state.lastRevert,
       addToLane,
       move,
       remove,

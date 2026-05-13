@@ -158,6 +158,30 @@ function Chip({ chip, index, isOpen, onToggle }: ChipProps) {
 
   const style = styleForChip(chip);
 
+  // T1.18 — chips without a `detail` are presentational and render as
+  // <span> (motion-friendly via motion.span). Chips with a `detail` keep the
+  // <button> + tooltip pattern so the description is announceable. The
+  // previous shape was a disabled <button> for both — invalid per WCAG 4.1.2
+  // (disabled buttons are not announced as interactive).
+  const baseClass = cn(
+    'relative inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition',
+    style,
+  );
+
+  if (!hasDetail) {
+    return (
+      <motion.span
+        role="listitem"
+        initial={entryInitial}
+        animate={entryAnimate}
+        transition={entryTransition}
+        className={cn(baseClass, 'cursor-default')}
+      >
+        {chip.label}
+      </motion.span>
+    );
+  }
+
   return (
     <span
       className="group relative inline-flex"
@@ -171,7 +195,7 @@ function Chip({ chip, index, isOpen, onToggle }: ChipProps) {
         onClick={(e) => {
           // Prevent the surrounding card's expand toggle.
           e.stopPropagation();
-          if (hasDetail) onToggle();
+          onToggle();
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape' && isOpen) {
@@ -180,18 +204,14 @@ function Chip({ chip, index, isOpen, onToggle }: ChipProps) {
           }
         }}
         className={cn(
-          'relative inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition',
+          baseClass,
           // Provide a ≥44px-equivalent hit area on coarse pointers via a
           // transparent pseudo-element extension (DESIGN.md §7 a11y).
           'before:absolute before:inset-x-0 before:-inset-y-3 before:content-[""]',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-          style,
-          !hasDetail && 'cursor-default',
         )}
-        aria-describedby={hasDetail ? detailId : undefined}
-        aria-expanded={hasDetail ? isOpen : undefined}
-        aria-disabled={!hasDetail || undefined}
-        tabIndex={hasDetail ? 0 : -1}
+        aria-describedby={detailId}
+        aria-expanded={isOpen}
       >
         <span className="relative z-10">{chip.label}</span>
       </motion.button>
@@ -199,18 +219,16 @@ function Chip({ chip, index, isOpen, onToggle }: ChipProps) {
       {/* Desktop tooltip — bound by `aria-describedby`. Hidden by default;
           shown on hover/focus-within of the chip wrapper (`group`). On
           coarse pointers this is suppressed so the in-place panel wins. */}
-      {hasDetail ? (
-        <span
-          id={detailId}
-          role="tooltip"
-          className={cn(
-            'pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-xs rounded-md bg-ink-900 px-3 py-2 text-[11px] leading-snug text-white shadow-soft',
-            '[@media(hover:hover)]:group-hover:block [@media(hover:hover)]:group-focus-within:block',
-          )}
-        >
-          {chip.detail}
-        </span>
-      ) : null}
+      <span
+        id={detailId}
+        role="tooltip"
+        className={cn(
+          'pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-max max-w-xs rounded-md bg-ink-900 px-3 py-2 text-[11px] leading-snug text-white shadow-soft',
+          '[@media(hover:hover)]:group-hover:block [@media(hover:hover)]:group-focus-within:block',
+        )}
+      >
+        {chip.detail}
+      </span>
     </span>
   );
 }

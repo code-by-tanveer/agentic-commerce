@@ -119,7 +119,8 @@ export function OutfitBundle({ anchorProductId, items, rationale }: Props) {
           disabled={saving || !!savedAt || !shortlist}
           aria-live="polite"
           className={cn(
-            'inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-medium transition',
+            // T1.31 — px-5 → px-4 (canonical §2.5 palette).
+            'inline-flex h-10 items-center gap-2 rounded-full px-4 text-sm font-medium transition',
             'focus:outline-none focus-visible:shadow-glow',
             savedAt
               ? 'bg-emerald-50 text-emerald-600'

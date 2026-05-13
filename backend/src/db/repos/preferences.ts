@@ -1,29 +1,19 @@
+import {
+  PREFERENCE_KEYS,
+  isPreferenceKey,
+  type PreferenceKey,
+} from '@agentic/events';
 import { db } from '../sqlite.js';
 
+// Cycle 7 polish (T1.22): `PREFERENCE_KEYS`, `PreferenceKey`, and
+// `isPreferenceKey` were lifted into `@agentic/events` so the BE repo, the
+// `save_preference` tool, the BE preferences REST routes, and the FE API
+// layer share a single source of truth. Re-exported here for backwards
+// compatibility with existing `from '../db/repos/preferences.js'` imports.
+export { PREFERENCE_KEYS, isPreferenceKey };
+export type { PreferenceKey };
+
 export type PreferenceSource = 'user' | 'inferred' | 'agent';
-
-export type PreferenceKey =
-  | 'size'
-  | 'budget'
-  | 'ships_from'
-  | 'ships_to'
-  | 'palette'
-  | 'ethics'
-  | 'shipping_speed';
-
-export const PREFERENCE_KEYS: readonly PreferenceKey[] = [
-  'size',
-  'budget',
-  'ships_from',
-  'ships_to',
-  'palette',
-  'ethics',
-  'shipping_speed',
-] as const;
-
-export function isPreferenceKey(value: string): value is PreferenceKey {
-  return (PREFERENCE_KEYS as readonly string[]).includes(value);
-}
 
 export interface PreferenceEntry {
   value: unknown;

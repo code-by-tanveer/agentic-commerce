@@ -16,6 +16,8 @@ import { searchCatalogTool } from '../services/tools/searchCatalog.js';
 import { SseWriter } from '../stream/sseWriter.js';
 import { getOrCreateSession } from '../db/repos/sessions.js';
 import { appendMessage } from '../db/repos/messages.js';
+import { listPreferences } from '../db/repos/preferences.js';
+import type { PreferencesSnapshot } from '../types/tool.js';
 
 const COOKIE_NAME = 'agentic_sid';
 
@@ -70,21 +72,40 @@ export async function chatRoutes(app: FastifyInstance) {
       maxAge: 60 * 60 * 24 * 30,
     });
 
-    // Persist the latest user turn for context across reloads.
-    const lastUser = [...parsed.data.messages].reverse().find((m) => m.role === 'user');
-    if (lastUser && lastUser.content) {
-      try {
-        await appendMessage(session.id, {
-          role: 'user',
-          blocks: [{ type: 'text', text: lastUser.content }],
-        });
-      } catch (err) {
-        request.log.warn({ err }, 'failed to persist user message');
-      }
-    }
-
+    // Open the SSE channel BEFORE any awaited DB work — `new SseWriter` flushes
+    // headers and writes `: open\n\n` synchronously, so the FE sees the socket
+    // open immediately. Cycle 7 perf polish (T1.25): prior code awaited
+    // `appendMessage` first, which delayed first-token latency by one
+    // SQLite round-trip on every user turn.
     const writer = new SseWriter(reply);
     const controller = new AbortController();
+
+    // Persist the latest user turn for context across reloads. Fire-and-forget
+    // so it can't gate the first SSE event. Errors are logged but never block
+    // the agent loop — the assistant turn still runs without the user message
+    // landing in history (the next request's `messages[]` from the FE carries
+    // the same text anyway).
+    const lastUser = [...parsed.data.messages].reverse().find((m) => m.role === 'user');
+    if (lastUser && lastUser.content) {
+      const content = lastUser.content;
+      void appendMessage(session.id, {
+        role: 'user',
+        blocks: [{ type: 'text', text: content }],
+      }).catch((err) => {
+        request.log.warn({ err }, 'failed to persist user message');
+      });
+    }
+
+    // Cycle 7 perf polish (T1.26): race the preferences SELECT with the rest
+    // of the pre-stream prep so the agent loop doesn't serialise on it.
+    // `runAgent` awaits this promise only when composing the system prompt;
+    // the SSE channel is already open by then.
+    const preferencesPromise: Promise<PreferencesSnapshot> = listPreferences(session.id)
+      .then((p) => p as PreferencesSnapshot)
+      .catch((err) => {
+        request.log.warn({ err }, 'failed to load preferences; continuing with empty snapshot');
+        return {} as PreferencesSnapshot;
+      });
 
     let abortedAlready = false;
     const onClose = (reason: string) => {
@@ -127,6 +148,12 @@ export async function chatRoutes(app: FastifyInstance) {
       .filter((m): m is ChatCompletionMessageParam => m !== null);
 
     try {
+      // Cycle 7 perf polish (T1.26): preferences SELECT was kicked off above
+      // in parallel with the SSE header flush, the cookie set, and the history
+      // mapping. By the time we hit this `await` the SELECT is typically
+      // already resolved on warm caches, and at worst we serialise on a
+      // single SQLite read while the FE socket is already open.
+      const preferences = await preferencesPromise;
       await runAgent({
         sessionId: session.id,
         history,
@@ -136,6 +163,7 @@ export async function chatRoutes(app: FastifyInstance) {
         signal: controller.signal,
         log: request.log,
         cache: sharedCache,
+        preferences,
       });
     } catch (err) {
       // Cycle-6 architect catch — never ship raw `err.message` to the SSE

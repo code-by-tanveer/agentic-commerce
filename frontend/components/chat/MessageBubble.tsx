@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageRenderer } from './MessageRenderer';
 import {
-  useConversation,
+  useConversationActions,
   type Message,
   type TextBlock,
 } from '@/hooks/useConversation';
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function MessageBubble({ message }: Props) {
-  const { retry } = useConversation();
+  const { retry } = useConversationActions();
   const reduced = useReducedMotion();
   const isUser = message.role === 'user';
 

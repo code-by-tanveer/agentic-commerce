@@ -201,21 +201,17 @@ export const recommendOutfitTool: Tool<RecommendOutfitArgs, RecommendOutfitResul
       };
     }
 
+    // Cycle 7 polish (T1.21): per-item rationale used to be computed-then-
+    // stripped. We now ship it as a parallel `rationales` array on the
+    // `outfit` event so the FE can render it under each cell. The element
+    // shape of `items` stays plain `NormalizedProduct[]` to avoid churning
+    // every FE consumer of the bundle.
     const itemsForEvent: NormalizedProduct[] = result.items.map((item) => {
-      // Outfit event payload keeps the rationale per item under merchantTags?
-      // No — events.ts has no rationale field on NormalizedProduct. We embed
-      // the rationale into the assistant string so the LLM can recap, and we
-      // put the rationale into the top-level `rationale` summary. Per-item
-      // rationale is exposed via a non-schema field that the FE event schema
-      // doesn't strip (Zod default — but we use the discriminated union, so
-      // extras get dropped by `.parse`). We attach it on the product object;
-      // the FE may read it post-validation by re-parsing the data block.
-      // Cleanest path: pass items as plain NormalizedProduct; embed per-item
-      // rationale into the top-level rationale string when summarising.
       const { rationale: _r, ...rest } = item;
       void _r;
       return rest as NormalizedProduct;
     });
+    const rationales: (string | null)[] = result.items.map((item) => item.rationale ?? null);
 
     const events = [
       {
@@ -223,6 +219,7 @@ export const recommendOutfitTool: Tool<RecommendOutfitArgs, RecommendOutfitResul
         toolCallId,
         anchorProductId: result.anchorProductId,
         items: itemsForEvent,
+        rationales,
         rationale: result.rationale,
       },
     ];

@@ -1,7 +1,7 @@
 'use client';
 
-import { AlertCircle, RotateCcw } from 'lucide-react';
-import { useConversation, type Block } from '@/hooks/useConversation';
+import { AlertCircle, RotateCcw, SearchX } from 'lucide-react';
+import { useConversationActions, type Block } from '@/hooks/useConversation';
 import { ProductCardGroup } from '../product/ProductCardGroup';
 import { ComparisonTable } from '../product/ComparisonTable';
 import { OutfitBundle } from '../product/OutfitBundle';
@@ -56,7 +56,7 @@ function BlockView({
   messageId: string;
   onRetry?: () => void;
 }) {
-  const { refineMoodboard } = useConversation();
+  const { refineMoodboard } = useConversationActions();
   switch (block.type) {
     case 'text':
       if (!block.text) return null;
@@ -77,6 +77,26 @@ function BlockView({
       );
 
     case 'products':
+      // T1.13 — empty result set renders a recovery card instead of vanishing.
+      // The prior behaviour (ProductCardGroup → null) left the user in a
+      // prose-only state with no next move; the inline card surfaces both
+      // the cause and two concrete escapes.
+      if (block.products.length === 0) {
+        return (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-2xl bg-ink-50 px-4 py-3 text-sm leading-relaxed text-ink-600 shadow-soft"
+          >
+            <SearchX className="mt-1 h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+            <p>
+              Nothing matched
+              {block.query ? <> for <span className="font-medium text-ink-900">{block.query}</span></> : null}
+              . Try fewer constraints, or paste an image of what you have in
+              mind.
+            </p>
+          </div>
+        );
+      }
       // ProductCardGroup expects the existing FE Product shape. Backend's
       // NormalizedProduct is structurally compatible (and currently identical)
       // — but typed differently, so we widen via a cast at the boundary.

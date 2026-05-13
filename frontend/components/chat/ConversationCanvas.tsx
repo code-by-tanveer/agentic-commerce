@@ -2,19 +2,26 @@
 
 import { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useConversation } from '@/hooks/useConversation';
+import {
+  useConversationActions,
+  useConversationState,
+} from '@/hooks/useConversation';
 import { MessageBubble } from './MessageBubble';
 import { SuggestionChips } from './SuggestionChips';
 
+// T1.11 — voice + breadth. The previous chips were marketer-flat
+// (home / gift / fitness / soft-goods). PRODUCT.md vision: the agent talks
+// like a friend who reads the catalogue. These prompts model that.
 const STARTERS = [
-  'a minimalist desk lamp under $150',
-  'gifts for a coffee obsessive',
-  'lightweight running shoes for trails',
-  'a chunky knit throw in neutral tones',
+  "a desk lamp that won't look like an Ikea cliché",
+  'a gift for someone who already owns everything',
+  'a winter coat that ships from EU',
+  'a chunky vase, ceramic, under $80',
 ];
 
 export function ConversationCanvas() {
-  const { messages, send } = useConversation();
+  const { messages } = useConversationState();
+  const { send } = useConversationActions();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,11 +32,13 @@ export function ConversationCanvas() {
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
-      <div
-        className="flex flex-col gap-4"
-        aria-live="polite"
-        aria-atomic="false"
-      >
+      {/* T1.5 — `aria-live` removed from the canvas. Re-announcing every
+          token / product card on every text_delta caused screen-reader spam.
+          The narrow polite-status surface now lives on ToolStatus
+          (role="status" aria-live="polite"). Streamed prose updates without
+          announcing each delta — assistive tech still reads it on focus /
+          virtual-cursor traversal. */}
+      <div className="flex flex-col gap-4">
         <AnimatePresence initial={false}>
           {messages.map((m) => (
             <motion.div key={m.id} layout>

@@ -60,9 +60,12 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
 
   return (
     <div
+      // T1.3 — safe-area-inset-bottom so the iOS home indicator doesn't clip
+      // the share buttons on the /s/[id] page.
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
       className={cn(
         'sticky bottom-0 z-20 w-full border-t border-ink-100 bg-ink-50/90 backdrop-blur',
-        'px-4 py-3',
+        'px-4 pt-3',
       )}
     >
       <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2">

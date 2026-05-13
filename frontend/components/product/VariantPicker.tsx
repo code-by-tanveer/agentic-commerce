@@ -33,8 +33,9 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
 
   if (!groups.length) {
     // Plain variant list when there are no structured options.
+    // T1.30 — gap-1.5 → gap-2 (no decimal spacing).
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {variants.map((v) => (
           <button
             key={v.id}
@@ -66,11 +67,12 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
   }
 
   return (
-    <div className="space-y-2.5">
+    // T1.30 — space-y-2.5 → space-y-2 / gap-1.5 → gap-2 (no decimal spacing).
+    <div className="space-y-2">
       {groups.map((group) => (
         <div key={group.name}>
           <p className="mb-1 text-[11px] uppercase tracking-wider text-ink-400">{group.name}</p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {group.values.map((value) => {
               const active = selected?.options?.[group.name] === value;
               return (

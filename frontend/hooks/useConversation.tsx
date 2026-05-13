@@ -132,7 +132,7 @@ const WELCOME: Message = {
     {
       type: 'text',
       text:
-        "Hi — tell me what you're shopping for. A vibe, a need, or a specific product. I'll surface options from Shopify merchants.",
+        "Tell me what you're shopping for — a vibe, a need, a specific product. Results come from Shopify merchants, ranked by your preferences, not by paid placement.",
     },
   ],
 };
@@ -340,22 +340,29 @@ export interface SendOptions {
   imageUrl?: string;
 }
 
-interface ConversationContextValue {
+// T1.27 — split context: state churns per text_delta; actions are stable.
+// Consumers that only need actions (InputBar, MessageRenderer's retry path,
+// Moodboard refine) subscribe to ConversationActionsContext and don't
+// re-render per token.
+interface ConversationStateValue {
   sessionId: string | null;
   messages: Message[];
   isStreaming: boolean;
-  // Back-compat for InputBar / Header — same field name, new meaning.
+  // Back-compat alias — same field name, new meaning.
   isSearching: boolean;
+}
+
+interface ConversationActionsValue {
   send: (text: string, opts?: SendOptions) => Promise<void>;
   retry: (messageId: string) => Promise<void>;
-  // Cycle 4 — re-send the conversation up to (and including) the moodboard's
-  // turn with the edited attributes joined into a refined query. Triggers a
-  // fresh assistant turn that will fan out to `search_catalog`.
   refineMoodboard: (messageId: string, attributes: string[]) => Promise<void>;
   reset: () => void;
 }
 
-const ConversationContext = createContext<ConversationContextValue | null>(null);
+type ConversationContextValue = ConversationStateValue & ConversationActionsValue;
+
+const ConversationStateContext = createContext<ConversationStateValue | null>(null);
+const ConversationActionsContext = createContext<ConversationActionsValue | null>(null);
 
 function rid(): string {
   return Math.random().toString(36).slice(2, 12);
@@ -586,33 +593,50 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'reset' });
   }, []);
 
-  const value = useMemo<ConversationContextValue>(
+  const stateValue = useMemo<ConversationStateValue>(
     () => ({
       sessionId: state.sessionId,
       messages: state.messages,
       isStreaming: state.isStreaming,
       isSearching: state.isStreaming,
-      send,
-      retry,
-      refineMoodboard,
-      reset,
     }),
-    [
-      state.sessionId,
-      state.messages,
-      state.isStreaming,
-      send,
-      retry,
-      refineMoodboard,
-      reset,
-    ],
+    [state.sessionId, state.messages, state.isStreaming],
   );
 
-  return <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>;
+  // Actions are referentially stable (their identity only changes when their
+  // own deps shift), so this memo barely ever invalidates — components that
+  // only consume actions don't re-render per text_delta.
+  const actionsValue = useMemo<ConversationActionsValue>(
+    () => ({ send, retry, refineMoodboard, reset }),
+    [send, retry, refineMoodboard, reset],
+  );
+
+  return (
+    <ConversationStateContext.Provider value={stateValue}>
+      <ConversationActionsContext.Provider value={actionsValue}>
+        {children}
+      </ConversationActionsContext.Provider>
+    </ConversationStateContext.Provider>
+  );
 }
 
-export function useConversation(): ConversationContextValue {
-  const ctx = useContext(ConversationContext);
-  if (!ctx) throw new Error('useConversation must be used inside <ConversationProvider>');
+export function useConversationState(): ConversationStateValue {
+  const ctx = useContext(ConversationStateContext);
+  if (!ctx)
+    throw new Error('useConversationState must be used inside <ConversationProvider>');
   return ctx;
+}
+
+export function useConversationActions(): ConversationActionsValue {
+  const ctx = useContext(ConversationActionsContext);
+  if (!ctx)
+    throw new Error('useConversationActions must be used inside <ConversationProvider>');
+  return ctx;
+}
+
+// Back-compat: existing consumers using `useConversation()` continue to work —
+// they get both halves merged. New code should prefer the split hooks to
+// minimise re-renders.
+export function useConversation(): ConversationContextValue {
+  return { ...useConversationState(), ...useConversationActions() };
 }

@@ -8,16 +8,16 @@ import { env } from '../config/env.js';
  *
  * Wire format: `signed:<base64url(payload)>.<base64url(hmac)>` where
  *   payload = JSON({ filename, exp })
- *   hmac    = HMAC-SHA256(payload, env.IP_HASH_SALT)
+ *   hmac    = HMAC-SHA256(payload, env.UPLOAD_SIGNING_SECRET)
  *
  * The filename is bound by the signature, so an attacker can't shuffle a
  * valid HMAC onto a different file. `exp` is checked at verify time.
  *
- * NOTE on key separation (Cycle 6): the HMAC key is `UPLOAD_SIGNING_SECRET`.
- * In production this is REQUIRED (Zod refine in `config/env.ts`). In dev it
- * falls back to `IP_HASH_SALT` with a single boot warning so existing local
- * configs keep working — the env module already resolved that fallback, so
- * we read a single field here.
+ * Key resolution (Cycle 6 split, Cycle 7 polish): the HMAC key is
+ * `env.UPLOAD_SIGNING_SECRET`. In production this is REQUIRED (Zod refine in
+ * `config/env.ts`). In dev `config/env.ts` falls back to `IP_HASH_SALT` with
+ * a single boot warning and exports the resolved value as
+ * `UPLOAD_SIGNING_SECRET`, so this module reads exactly one field.
  */
 
 const SCHEME = 'signed:';
@@ -39,10 +39,9 @@ function unb64url(s: string): Buffer {
 }
 
 function sign(payload: string): string {
-  // Cycle 6: `env.UPLOAD_SIGNING_SECRET` is dedicated; in non-prod it falls
-  // back to `IP_HASH_SALT` (resolved in `config/env.ts` with a boot warning).
-  const key = env.UPLOAD_SIGNING_SECRET ?? env.IP_HASH_SALT;
-  return b64url(createHmac('sha256', key).update(payload).digest());
+  // `env.UPLOAD_SIGNING_SECRET` is resolved (incl. the dev fallback) in
+  // `config/env.ts`. No null coalesce needed here.
+  return b64url(createHmac('sha256', env.UPLOAD_SIGNING_SECRET).update(payload).digest());
 }
 
 export function signUploadUrl(filename: string, ttlMs: number): string {

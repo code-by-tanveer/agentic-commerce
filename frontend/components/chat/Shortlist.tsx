@@ -34,20 +34,48 @@ import { ProductImage } from '../product/ProductImage';
 //     handled at the ProductCard / CollageCard source (`L`/`M`/`S`).
 // ---------------------------------------------------------------------------
 
+// T1.1 — copy reflects the tap affordance. Heart icon (lucide-react) is
+// already imported and used as the Love lane icon; we re-mention "tap ♥" in
+// natural language. No-mascot rule honoured (no emoji in the string itself —
+// the literal heart is the rendered Heart component on each card).
 const LANE_META: Array<{
   lane: ShortlistLane;
   label: string;
   Icon: typeof Heart;
   emptyHint: string;
 }> = [
-  { lane: 'love', label: 'Love', Icon: Heart, emptyHint: 'Drag here, or press L on a card.' },
-  { lane: 'maybe', label: 'Maybe', Icon: HelpCircle, emptyHint: 'Drag here, or press M on a card.' },
-  { lane: 'skip', label: 'Skip', Icon: XCircle, emptyHint: 'Drag here, or press S on a card.' },
+  {
+    lane: 'love',
+    label: 'Love',
+    Icon: Heart,
+    emptyHint: 'Tap the heart on any product to save it here.',
+  },
+  {
+    lane: 'maybe',
+    label: 'Maybe',
+    Icon: HelpCircle,
+    emptyHint: 'Drag a card here, or press M on a focused card.',
+  },
+  {
+    lane: 'skip',
+    label: 'Skip',
+    Icon: XCircle,
+    emptyHint: 'Drag a card here, or press S on a focused card.',
+  },
 ];
 
 export function Shortlist() {
-  const { isOpen, closeDrawer } = useShortlist();
+  const { isOpen, closeDrawer, lastRevert } = useShortlist();
   const reduce = useReducedMotion();
+
+  // T1.33 — surface revert errors inside the drawer header. Auto-clears
+  // via the hook. Single line, rose-700 text. Both the rail and the
+  // mobile sheet render it just under their respective headers.
+  const revertBanner = lastRevert.scope ? (
+    <p role="alert" className="px-3 pb-2 text-xs text-rose-700">
+      {lastRevert.message}
+    </p>
+  ) : null;
 
   return (
     <>
@@ -66,6 +94,7 @@ export function Shortlist() {
             )}
           >
             <RailHeader onClose={closeDrawer} />
+            {revertBanner}
             <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
               {LANE_META.map(({ lane, label, Icon, emptyHint }) => (
                 <RailLane
@@ -83,7 +112,13 @@ export function Shortlist() {
 
       {/* Mobile — bottom sheet variant. */}
       <AnimatePresence>
-        {isOpen ? <MobileSheet onClose={closeDrawer} reduced={!!reduce} /> : null}
+        {isOpen ? (
+          <MobileSheet
+            onClose={closeDrawer}
+            reduced={!!reduce}
+            revertBanner={revertBanner}
+          />
+        ) : null}
       </AnimatePresence>
     </>
   );
@@ -219,7 +254,15 @@ function LaneItem({
 // Mobile bottom sheet
 // ---------------------------------------------------------------------------
 
-function MobileSheet({ onClose, reduced }: { onClose: () => void; reduced: boolean }) {
+function MobileSheet({
+  onClose,
+  reduced,
+  revertBanner,
+}: {
+  onClose: () => void;
+  reduced: boolean;
+  revertBanner?: React.ReactNode;
+}) {
   const sheetRef = useRef<HTMLDivElement | null>(null);
   // Cycle 2 PreferencesCard.BottomSheet pattern — extracted to a shared hook.
   useFocusTrap(sheetRef, { enabled: true, onClose, initialFocus: 'last' });
@@ -249,10 +292,15 @@ function MobileSheet({ onClose, reduced }: { onClose: () => void; reduced: boole
         animate={reduced ? { opacity: 1 } : { y: 0 }}
         exit={reduced ? { opacity: 0 } : { y: '100%' }}
         transition={sheetT}
+        // T1.3 — safe-area-inset-bottom so the iOS home indicator doesn't
+        // clip the Done button. `max()` keeps existing padding floor on
+        // devices without a physical inset.
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
         className="absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-hidden rounded-t-2xl bg-white shadow-soft"
       >
         <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-ink-100" aria-hidden />
         <MobileHeader onClose={onClose} />
+        {revertBanner}
         <MobileLanes />
         <div className="flex justify-end p-4">
           <button

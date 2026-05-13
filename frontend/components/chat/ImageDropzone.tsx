@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { useConversation } from '@/hooks/useConversation';
+import {
+  useConversationActions,
+  useConversationState,
+} from '@/hooks/useConversation';
 import { useUpload } from '@/hooks/useUpload';
 
 // ---------------------------------------------------------------------------
@@ -35,7 +38,8 @@ interface Props {
 }
 
 export function ImageDropzone({ children }: Props) {
-  const { send, isStreaming } = useConversation();
+  const { send } = useConversationActions();
+  const { isStreaming } = useConversationState();
   const { upload, isUploading, error, clearError } = useUpload();
   const reduced = useReducedMotion();
   const [isDragging, setIsDragging] = useState(false);

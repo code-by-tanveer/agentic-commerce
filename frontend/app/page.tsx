@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { ConversationProvider } from '@/hooks/useConversation';
 import { PreferencesProvider } from '@/hooks/usePreferences';
 import { SessionProvider, useSession } from '@/hooks/useSession';
@@ -24,9 +25,15 @@ import { PreferencesCard } from '@/components/preferences/PreferencesCard';
 //                         from page state.
 //   ConversationProvider — wraps the streaming/SSE pump.
 export default function Page() {
+  // T1.34 — `SessionProvider` calls `useSearchParams` (deep-link support).
+  // Next.js 14 requires that read to be wrapped in a Suspense boundary so it
+  // can render the empty-params fallback during prerender. The Suspense
+  // wraps the whole provider tree because the id ripples through every
+  // downstream provider.
   return (
-    <SessionProvider>
-      <ShortlistProvider>
+    <Suspense fallback={null}>
+      <SessionProvider>
+        <ShortlistProvider>
         <PreferencesShell>
           <ConversationProvider>
             {/* ImageDropzone — sibling to <main> so it can listen at the
@@ -35,6 +42,9 @@ export default function Page() {
                 full-viewport via fixed positioning when dragging starts. */}
             <ImageDropzone />
             <main className="grain relative flex min-h-dvh flex-col bg-ink-50">
+              {/* T1.17 — single page-level <h1> for screen readers. The visual
+                  wordmark in <Header> is styled prose (a <p> for layout). */}
+              <h1 className="sr-only">Agentic Commerce</h1>
               <Header />
               <div className="flex flex-1 flex-col">
                 <ConversationCanvas />
@@ -56,6 +66,7 @@ export default function Page() {
         </PreferencesShell>
       </ShortlistProvider>
     </SessionProvider>
+    </Suspense>
   );
 }
 

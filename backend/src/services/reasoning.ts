@@ -4,9 +4,9 @@ import type { PreferenceEntrySnapshot, PreferencesSnapshot } from '../types/tool
 /**
  * Pure rules-engine for product reasoning chips. NO DB, NO MCP, NO logging.
  * Given a product + a preferences snapshot, return ≤4 chips ranked by signal
- * strength per cycle-2.md:
+ * strength per cycle-2.md, with Cycle 7 polish adding `fast_shipping`:
  *
- *   size_match > discount > price > shipping > ethics
+ *   size_match > discount > price > fast_shipping > shipping > ethics
  *
  * Tests for this file should be trivial — feed in fixtures, assert on the
  * returned array. See cycle-2.md "Backend engineer" hard rules.
@@ -18,9 +18,17 @@ const RANK: Record<string, number> = {
   size_match: 0,
   discount: 1,
   price: 2,
-  shipping: 3,
-  ethics: 4,
+  fast_shipping: 3,
+  shipping: 4,
+  ethics: 5,
 };
+
+// Cycle 7 polish (T1.35): the gift-deadline persona needs a quick visual cue
+// when a merchant ships in ≤3 days. `MerchantInfo.shippingDays` is free-form
+// ("Ships in 2-3 business days", "5 day shipping", etc.) so we parse loosely
+// and emit only when the highest day-count we can extract is ≤3.
+const FAST_SHIPPING_MAX_DAYS = 3;
+const SHIPPING_DAYS_REGEX = /(\d+)(?:\s*[-–]\s*(\d+))?\s*(?:business\s+)?days?/i;
 
 function readEntry(
   prefs: PreferencesSnapshot,
@@ -103,6 +111,24 @@ function priceChip(product: NormalizedProduct, prefs: PreferencesSnapshot): Reas
   };
 }
 
+function fastShippingChip(product: NormalizedProduct): ReasoningChip | null {
+  const raw = product.merchantInfo?.shippingDays;
+  if (!raw) return null;
+  const m = SHIPPING_DAYS_REGEX.exec(raw);
+  if (!m) return null;
+  const lo = Number(m[1]);
+  const hi = m[2] != null ? Number(m[2]) : lo;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  const maxDays = Math.max(lo, hi);
+  if (maxDays > FAST_SHIPPING_MAX_DAYS) return null;
+  return {
+    kind: 'fast_shipping',
+    label: `Ships in ${maxDays} day${maxDays === 1 ? '' : 's'}`,
+    detail: `Merchant published shipping window: ${raw}.`,
+    tone: 'positive',
+  };
+}
+
 function shippingChip(product: NormalizedProduct, prefs: PreferencesSnapshot): ReasoningChip | null {
   const wanted = readValue<unknown>(prefs, 'ships_to');
   const target =
@@ -157,6 +183,8 @@ export function computeChips(
   if (d) candidates.push(d);
   const p = priceChip(product, prefs);
   if (p) candidates.push(p);
+  const fs = fastShippingChip(product);
+  if (fs) candidates.push(fs);
   const sh = shippingChip(product, prefs);
   if (sh) candidates.push(sh);
   const e = ethicsChip(product, prefs);

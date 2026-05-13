@@ -45,11 +45,21 @@ export interface SavedAffordance {
   at: number; // performance.now()-ish; 0 means "nothing fresh to show"
 }
 
+// T1.33 — last optimistic-revert error, scoped to a specific key so the
+// PreferencesCard renders a tiny rose-700 line under the offending chip.
+// Auto-clears after 3s; not toasted system-wide.
+export interface PrefRevertError {
+  key: PreferenceKey | null;
+  message: string;
+  at: number;
+}
+
 interface State {
   prefs: PreferenceMap;
   status: PrefStatus;
   error: string | null;
   lastSaved: SavedAffordance;
+  lastRevert: PrefRevertError;
 }
 
 type Action =
@@ -59,13 +69,16 @@ type Action =
   | { type: 'set_local'; key: PreferenceKey; record: PreferenceRecord; markSaved: boolean }
   | { type: 'remove_local'; key: PreferenceKey }
   | { type: 'replace_local'; prefs: PreferenceMap }
-  | { type: 'clear_saved' };
+  | { type: 'clear_saved' }
+  | { type: 'revert'; key: PreferenceKey; message: string }
+  | { type: 'clear_revert' };
 
 const initialState: State = {
   prefs: {},
   status: 'idle',
   error: null,
   lastSaved: { key: null, at: 0 },
+  lastRevert: { key: null, message: '', at: 0 },
 };
 
 function reducer(state: State, action: Action): State {
@@ -95,6 +108,13 @@ function reducer(state: State, action: Action): State {
       return { ...state, prefs: action.prefs };
     case 'clear_saved':
       return { ...state, lastSaved: { key: null, at: 0 } };
+    case 'revert':
+      return {
+        ...state,
+        lastRevert: { key: action.key, message: action.message, at: Date.now() },
+      };
+    case 'clear_revert':
+      return { ...state, lastRevert: { key: null, message: '', at: 0 } };
     default:
       return state;
   }
@@ -109,6 +129,9 @@ export interface PreferencesContextValue {
   // Called by `useConversation` when a `preference_update` SSE arrives.
   applyServerUpdate: (key: PreferenceKey, value: unknown, source: PreferenceSource) => void;
   lastSaved: SavedAffordance;
+  // T1.33 — last optimistic-revert (per-key); UI renders a small inline rose
+  // line under the chip. Auto-clears after 3s.
+  lastRevert: PrefRevertError;
 }
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
@@ -153,6 +176,13 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
     return () => clearTimeout(t);
   }, [state.lastSaved]);
 
+  // T1.33 — auto-clear the revert affordance after 3s.
+  useEffect(() => {
+    if (!state.lastRevert.key) return;
+    const t = setTimeout(() => dispatch({ type: 'clear_revert' }), 3000);
+    return () => clearTimeout(t);
+  }, [state.lastRevert]);
+
   const set = useCallback<PreferencesContextValue['set']>(
     async (key, value, source = 'user') => {
       if (!sessionId) return;
@@ -166,8 +196,8 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
       });
       try {
         await putPreference(sessionId, key, value, source);
-      } catch {
-        // Revert.
+      } catch (err) {
+        // Revert + surface inline.
         const prevPrior = snapshots.current.get(key);
         if (prevPrior === undefined) {
           dispatch({ type: 'remove_local', key });
@@ -179,6 +209,13 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
             markSaved: false,
           });
         }
+        // T1.33 — small inline rose-700 line under the chip, ≤3s.
+        dispatch({
+          type: 'revert',
+          key,
+          message:
+            err instanceof ApiError ? err.message : 'Could not save — try again',
+        });
       }
     },
     [sessionId, state.prefs],
@@ -192,7 +229,7 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
       dispatch({ type: 'remove_local', key });
       try {
         await apiDeletePreference(sessionId, key);
-      } catch {
+      } catch (err) {
         // Revert if we had something there.
         const prevPrior = snapshots.current.get(key);
         if (prevPrior !== undefined) {
@@ -203,6 +240,13 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
             markSaved: false,
           });
         }
+        // T1.33 — surface inline.
+        dispatch({
+          type: 'revert',
+          key,
+          message:
+            err instanceof ApiError ? err.message : 'Could not remove — try again',
+        });
       }
     },
     [sessionId, state.prefs],
@@ -235,8 +279,18 @@ export function PreferencesProvider({ children, sessionId }: ProviderProps) {
       remove,
       applyServerUpdate,
       lastSaved: state.lastSaved,
+      lastRevert: state.lastRevert,
     }),
-    [state.prefs, state.status, state.error, state.lastSaved, set, remove, applyServerUpdate],
+    [
+      state.prefs,
+      state.status,
+      state.error,
+      state.lastSaved,
+      state.lastRevert,
+      set,
+      remove,
+      applyServerUpdate,
+    ],
   );
 
   return (

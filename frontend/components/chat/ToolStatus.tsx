@@ -17,14 +17,20 @@ interface Props {
   errorMessage?: string;
 }
 
+// T1.7 — verb map covers all 7 tools. Fallback is the generic "Working" verb
+// so we never leak a function name like "save_preference" into UI copy.
 const VERBS: Record<string, string> = {
   search_catalog: 'Searching',
   get_product_details: 'Loading details for',
   compare_products: 'Comparing',
+  save_preference: 'Saving',
+  get_preferences: 'Reading preferences',
+  recommend_outfit: 'Pairing',
+  extract_style_from_image: 'Reading the image',
 };
 
 function verb(name: string): string {
-  return VERBS[name] ?? 'Working on';
+  return VERBS[name] ?? 'Working';
 }
 
 function asString(value: unknown): string | null {
@@ -36,6 +42,26 @@ function asString(value: unknown): string | null {
 function describeArgs(name: string, args: unknown): string {
   if (!args || typeof args !== 'object') return '';
   const a = args as Record<string, unknown>;
+
+  // T1.7 — preference tools surface the human-readable key (e.g. "budget"),
+  // not the raw arg dump. `save_preference` and `get_preferences` both pass
+  // a `key` arg per the BE tool schemas.
+  if (name === 'save_preference' || name === 'get_preferences') {
+    const key = asString(a.key);
+    if (key) return key.replace(/_/g, ' ');
+  }
+
+  // Vision tool — surface the anchor concept if the agent passed one.
+  if (name === 'extract_style_from_image') {
+    const desc = asString(a.description) ?? asString(a.hint);
+    if (desc) return desc;
+  }
+
+  // Outfit pairing — anchor product id when present.
+  if (name === 'recommend_outfit') {
+    const anchor = asString(a.anchorProductId) ?? asString(a.productId);
+    if (anchor) return anchor;
+  }
 
   // Prefer obvious freeform strings.
   const query = asString(a.query) ?? asString(a.text) ?? asString(a.q);
@@ -63,6 +89,10 @@ export function ToolStatus({ name, args, status, errorMessage }: Props) {
   const label = `${verb(name)} ${describeArgs(name, args)}`.trim();
 
   return (
+    // T1.5 — narrow polite-status region. `aria-atomic="false"` so each new
+    // tool announcement reads as a fresh update rather than re-announcing the
+    // entire concatenated history every time. This is the only live region
+    // in the canvas; ConversationCanvas no longer carries `aria-live`.
     <div
       className={cn(
         'flex items-center gap-2 text-xs text-ink-400',
@@ -70,6 +100,7 @@ export function ToolStatus({ name, args, status, errorMessage }: Props) {
       )}
       role="status"
       aria-live="polite"
+      aria-atomic="false"
     >
       <Indicator status={status} reduced={!!reduced} />
       <span className="truncate">
@@ -104,12 +135,13 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
   }
   // Running — single rotating dot (Granola-style), or opacity pulse when
   // prefers-reduced-motion is set.
+  // T1.32 — both durations brought under DESIGN.md §6's 600ms loop budget.
   if (reduced) {
     return (
       <motion.span
         className="inline-block h-2 w-2 rounded-full bg-ink-400"
         animate={{ opacity: [0.35, 1, 0.35] }}
-        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut' }}
         aria-hidden
       />
     );
@@ -118,7 +150,7 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
     <motion.span
       className="inline-block h-3 w-3"
       animate={{ rotate: 360 }}
-      transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
+      transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }}
       aria-hidden
     >
       <span className="block h-2 w-2 rounded-full bg-ink-400" />

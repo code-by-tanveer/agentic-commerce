@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type ClipboardEvent,
@@ -10,12 +11,17 @@ import {
 } from 'react';
 import { ArrowUp, Loader2, Paperclip } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { useConversation } from '@/hooks/useConversation';
+import {
+  useConversationActions,
+  useConversationState,
+} from '@/hooks/useConversation';
 import { useUpload } from '@/hooks/useUpload';
 
 export function InputBar() {
-  const { send, isSearching } = useConversation();
+  const { send } = useConversationActions();
+  const { isSearching } = useConversationState();
   const { upload, isUploading } = useUpload();
+  const labelId = useId();
   const [value, setValue] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,7 +42,13 @@ export function InputBar() {
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // T1.4 — IME composition: don't submit mid-CJK input. `nativeEvent.isComposing`
+    // is true while a CJK / Korean / Vietnamese IME has uncommitted candidates.
+    if (
+      e.key === 'Enter' &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing
+    ) {
       e.preventDefault();
       void submit();
     }
@@ -76,12 +88,24 @@ export function InputBar() {
   const disabled = isSearching || isUploading;
 
   return (
-    <div className="sticky bottom-0 z-10 border-t border-ink-100 bg-ink-50/80 backdrop-blur">
+    // T1.3 — safe-area-inset-bottom. iOS home indicator clips otherwise.
+    // `max()` keeps the existing visual padding floor when the device has no
+    // physical inset (desktop / Android with on-screen nav).
+    <div
+      className="sticky bottom-0 z-10 border-t border-ink-100 bg-ink-50/80 backdrop-blur"
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
+    >
       <form
         onSubmit={submit}
         className="mx-auto flex w-full max-w-3xl items-end gap-2 px-4 py-4"
+        aria-labelledby={labelId}
       >
-        <div className="relative flex w-full items-end rounded-3xl bg-white px-3 py-2.5 shadow-soft transition focus-within:shadow-lift">
+        {/* T1.16 — visible-to-AT label (sr-only). Placeholder alone is not a
+            label per WCAG 1.3.1 / 4.1.2. */}
+        <label id={labelId} htmlFor={`${labelId}-input`} className="sr-only">
+          Message
+        </label>
+        <div className="relative flex w-full items-end rounded-3xl bg-white px-3 py-2 shadow-soft transition focus-within:shadow-lift">
           <input
             ref={fileInputRef}
             type="file"
@@ -111,12 +135,14 @@ export function InputBar() {
           </button>
           <textarea
             ref={ref}
+            id={`${labelId}-input`}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             rows={1}
             placeholder="What are you looking for?"
+            aria-label="Message"
             className="w-full resize-none bg-transparent text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none"
           />
           <button

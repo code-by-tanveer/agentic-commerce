@@ -75,6 +75,10 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
 
   // Snapshot preferences ONCE per request and freeze for the loop. Tools
   // read from ctx.preferences but never re-load — see cycle-2.md hard rule.
+  // Cycle 7 perf polish (T1.26): the chat route now kicks off `listPreferences`
+  // in parallel with the SSE header flush and passes the resolved snapshot
+  // here. The inline `listPreferences` fallback remains as a safety net for
+  // any callers that don't pre-load (tests, future entry points).
   let preferences: PreferencesSnapshot = opts.preferences ?? ({} as PreferencesSnapshot);
   if (!opts.preferences) {
     try {
@@ -346,7 +350,9 @@ function classifyError(err: unknown): ClassifiedError {
 
   // Auth / permission — surface as a generic "service unavailable" so we don't
   // hint at key state. Admins handle the rotation; users can't retry their way
-  // out of it.
+  // out of it. Cycle 7 polish (T1.20): copy now matches `retryable: false`
+  // (prior "Please try again." invited a retry the FE never rendered, and
+  // wouldn't help if it did — the key is rotated server-side).
   if (
     e.status === 401 ||
     e.status === 403 ||
@@ -354,7 +360,7 @@ function classifyError(err: unknown): ClassifiedError {
   ) {
     return {
       code: 'invalid_request',
-      message: 'Service unavailable. Please try again.',
+      message: 'Service unavailable. Contact support.',
       retryable: false,
     };
   }

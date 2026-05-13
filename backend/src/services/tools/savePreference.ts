@@ -2,8 +2,10 @@ import { z } from 'zod';
 import {
   PREFERENCE_KEYS,
   isPreferenceKey,
-  upsertPreference,
   type PreferenceKey,
+} from '@agentic/events';
+import {
+  upsertPreference,
   type PreferenceSource,
 } from '../../db/repos/preferences.js';
 import type { Tool } from '../../types/tool.js';
