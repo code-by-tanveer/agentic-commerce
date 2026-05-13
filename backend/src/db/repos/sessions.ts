@@ -110,3 +110,39 @@ export async function setViewMode(
   updateViewModeStmt().run(mode, new Date().toISOString(), sessionId);
   return Promise.resolve();
 }
+
+// Cycle 5 (Phase D): summary blob is a JSON-stringified SummaryBlob written
+// by POST /api/session/:id/summary; read back by GET. Column has existed
+// since Cycle 1's migration 0001 (ARCH §4).
+const selectSummaryStmt = () =>
+  db.prepare<[string]>('SELECT summary_blob FROM sessions WHERE id = ?');
+const updateSummaryStmt = () =>
+  db.prepare<[string, string, string]>(
+    'UPDATE sessions SET summary_blob = ?, updated_at = ? WHERE id = ?',
+  );
+
+export async function getSummaryBlob<T = unknown>(
+  sessionId: string,
+): Promise<T | null> {
+  const row = selectSummaryStmt().get(sessionId) as
+    | { summary_blob: string | null }
+    | undefined;
+  if (!row || !row.summary_blob) return Promise.resolve(null);
+  try {
+    return Promise.resolve(JSON.parse(row.summary_blob) as T);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+export async function setSummaryBlob(
+  sessionId: string,
+  blob: unknown,
+): Promise<void> {
+  updateSummaryStmt().run(
+    JSON.stringify(blob),
+    new Date().toISOString(),
+    sessionId,
+  );
+  return Promise.resolve();
+}

@@ -4,11 +4,14 @@ import { useMemo } from 'react';
 import { Layers, RotateCcw, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useConversation } from '@/hooks/useConversation';
+import { useSession } from '@/hooks/useSession';
 import { useShortlist } from '@/hooks/useShortlist';
+import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
 export function Header() {
   const { reset, messages } = useConversation();
+  const { sessionId } = useSession();
   const { shortlist, openDrawer } = useShortlist();
   const hasHistory = messages.length > 1;
 
@@ -18,6 +21,10 @@ export function Header() {
     () => shortlist.filter((i) => i.lane === 'love' || i.lane === 'maybe').length,
     [shortlist],
   );
+
+  // Cycle 5: surface the share button only once there's at least one Love
+  // or Maybe item to share — keeps the chrome quiet on a fresh session.
+  const canShare = badge > 0 && !!sessionId;
 
   return (
     <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
@@ -34,6 +41,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <ViewToggle />
+          {canShare && sessionId && <ShareButton sessionId={sessionId} />}
           <button
             type="button"
             onClick={openDrawer}

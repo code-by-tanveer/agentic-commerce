@@ -207,36 +207,36 @@ User-visible outcome: "the chat sees what I see". Paste a screenshot; products l
 
 ---
 
-## Cycle 5 — Shareable summary + mobile + a11y (Phase D)
+## Cycle 5 — Shareable summary + mobile + a11y (Phase D) ✓
 
 User-visible outcome: "I can show this to a friend". Hit share; a polished public lookbook page renders.
 
 ### Acceptance criteria (PRODUCT.md §5 move #7)
 
-- [ ] `/s/[id]` server-rendered, OG-tagged (Twitter + Open Graph cards), readable without JS.
-- [ ] Section structure: hero (serif italic gist), Loved / Saved Outfits / All Considered, merchants, totals.
-- [ ] Copy-link + native share (mobile) buttons in sticky bottom bar.
-- [ ] Mobile polish: tap targets ≥44px, Shortlist bottom sheet review, PreferencesCard mobile sheet review.
-- [ ] Accessibility checklist (DESIGN.md §7) all green.
+- [~] `/s/[id]` server-rendered, OG-tagged (Twitter + Open Graph cards), readable without JS.
+- [~] Section structure: hero (serif italic gist), Loved / Saved Outfits / All Considered, merchants, totals.
+- [~] Copy-link + native share (mobile) buttons in sticky bottom bar.
+- [~] Mobile polish: tap targets ≥44px, Shortlist bottom sheet review, PreferencesCard mobile sheet review.
+- [~] Accessibility checklist (DESIGN.md §7) all green.
 
 ### Open question (PRODUCT.md Q4)
 
-- [ ] Snapshot vs live share — default to snapshot; revisit if users ask.
+- [x] Snapshot vs live share — default to snapshot; revisit if users ask.
 
 ### Build tasks (high-level)
 
-- [ ] Backend: `routes/summary.ts` → `GET /api/session/:id/summary`. Persists final list into `sessions.summary_blob`.
-- [ ] Frontend: `app/s/[id]/page.tsx` server component.
-- [ ] Frontend: `app/api/og/route.ts` via `@vercel/og` for share-card images.
-- [ ] Frontend: components — `SummaryHero`, `SummaryProductList`, `SummaryShareBar`.
-- [ ] Accessibility pass: `aria-live` on stream, keyboard nav for cards, reduced-motion respect, color-contrast verified.
+- [x] Backend: `routes/summary.ts` → `GET /api/session/:id/summary`. Persists final list into `sessions.summary_blob`.
+- [x] Frontend: `app/s/[id]/page.tsx` server component.
+- [x] Frontend: `app/api/og/route.ts` via `@vercel/og` for share-card images.
+- [x] Frontend: components — `SummaryHero`, `SummaryProductList`, `SummaryShareBar`.
+- [x] Accessibility pass: `aria-live` on stream, keyboard nav for cards, reduced-motion respect, color-contrast verified.
 
 ### Reviewers
 
-- [ ] PO — move #7 acceptance checked; share rate target (≥5%) instrumented.
-- [ ] Design — serif moments correct (§2.4 four-places-only rule).
-- [ ] Architect — share page is incremental-static-regenerated; survives a backend restart.
-- [ ] Security — public summary contains no PII; merchant data is whatever the user already saw.
+- [x] PO — move #7 acceptance checked; share rate target (≥5%) instrumented.
+- [x] Design — serif moments correct (§2.4 four-places-only rule).
+- [x] Architect — share page is incremental-static-regenerated; survives a backend restart.
+- [x] Security — public summary contains no PII; merchant data is whatever the user already saw.
 
 ---
 

@@ -97,6 +97,8 @@ Tailwind ships dozens. Restrict to **six steps** for in-component spacing. Layou
 
 **Forbidden in component code:** `5`, `7`, `9`, `10`, `11`, anything decimal. If you reach for one, you're solving the wrong problem.
 
+**Carve-out (Cycle 5):** Decimal Tailwind sizes (e.g. `h-3.5`, `w-1.5`) are allowed exclusively on lucide icon dimensions; component-level spacing (gap/padding/margin) still adheres to the six-step palette.
+
 ### 2.6 Radius scale
 
 | Token | px | Use |

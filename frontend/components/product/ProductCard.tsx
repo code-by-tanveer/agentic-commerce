@@ -236,7 +236,7 @@ export function ProductCard({ product, index = 0 }: Props) {
                   onClick={buy}
                   disabled={!canBuy}
                   className={cn(
-                    'inline-flex h-10 items-center gap-2 rounded-full px-5 text-sm font-medium transition',
+                    'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition',
                     canBuy
                       ? 'bg-accent-500 text-white hover:bg-accent-600'
                       : 'cursor-not-allowed bg-ink-100 text-ink-400',

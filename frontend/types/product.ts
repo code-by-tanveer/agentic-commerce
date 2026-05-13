@@ -101,3 +101,34 @@ export interface Moodboard {
   attributes: string[];
   suggestedQuery: string;
 }
+
+// ---------------------------------------------------------------------------
+// Cycle 5 — SummaryBlob. Mirrors `backend/src/services/summary.ts::SummaryBlob`.
+// Rendered by the server-rendered `/s/[id]` lookbook page. `snapshot` on each
+// shortlist row is the BE `ShortlistRow.snapshot` — opaque `unknown` on the
+// wire so a delisted-product reshape doesn't break the page; the renderer
+// narrows to `Product` defensively (PRODUCT.md acceptance #5).
+// ---------------------------------------------------------------------------
+export interface SummaryProduct {
+  productId: string;
+  lane: 'love' | 'maybe';
+  snapshot: Product;
+  addedAt: string;
+}
+
+export interface SummaryOutfit {
+  id: string;
+  anchorProductId: string;
+  items: Product[];
+  savedAt: string;
+  rationale?: string;
+}
+
+export interface SummaryBlob {
+  gist: string;
+  createdAt: string;
+  love: SummaryProduct[];
+  maybe: SummaryProduct[];
+  outfits: SummaryOutfit[];
+  merchantCount: number;
+}

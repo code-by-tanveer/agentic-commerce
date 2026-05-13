@@ -107,7 +107,7 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
   if (reduced) {
     return (
       <motion.span
-        className="inline-block h-1.5 w-1.5 rounded-full bg-ink-400"
+        className="inline-block h-2 w-2 rounded-full bg-ink-400"
         animate={{ opacity: [0.35, 1, 0.35] }}
         transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
         aria-hidden
@@ -121,7 +121,7 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       transition={{ duration: 0.9, repeat: Infinity, ease: 'linear' }}
       aria-hidden
     >
-      <span className="block h-1.5 w-1.5 rounded-full bg-ink-400" />
+      <span className="block h-2 w-2 rounded-full bg-ink-400" />
     </motion.span>
   );
 }

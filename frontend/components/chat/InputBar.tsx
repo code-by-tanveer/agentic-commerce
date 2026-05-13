@@ -81,7 +81,7 @@ export function InputBar() {
         onSubmit={submit}
         className="mx-auto flex w-full max-w-3xl items-end gap-2 px-4 py-4"
       >
-        <div className="relative flex w-full items-end rounded-3xl border border-ink-200 bg-white px-3 py-2.5 shadow-soft transition focus-within:border-ink-400">
+        <div className="relative flex w-full items-end rounded-3xl bg-white px-3 py-2.5 shadow-soft transition focus-within:shadow-lift">
           <input
             ref={fileInputRef}
             type="file"

@@ -3,6 +3,7 @@ import type {
   SavedOutfit,
   ShortlistItem,
   ShortlistLane,
+  SummaryBlob,
   ViewMode,
 } from '@/types/product';
 
@@ -422,6 +423,45 @@ export async function uploadImage(
     throw new ApiError(res.status, body?.message ?? 'upload failed');
   }
   return (await res.json()) as UploadedImage;
+}
+
+// ---------------------------------------------------------------------------
+// Summary (Cycle 5) — shareable lookbook. `createSummary` snapshots the
+// current shortlist + outfits into `sessions.summary_blob` and returns the
+// public URL; `fetchSummary` reads the blob back (server-side from the
+// `/s/[id]` page, or client-side as a fallback). 404 → `null` so callers can
+// branch on "no such share" without try/catching.
+// ---------------------------------------------------------------------------
+
+export async function createSummary(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<{ url: string }> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/summary`,
+    { method: 'POST', signal },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'summary create failed');
+  }
+  return (await res.json()) as { url: string };
+}
+
+export async function fetchSummary(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<SummaryBlob | null> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/summary`,
+    { signal },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'summary fetch failed');
+  }
+  return (await res.json()) as SummaryBlob;
 }
 
 // ---------------------------------------------------------------------------

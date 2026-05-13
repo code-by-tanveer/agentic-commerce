@@ -9,6 +9,7 @@ import { runMigrations } from './db/migrations/runner.js';
 import { chatRoutes } from './routes/chat.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { sessionRoutes } from './routes/session.js';
+import { summaryRoutes } from './routes/summary.js';
 import { uploadRoutes } from './routes/upload.js';
 import { purgeStaleUploads } from './services/uploadsPurge.js';
 
@@ -87,6 +88,7 @@ async function main() {
 
   await app.register(chatRoutes);
   await app.register(sessionRoutes);
+  await app.register(summaryRoutes);
   await app.register(preferencesRoutes);
   await app.register(uploadRoutes);
 
