@@ -261,13 +261,31 @@ User-visible outcome: "I can show this to a friend". Hit share; a polished publi
 
 ---
 
+## QA Evidence Gate (post-mortem 2026-05-13)
+
+The polish-cycle process rewarded artifacts that prove code exists (tsc, tests, ADRs) over artifacts that prove the product runs. Six cycles passed PASS on a product that wouldn't boot. This gate closes that loophole.
+
+**Every cycle's QA step must commit a `cycle-N/qa-evidence/` directory before the four reviewers vote.** Required contents:
+
+1. **`boot.log`** — terminal capture from a fresh `git clean -dfx && npm install`, both `npm run dev:backend` and `npm run dev:frontend` reaching steady state with a real `GROQ_API_KEY`. Both `Server listening` and `Ready in` lines must be present.
+2. **`first-chat.log`** — Playwright run of `npm run e2e` showing `firstchat.spec.ts` green. The spec asserts (a) "hi" gets a streamed reply within 10s, (b) no `<function` substring in visible text, (c) input re-enabled after `done`, (d) message container scrolled to the latest message.
+3. **`error-path.log`** — one forced error turn (kill the backend mid-stream, or use a bad GROQ_API_KEY) showing the sanitized error block renders AND the input + Retry button both become interactive within one tick.
+
+**No evidence directory → no PASS vote allowed.** This kills three carve-outs from prior cycles: the "mental dry-run" loophole (personas walking diffs instead of the running app), the "Groq-key gap" carve-out (skipping live integration), and the "tsc + 73 tests = green cycle" false positive.
+
+PR template (`docs/CYCLES/_template.md`) and the orchestrator's cycle-open checklist both reference this gate.
+
+---
+
 ## Launch-ready definition
 
 The product is **directly launchable** when, in a single cycle (Cycle 6 or a polish cycle), all four reviewers sign PASS and:
 
 1. Every checkbox above is `[x]`.
-2. `docs/walkthroughs/launch.md` — a full manual user-journey walkthrough document — is committed and reflects current behaviour.
-3. The orchestrator triggers `/ultrareview` (user-initiated, billed) for an outside-eye review; any high/critical findings are addressed before declaring launch.
-4. The user explicitly says "ship it."
+2. **§5.0 of `PRODUCT.md` (Move zero — boot & resilience) passes** before §5.1–§5.7 are reviewed.
+3. **The QA Evidence Gate above is satisfied** — `qa-evidence/` directory committed for the current cycle with all three artifacts.
+4. `docs/walkthroughs/launch.md` — a full manual user-journey walkthrough document — is committed and reflects current behaviour.
+5. The orchestrator triggers `/ultrareview` (user-initiated, billed) for an outside-eye review; any high/critical findings are addressed before declaring launch.
+6. The user explicitly says "ship it."
 
 The orchestrator stops the autonomous loop on launch-ready and posts a final readiness summary.

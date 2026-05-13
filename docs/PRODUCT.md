@@ -64,9 +64,33 @@ The PO considered making this conjunctive ("shortlist ≥2 AND tap ≥1 chip det
 
 ---
 
+## 5.0 Move zero — boot & resilience (the prerequisite)
+
+Added 2026-05-13 after the first real local boot revealed eight cascade bugs that six polish cycles never caught. Every cycle PASS gate must run §5.0 BEFORE §5.1–§5.7. A green §5.1–§5.7 with a failing §5.0 is a FAIL.
+
+The seven UX moves describe what the app *does in the happy path*. They never describe what makes it *a working app*. §5.0 closes that gap with acceptance criteria the cycle process can mechanically verify:
+
+(a) **Cold boot.** A fresh clone, `cp backend/.env.example backend/.env`, `npm install`, `npm run dev:backend && npm run dev:frontend` — both servers reach steady state and accept a chat turn, **zero manual edits to source or .env**. `.env.example` values must pass the same Zod validation as production (empty strings fail at write time, not boot time — e.g. `SHOPIFY_TOKEN_URL=` is forbidden; comment the line out instead).
+
+(b) **Greeting guard.** The agent responds to `hi`, `hello`, `thanks`, and `what can you do?` *without* invoking any tool. Tool dispatch fires only for shopping-shaped queries (named product type, vibe, occasion, budget, recipient, or "find/recommend/show me" framing).
+
+(c) **Tool-call contract.** The active model's tool-call format is asserted against our dispatcher. Any `<function>`-style XML or raw protocol token that reaches the user-visible content stream is a failed turn. Switching models (env `GROQ_MODEL`) requires re-running the contract.
+
+(d) **Stream-state invariant.** After any error (network drop, 429, parser failure, abort), the FE state machine returns to idle within one event-loop tick: the input is re-enabled and the Retry button is clickable and effectful.
+
+(e) **Visual chrome contract.** Interactive primitives in a horizontal row share a single height token (per `DESIGN.md §2.9`). The empty-chat shell renders correctly at 360 / 768 / 1280 widths.
+
+(f) **Auto-scroll.** The viewport follows the latest assistant turn unless the user has scrolled away *via a real gesture* (wheel, touchmove, page keys). Document-growth during streaming must never be misread as user intent.
+
+(g) **Deploy artifacts exist.** `Dockerfile`, `fly.toml` (or chosen equivalent), and an end-to-end smoke test (`npm run e2e` against fresh servers) are committed and green. DEPLOY.md describing them is not sufficient.
+
+The post-mortem from 2026-05-13 (see `docs/CYCLES/post-mortem-first-boot.md` once written) identified the meta-failure: the polish-cycle process rewarded artifacts that prove **code exists** (tsc clean, tests green, ADRs filed) over artifacts that prove **the product runs**. §5.0 is the correction.
+
+---
+
 ## 5. The seven UX moves — restated as acceptance criteria
 
-These are the moat. Every cycle review checks the relevant subset against PASS/FAIL.
+These are the moat. Every cycle review checks the relevant subset against PASS/FAIL — **after** §5.0 passes.
 
 1. **Visual-first collage layout.**
    *Acceptance:* The same product result set can be toggled between list view and a Pinterest-style masonry collage; the toggle persists for the session; products in collage retain their reasoning chips and merchant info on hover/tap.

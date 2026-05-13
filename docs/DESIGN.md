@@ -135,6 +135,25 @@ Library: Framer Motion (already a dep).
 
 **Easings (in code as Framer constants):** entry `[0.16, 1, 0.3, 1]` (overshoot-free easeOutCubic-ish), exit `[0.7, 0, 0.84, 0]`. No `spring` with bounce; no overshoot. Stagger between sibling cards: 40ms, capped at 6 items (no stagger past index 5 — the rest snap in together).
 
+### 2.9 Control heights & row alignment (grammar of adjacency)
+
+Added 2026-05-13 after a misaligned cursor in the InputBar survived six polish cycles. The DESIGN.md tokens covered isolated properties (spacing, radius, shadow) and single-element rules (serif homes) but had **no grammar for adjacency** — no rule for sibling controls in a row. This section is that grammar.
+
+**Row height tokens.** Every interactive primitive in a horizontal row declares one canonical height token. Sibling primitives in the same row must share the token. Padding on each sibling is the difference between the token and the sibling's intrinsic content height.
+
+| Row token | Height | Used for |
+|---|---|---|
+| `row-input` | 36px (`h-9`) | Chat InputBar siblings: textarea, send button, attach button. |
+| `row-chip` | 28px (`h-7`) | Reasoning chips, preference chips, suggestion chips. |
+| `row-tap` | 44px (`h-11`) | Mobile tap-target rows (per WCAG 2.5.5). |
+| `row-toolbar` | 40px (`h-10`) | View toggles, share button, jump-to-latest pill. |
+
+**Textarea / input rule.** A `<textarea>` or single-line `<input>` adjacent to fixed-height buttons in the same row MUST pad to match. For `text-sm` (20px line-height) in a `row-input` (36px), the spec is `py-2` (8px symmetric). For `text-base` (24px) in a `row-tap` (44px), it's `py-[10px]`. This is the spec, not a fix — write it the right way the first time.
+
+**Optical-center rule.** When icons sit beside text, align their **optical centers**, not their bounding-box centers. For `lucide-react` icons at 16px next to `text-sm` (14px font), they appear centered by default. For larger icons, lift the icon by 0.5–1px via `relative -top-px` rather than padding the text.
+
+**Verification.** The cursor alignment is the cheapest test. For any new input primitive, focus the field, type one character, screenshot the caret, and confirm its vertical center matches the sibling icon's vertical center. Caret alignment is invisible in static empty-state screenshots (placeholder glyphs sit lower than carets do), so review processes that only screenshot the empty state will miss this — make the caret check part of any InputBar / search-field / inline-edit review.
+
 ---
 
 ## 3. Principles

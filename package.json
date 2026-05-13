@@ -8,6 +8,11 @@
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
     "build": "npm --workspace backend run build && npm --workspace frontend run build",
-    "test": "npm --workspace backend run test"
+    "test": "npm --workspace backend run test",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
   }
 }
