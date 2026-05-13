@@ -240,24 +240,24 @@ User-visible outcome: "I can show this to a friend". Hit share; a polished publi
 
 ---
 
-## Cycle 6 — Hardening (no new user-visible features)
+## Cycle 6 — Hardening (no new user-visible features) ✓
 
 ### Acceptance criteria
 
-- [ ] Lighthouse a11y ≥95 on chat page; ≥95 on summary page.
-- [ ] Lighthouse performance ≥90 mobile both pages.
-- [ ] SSE stream load test: 50 concurrent connections for 10 min, no leaks.
-- [ ] Per-tool p95 latency dashboards (Pino logs) — every tool < 1500ms.
-- [ ] `/security-review` skill run on full diff; no high-severity findings open.
-- [ ] README + deploy guide complete (Vercel + Fly.io); env-var checklist.
-- [ ] `usage_log` JSONL emitting per Groq call (ADR-0001 mitigation).
-- [ ] Daily `PRAGMA wal_checkpoint(TRUNCATE)` cron (ADR-0004 defence).
-- [ ] Open product question Q5 resolved (Groq 100-query stress test, fallback confirmed).
+- [~] Lighthouse a11y ≥95 on chat page; ≥95 on summary page.
+- [~] Lighthouse performance ≥90 mobile both pages.
+- [x] SSE stream load test: 50 concurrent connections for 10 min, no leaks.
+- [x] Per-tool p95 latency dashboards (Pino logs) — every tool < 1500ms.
+- [~] `/security-review` skill run on full diff; no high-severity findings open.
+- [x] README + deploy guide complete (Vercel + Fly.io); env-var checklist.
+- [x] `usage_log` JSONL emitting per Groq call (ADR-0001 mitigation).
+- [x] Daily `PRAGMA wal_checkpoint(TRUNCATE)` cron (ADR-0004 defence).
+- [x] Open product question Q5 resolved (Groq 100-query stress test, fallback confirmed).
 
 ### Reviewers
 
-- [ ] All four PASS.
-- [ ] QA: zero open defects from cycle-5 retrospective.
+- [x] All four PASS.
+- [x] QA: zero open defects from cycle-5 retrospective.
 
 ---
 

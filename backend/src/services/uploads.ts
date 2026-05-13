@@ -13,9 +13,11 @@ import { env } from '../config/env.js';
  * The filename is bound by the signature, so an attacker can't shuffle a
  * valid HMAC onto a different file. `exp` is checked at verify time.
  *
- * NOTE on key reuse: we re-use `IP_HASH_SALT` as the upload-signing key for
- * Cycle 4 (documented in cycle-4.md). Cycle 6 introduces a dedicated
- * `UPLOAD_SIGNING_SECRET` env var and rotates this off the shared salt.
+ * NOTE on key separation (Cycle 6): the HMAC key is `UPLOAD_SIGNING_SECRET`.
+ * In production this is REQUIRED (Zod refine in `config/env.ts`). In dev it
+ * falls back to `IP_HASH_SALT` with a single boot warning so existing local
+ * configs keep working — the env module already resolved that fallback, so
+ * we read a single field here.
  */
 
 const SCHEME = 'signed:';
@@ -37,7 +39,10 @@ function unb64url(s: string): Buffer {
 }
 
 function sign(payload: string): string {
-  return b64url(createHmac('sha256', env.IP_HASH_SALT).update(payload).digest());
+  // Cycle 6: `env.UPLOAD_SIGNING_SECRET` is dedicated; in non-prod it falls
+  // back to `IP_HASH_SALT` (resolved in `config/env.ts` with a boot warning).
+  const key = env.UPLOAD_SIGNING_SECRET ?? env.IP_HASH_SALT;
+  return b64url(createHmac('sha256', key).update(payload).digest());
 }
 
 export function signUploadUrl(filename: string, ttlMs: number): string {

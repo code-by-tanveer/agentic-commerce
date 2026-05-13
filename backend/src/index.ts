@@ -5,6 +5,7 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
+import { db } from './db/sqlite.js';
 import { runMigrations } from './db/migrations/runner.js';
 import { chatRoutes } from './routes/chat.js';
 import { preferencesRoutes } from './routes/preferences.js';
@@ -107,8 +108,29 @@ async function main() {
   );
   // Don't keep the event loop alive on the timer alone.
   if (typeof purgeInterval.unref === 'function') purgeInterval.unref();
+
+  // Cycle 6 carry-over (architect): daily WAL checkpoint to bound the
+  // -wal file's growth so the SQLite volume on Fly stays sane. TRUNCATE
+  // mode rewrites pages back into the main DB file and shrinks -wal back
+  // to zero. Best-effort — a busy writer just means we retry tomorrow.
+  const walCheckpointInterval = setInterval(
+    () => {
+      try {
+        db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+        app.log.info('wal checkpoint ok');
+      } catch (e) {
+        app.log.warn({ err: e }, 'wal checkpoint failed');
+      }
+    },
+    24 * 60 * 60 * 1000,
+  );
+  if (typeof walCheckpointInterval.unref === 'function') {
+    walCheckpointInterval.unref();
+  }
+
   app.addHook('onClose', async () => {
     clearInterval(purgeInterval);
+    clearInterval(walCheckpointInterval);
   });
 
   try {

@@ -23,12 +23,14 @@ interface PageProps {
 
 // Server-side fetch helper. Uses BACKEND_URL when present (the page can be
 // SSR'd outside the Next.js dev server's rewrite proxy — e.g. Vercel preview
-// pointing at a Fly backend). Falls back to the rewrite path locally.
+// pointing at a Fly backend). Cycle 6: BACKEND_URL is required in prod (the
+// env guard documented in `frontend/.env.example`); the localhost:4000
+// fallback exists only for local `next dev` against a local backend. The
+// previous fallback pointed at the FE port (`process.env.PORT ?? 3000`)
+// which 404'd whenever the rewrite proxy wasn't involved.
 async function loadSummary(id: string): Promise<SummaryBlob | null> {
-  const backend = process.env.BACKEND_URL;
-  const url = backend
-    ? `${backend.replace(/\/$/, '')}/api/session/${encodeURIComponent(id)}/summary`
-    : `http://localhost:${process.env.PORT ?? 3000}/api/session/${encodeURIComponent(id)}/summary`;
+  const backend = (process.env.BACKEND_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+  const url = `${backend}/api/session/${encodeURIComponent(id)}/summary`;
   try {
     const res = await fetch(url, { cache: 'no-store' });
     if (res.status === 404) return null;

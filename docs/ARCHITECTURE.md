@@ -466,6 +466,7 @@ Triggers to move on: SQLite file > 200 MB, or daily Groq requests > 10K, or p95 
 
 **Uploads.**
 - 8 MB max. Magic-byte sniff (`file-type`). MIME allowlist: `image/jpeg`, `image/png`, `image/webp`. Files stored under `UPLOAD_DIR` with random nanoid filenames. Served via the backend (not directly from disk) with a signed-URL handler so we can revoke. 24h purge cron. [DEFERRED — virus scan / NSFW classification. Revisit if we open ingestion to a real user base.]
+- **Upload-signing key separation (Cycle 6).** Signed upload URLs are HMAC'd with a dedicated `UPLOAD_SIGNING_SECRET`, not the `IP_HASH_SALT` (which Cycle 4 reused). In production this env var is **required** (a Zod refine in `config/env.ts` throws on boot if it's missing). In `development`/`test`, it falls back to `IP_HASH_SALT` with a single `[env] UPLOAD_SIGNING_SECRET not set; falling back to IP_HASH_SALT for dev` warning at boot. This keeps the dev ergonomics from Cycle 4 while making the prod surface explicit — and means rotating the upload key never accidentally invalidates session IP hashes (or vice versa).
 
 **CSP.**
 - `default-src 'self'; img-src 'self' https: data:; connect-src 'self' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' (dev only — Next.js dev); style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'`.

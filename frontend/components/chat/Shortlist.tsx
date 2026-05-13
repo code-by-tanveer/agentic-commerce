@@ -203,7 +203,11 @@ function LaneItem({
         type="button"
         onClick={onRemove}
         aria-label={`Remove ${p.title} from shortlist`}
-        className="rounded-full p-1 text-ink-400 transition hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+        // Cycle 6 — visible target stays at p-1 (~20px) per DESIGN.md; the
+        // `before:` pseudo-element pads the touch area out to ≥44px so the
+        // lane-item X meets WCAG 2.5.5 Target Size AAA without changing
+        // the visual layout density of the lanes.
+        className="relative rounded-full p-1 text-ink-400 transition hover:bg-ink-50 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-white before:absolute before:inset-[-12px] before:content-['']"
       >
         <X className="h-3 w-3" aria-hidden />
       </button>

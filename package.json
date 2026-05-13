@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Conversational commerce app on top of Shopify Catalog MCP.",
-  "workspaces": ["backend", "frontend"],
+  "workspaces": ["backend", "frontend", "packages/*"],
   "scripts": {
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",

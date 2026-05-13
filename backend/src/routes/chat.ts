@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { runAgent } from '../services/agent.js';
 import { sharedCache } from '../services/cache.js';
 import { SYSTEM_PROMPT } from '../services/prompts.js';
@@ -58,10 +59,12 @@ export async function chatRoutes(app: FastifyInstance) {
       ip: request.ip,
     });
 
-    // Set / refresh cookie.
+    // Set / refresh cookie. Cycle 6: `Secure` is gated on NODE_ENV so dev over
+    // plain HTTP doesn't silently drop the cookie (Security LOW carry-over
+    // from Cycle 1). HTTPS-only in production via the env flag.
     reply.setCookie(COOKIE_NAME, session.id, {
       httpOnly: true,
-      secure: true,
+      secure: env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30,
@@ -135,12 +138,16 @@ export async function chatRoutes(app: FastifyInstance) {
         cache: sharedCache,
       });
     } catch (err) {
+      // Cycle-6 architect catch — never ship raw `err.message` to the SSE
+      // error frame (re-opens Cycle-1 Security-LOW sanitization rule).
+      // `runAgent` covers ~all error paths via `classifyError`; this is the
+      // safety net for everything that escapes it.
       request.log.error({ err }, 'chat route failed');
       try {
         writer.write({
           type: 'error',
           code: 'internal',
-          message: err instanceof Error ? err.message : 'internal_error',
+          message: 'Something went wrong on our side. Try again?',
           retryable: true,
         });
       } catch {

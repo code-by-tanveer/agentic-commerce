@@ -37,7 +37,7 @@ export function SummaryHero({ blob }: Props) {
         <p className="text-[11px] uppercase tracking-wider text-ink-400">
           A lookbook from Agentic Commerce
         </p>
-        <h1 className="mt-3 font-display text-3xl italic leading-tight text-ink-900 sm:text-4xl">
+        <h1 className="mt-3 font-display text-3xl italic leading-tight text-ink-900">
           {blob.gist}
         </h1>
         <p className="mt-4 text-sm text-ink-400">

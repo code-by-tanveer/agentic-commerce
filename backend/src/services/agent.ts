@@ -278,19 +278,121 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       // FE bailed; don't emit (the stream is closed anyway).
       return;
     }
-    const message = err instanceof Error ? err.message : 'agent_failure';
-    const code = inferErrorCode(err);
+    // Full raw error (stack + cause) goes to the log at error level. Only
+    // the sanitized one-liner ships over SSE — Cycle 1 D2 security finding.
     log.error({ err }, 'agent loop failed');
-    emit({ type: 'error', code, message, retryable: code !== 'invalid_request' });
+    const mapped = classifyError(err);
+    emit({
+      type: 'error',
+      code: mapped.code,
+      message: mapped.message,
+      retryable: mapped.retryable,
+    });
   }
 }
 
-function inferErrorCode(err: unknown): 'rate_limited' | 'mcp_error' | 'tool_error' | 'invalid_request' | 'internal' {
-  if (!err || typeof err !== 'object') return 'internal';
-  const e = err as { status?: number; name?: string };
-  if (e.status === 429) return 'rate_limited';
-  if (e.name === 'McpError') return 'mcp_error';
-  return 'internal';
+type ErrorCode =
+  | 'rate_limited'
+  | 'mcp_error'
+  | 'tool_error'
+  | 'invalid_request'
+  | 'internal';
+
+interface ClassifiedError {
+  code: ErrorCode;
+  message: string;
+  retryable: boolean;
+}
+
+/**
+ * Cycle 6 carry-over D2: produce a granular `(code, message, retryable)` for
+ * every error class. The raw error stays in logs (above); only this sanitized
+ * one-liner travels over the SSE `error` frame so we never leak Groq SDK or
+ * MCP internals to the user.
+ */
+function classifyError(err: unknown): ClassifiedError {
+  if (!err || typeof err !== 'object') {
+    return {
+      code: 'internal',
+      message: "Something went wrong on our side. Try again?",
+      retryable: true,
+    };
+  }
+  const e = err as {
+    status?: number;
+    name?: string;
+    code?: string;
+    error?: { code?: string; type?: string };
+  };
+
+  // McpError — catalog unreachable / MCP-level failure.
+  if (e.name === 'McpError') {
+    return {
+      code: 'mcp_error',
+      message: "Couldn't reach the catalog. Retry?",
+      retryable: true,
+    };
+  }
+
+  // Groq rate limit: HTTP 429 OR error code `rate_limit_exceeded`.
+  const groqErrCode = e.error?.code ?? e.code;
+  if (e.status === 429 || groqErrCode === 'rate_limit_exceeded') {
+    return {
+      code: 'rate_limited',
+      message: 'Hitting traffic — retrying in a few seconds.',
+      retryable: true,
+    };
+  }
+
+  // Auth / permission — surface as a generic "service unavailable" so we don't
+  // hint at key state. Admins handle the rotation; users can't retry their way
+  // out of it.
+  if (
+    e.status === 401 ||
+    e.status === 403 ||
+    groqErrCode === 'invalid_api_key'
+  ) {
+    return {
+      code: 'invalid_request',
+      message: 'Service unavailable. Please try again.',
+      retryable: false,
+    };
+  }
+
+  // Tool-dispatch throw bubbled out of `runAgent`. We tag those by `name`
+  // when we surface them in this catch (rare — most tool throws are already
+  // converted to `tool_status: error` inside the registry). If we ever do see
+  // one here, it's not retryable as-is — the LLM picked bad args.
+  if (e.name === 'ToolDispatchError') {
+    return {
+      code: 'tool_error',
+      message: 'A tool failed. Try rephrasing?',
+      retryable: false,
+    };
+  }
+
+  // Groq 5xx / network-level (APIConnectionError etc. all surface with a
+  // missing or >=500 status).
+  if (typeof e.status === 'number' && e.status >= 500) {
+    return {
+      code: 'internal',
+      message: "Something went wrong on our side. Try again?",
+      retryable: true,
+    };
+  }
+  if (e.name === 'APIConnectionError' || e.name === 'APIConnectionTimeoutError') {
+    return {
+      code: 'internal',
+      message: "Something went wrong on our side. Try again?",
+      retryable: true,
+    };
+  }
+
+  return {
+    code: 'internal',
+    message: "Something went wrong on our side. Try again?",
+    retryable: true,
+  };
 }
 
 function summarisePreferences(prefs: PreferencesSnapshot): string {

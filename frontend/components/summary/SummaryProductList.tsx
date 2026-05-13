@@ -68,7 +68,10 @@ function ProductCell({ product }: { product: Product }) {
               href={product.checkoutUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-full bg-ink-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-ink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
+              // Cycle 6 — visible chip kept compact (px-3 py-2); the
+              // `before:` pad extends the touch area to ≥44px without any
+              // visual change.
+              className="relative inline-flex items-center gap-1 rounded-full bg-ink-900 px-3 py-2 text-xs font-medium text-white transition hover:bg-ink-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 before:absolute before:inset-[-10px] before:content-['']"
             >
               Open at {product.merchant}
               <ExternalLink className="h-3 w-3" aria-hidden />

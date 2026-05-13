@@ -1,66 +1,57 @@
 # Agentic Commerce
 
-Conversational commerce app on top of the Shopify Catalog MCP server.
+A chat-native shopping agent that helps you *decide what to buy*, not just *find* it — visually, transparently, with memory. Built on the Shopify Catalog MCP.
 
-A user types a natural-language product query, the backend calls the Shopify Catalog MCP (`https://catalog.shopify.com/api/ucp/mcp`), and the frontend renders inline product cards. Clicking **Buy Now** redirects to the merchant's Shopify checkout URL.
+## What it does
 
-## Layout
+- **Streams an agent that thinks out loud.** Type a query and watch the tool-use status, then the streamed text and product grid arrive inline as a single assistant turn.
+- **Remembers you across the session.** Mention a size, budget, palette, or shipping preference once; an inline "About you" card appears and every subsequent result carries the matching reasoning chips.
+- **Lays results out like Pinterest.** Toggle between list and a masonry collage; the choice persists for the session.
+- **Shortlists into Love / Maybe / Skip lanes** via drag-and-drop or keyboard. Snapshots survive a hard reload.
+- **Builds outfits and bundles.** Ask "what would go with this?" on any product and get a 2–4 item bundle with a one-line rationale per item.
+- **Searches from a photo.** Paste or drop an image; the agent extracts editable style attributes and fires a search within seconds.
+- **Renders a shareable lookbook** at `/s/<id>` — server-rendered, OG-tagged, viewable without JavaScript.
 
-```
-backend/    Fastify + TypeScript. JSON-RPC client for Catalog MCP. Normalizes responses.
-frontend/   Next.js 14 (App Router) + Tailwind + Framer Motion. Conversational Product Canvas.
-```
+## Stack
 
-## Getting started
+Next.js 14 (App Router) + Tailwind on the frontend. Fastify + TypeScript + `better-sqlite3` on the backend. Groq Cloud for LLM (text + vision) and the Shopify Catalog MCP for catalog access.
+
+## Run locally
 
 ```bash
+git clone <repo>
+cd agentic_commerce
 npm install
-cp backend/.env.example backend/.env     # fill in UCP_PROFILE_URL + optional JWT creds
-cp frontend/.env.example frontend/.env   # optional — defaults to localhost:4000
+
+cp backend/.env.example backend/.env       # set GROQ_API_KEY + UCP_PROFILE_URL
+cp frontend/.env.example frontend/.env     # defaults to BACKEND_URL=http://localhost:4000
 
 # Two terminals:
 npm run dev:backend     # http://localhost:4000
 npm run dev:frontend    # http://localhost:3000
 ```
 
-### Required configuration
+The backend listens on `PORT` (default `4000`); SQLite migrations run automatically on boot. The frontend proxies `/api/*` to `BACKEND_URL`. Only `GROQ_API_KEY` and `UCP_PROFILE_URL` are strictly required for a working dev boot; everything else has a sensible default.
 
-| Variable | Required | Notes |
-|---|---|---|
-| `UCP_PROFILE_URL` | yes | Public URL where your UCP agent profile JSON is hosted. Sent on every MCP request. |
-| `CATALOG_MCP_URL` | no | Defaults to `https://catalog.shopify.com/api/ucp/mcp`. |
-| `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` / `SHOPIFY_TOKEN_URL` | optional | If your deployment requires JWT auth via client credentials, set all three. The backend will cache the token until ~1 min before expiry and refresh transparently. |
-| `ALLOWED_ORIGINS` | no | Comma-separated list. Defaults to `http://localhost:3000`. |
-
-## API
-
-### `POST /api/search`
-Request: `{ "query": "minimalist desk lamp" }`
-Response: `{ "products": NormalizedProduct[] }`
-
-### `GET /api/product/:id`
-Response: `NormalizedProduct`
-
-`NormalizedProduct` shape lives in `backend/src/types/product.ts` and is mirrored on the frontend in `frontend/types/product.ts`.
+For a full manual walkthrough — typing a query, dropping an image, sharing a session — see [`docs/walkthroughs/launch.md`](docs/walkthroughs/launch.md).
 
 ## Architecture
 
-```
-Browser ──▶ Next.js frontend ──▶ /api/search, /api/product/:id ──▶ Fastify backend ──▶ Shopify Catalog MCP
-                                                                                              │
-                                                                  variant.checkout_url ◀──────┘
-Browser opens checkout_url directly (Shopify-hosted redirect checkout).
-```
+The frontend is a thin streaming UI: it POSTs to `/api/chat`, receives a typed SSE stream, and renders each event as a structured sub-block in the conversation. The backend runs the agent loop (Groq + Catalog MCP) inside the Fastify process, persists sessions and preferences to SQLite, and serves `/api/session/*` and `/api/upload`. The agent loop is bounded (≤4 turns/turn) and deterministic in its event protocol. Full design and rationale in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-The frontend never talks to Shopify directly — credentials and the UCP agent profile live on the backend only.
+## Deployment
 
-- Backend speaks JSON-RPC 2.0 to the Catalog MCP server. Tools used: `search_catalog`, `get_product`.
-- Each request injects `meta.ucp-agent.profile` from `UCP_PROFILE_URL`, as required by the UCP spec.
-- Token caching layer (`tokenCache.ts`) is a no-op unless `SHOPIFY_CLIENT_ID/SECRET/TOKEN_URL` are all set.
-- `normalize.ts` flattens the variable MCP response shapes (variants/media nested under different keys) into a stable `NormalizedProduct` for the frontend.
+Frontend deploys to Vercel; backend deploys to a single Fly.io machine with a persistent volume for the SQLite file. Sticky-machine routing keeps an in-flight SSE on the host that started it. Step-by-step instructions, env-var checklist, and a post-deploy smoke procedure live in [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
-## Where to extend
+## Where to look
 
-- **Smarter assistant copy**: today the assistant reply is templated in `frontend/hooks/useConversation.tsx:summarize`. Drop in a Claude API call there to phrase results, ask clarifying questions, or rank.
-- **Comparison view**: the spec mentions a `ComparisonTable` — easy to add as a new message type beside `products` on `Message`.
-- **Persistence**: conversation state is in-memory only. Add a `localStorage` effect in `useConversation` if you want it to survive reloads.
+| Need                                  | File                              |
+|---------------------------------------|-----------------------------------|
+| Product vision, personas, anti-goals  | `docs/PRODUCT.md`                 |
+| System design, schema, streaming spec | `docs/ARCHITECTURE.md`            |
+| Visual language, tokens, principles   | `docs/DESIGN.md`                  |
+| Decision history                      | `docs/adr/`                       |
+| Per-cycle build log                   | `docs/CYCLES/`                    |
+| Deploy guide                          | `docs/DEPLOY.md`                  |
+| Manual UI walkthrough                 | `docs/walkthroughs/launch.md`     |
+| Backend-specific dev notes            | `backend/README.md`               |

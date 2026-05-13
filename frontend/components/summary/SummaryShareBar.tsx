@@ -68,7 +68,10 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
       <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2">
         <a
           href={`/?session=${encodeURIComponent(sessionId)}`}
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
+          // Cycle 6 — visible chip stays at py-2/px-3, but the `before:`
+          // pseudo-element extends the touchable area to ≥44px (WCAG 2.5.5
+          // Target Size AAA). The pad is purely interactive, no visual.
+          className="relative inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 before:absolute before:inset-[-10px] before:content-['']"
         >
           <MessageCircle className="h-3.5 w-3.5" aria-hidden />
           Open in chat
@@ -79,7 +82,7 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
               type="button"
               onClick={onNativeShare}
               aria-label="Share via your device"
-              className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
+              className="relative inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 before:absolute before:inset-[-10px] before:content-['']"
             >
               <Share2 className="h-3.5 w-3.5 text-ink-400" aria-hidden />
               Share
@@ -90,8 +93,9 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
             onClick={onCopy}
             aria-label={copied ? 'Link copied' : 'Copy link'}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium transition',
+              'relative inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
+              "before:absolute before:inset-[-10px] before:content-['']",
               copied
                 ? 'bg-emerald-50 text-emerald-700'
                 : 'bg-ink-900 text-white hover:bg-ink-600',

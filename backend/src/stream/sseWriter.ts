@@ -31,7 +31,10 @@ export class SseWriter {
     this.pingTimer = setInterval(() => {
       if (this.closed) return;
       try {
-        this.reply.raw.write(': ping\n\n');
+        // ARCH §6 specifies named-event heartbeats (`event: ping`). The
+        // earlier comment-form `: ping\n\n` also kept proxies happy, but
+        // pinning the spec lets the FE filter on type rather than guess.
+        this.reply.raw.write('event: ping\ndata: {}\n\n');
       } catch {
         // Best effort. If the socket is gone, close() will be invoked separately.
       }
@@ -63,7 +66,7 @@ export class SseWriter {
   ping(): void {
     if (this.closed) return;
     try {
-      this.reply.raw.write(': ping\n\n');
+      this.reply.raw.write('event: ping\ndata: {}\n\n');
     } catch {
       // Ignore.
     }

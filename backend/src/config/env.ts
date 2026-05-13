@@ -13,45 +13,103 @@ function defaultIpHashSalt(): string {
   return generatedSalt;
 }
 
-const schema = z.object({
-  UCP_PROFILE_URL: z.string().url(),
-  CATALOG_MCP_URL: z.string().url().default('https://catalog.shopify.com/api/ucp/mcp'),
-  SHOPIFY_CLIENT_ID: z.string().optional(),
-  SHOPIFY_CLIENT_SECRET: z.string().optional(),
-  SHOPIFY_TOKEN_URL: z.string().url().optional(),
+const schema = z
+  .object({
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
 
-  // Groq / LLM.
-  GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
-  GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
-  GROQ_FALLBACK_MODEL: z.string().default('llama-3.1-8b-instant'),
-  GROQ_VISION_MODEL: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
+    UCP_PROFILE_URL: z.string().url(),
+    CATALOG_MCP_URL: z.string().url().default('https://catalog.shopify.com/api/ucp/mcp'),
+    SHOPIFY_CLIENT_ID: z.string().optional(),
+    SHOPIFY_CLIENT_SECRET: z.string().optional(),
+    SHOPIFY_TOKEN_URL: z.string().url().optional(),
 
-  // Persistence.
-  DB_PATH: z.string().default('data/agentic.db'),
-  UPLOAD_DIR: z.string().default('data/uploads'),
-  UPLOAD_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+    // Groq / LLM.
+    GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
+    GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+    GROQ_FALLBACK_MODEL: z.string().default('llama-3.1-8b-instant'),
+    GROQ_VISION_MODEL: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
 
-  // Vision spend cap (input tokens). Bounds the size of the base64-encoded
-  // image data URL we ship to Groq vision.
-  VISION_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).max(32_000).default(4096),
+    // Persistence.
+    DB_PATH: z.string().default('data/agentic.db'),
+    UPLOAD_DIR: z.string().default('data/uploads'),
+    UPLOAD_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 
-  // Hashing salt for IP forensics. NOTE: this same secret currently signs
-  // upload URLs (see services/uploads.ts). Cycle 6 splits this into a
-  // dedicated `UPLOAD_SIGNING_SECRET`.
-  IP_HASH_SALT: z.string().min(8).optional(),
+    // Vision spend cap (input tokens). Bounds the size of the base64-encoded
+    // image data URL we ship to Groq vision.
+    VISION_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).max(32_000).default(4096),
 
-  PORT: z.coerce.number().default(4000),
-  ALLOWED_ORIGINS: z
-    .string()
-    .default('http://localhost:3000')
-    .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
-});
+    // Hashing salt for IP forensics.
+    IP_HASH_SALT: z.string().min(8).optional(),
+
+    // Dedicated HMAC key for signed upload URLs (ARCH §9, Cycle 6). In dev,
+    // falls back to IP_HASH_SALT with a boot warning. In prod, REQUIRED — a
+    // refine() below throws if missing.
+    UPLOAD_SIGNING_SECRET: z.string().min(8).optional(),
+
+    // Backend URL the FE share page server-fetches against. No default; in
+    // prod this is required (the FE will otherwise try localhost:PORT which
+    // is the FE port). Documented in `frontend/.env.example`.
+    BACKEND_URL: z.string().url().optional(),
+
+    PORT: z.coerce.number().default(4000),
+    ALLOWED_ORIGINS: z
+      .string()
+      .default('http://localhost:3000')
+      .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
+  })
+  .superRefine((val, ctx) => {
+    if (val.NODE_ENV === 'production') {
+      if (!val.UPLOAD_SIGNING_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['UPLOAD_SIGNING_SECRET'],
+          message:
+            'UPLOAD_SIGNING_SECRET is required in production (separate HMAC key for signed upload URLs).',
+        });
+      }
+      if (!val.BACKEND_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['BACKEND_URL'],
+          message:
+            'BACKEND_URL is required in production (FE share-page fetches it server-side).',
+        });
+      }
+      if (
+        Array.isArray(val.ALLOWED_ORIGINS) &&
+        val.ALLOWED_ORIGINS.some((o) => /localhost/i.test(o))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ALLOWED_ORIGINS'],
+          message:
+            'production must not allow localhost origin in ALLOWED_ORIGINS.',
+        });
+      }
+    }
+  });
 
 const parsed = schema.parse(process.env);
 
+// In non-prod, UPLOAD_SIGNING_SECRET falls back to IP_HASH_SALT with a single
+// boot-time warning. This preserves the Cycle 4 behaviour for local dev while
+// satisfying the Cycle 6 security-MEDIUM split for production.
+const resolvedIpHashSalt = parsed.IP_HASH_SALT ?? defaultIpHashSalt();
+let resolvedUploadSecret = parsed.UPLOAD_SIGNING_SECRET;
+if (!resolvedUploadSecret && parsed.NODE_ENV !== 'production') {
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[env] UPLOAD_SIGNING_SECRET not set; falling back to IP_HASH_SALT for dev. Set UPLOAD_SIGNING_SECRET in production.`,
+  );
+  resolvedUploadSecret = resolvedIpHashSalt;
+}
+
 export const env = {
   ...parsed,
-  IP_HASH_SALT: parsed.IP_HASH_SALT ?? defaultIpHashSalt(),
+  IP_HASH_SALT: resolvedIpHashSalt,
+  UPLOAD_SIGNING_SECRET: resolvedUploadSecret as string,
 };
 
 export const hasJwtAuth =
