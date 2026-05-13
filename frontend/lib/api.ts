@@ -87,6 +87,54 @@ export async function getOrCreateSession(): Promise<SessionRef> {
 }
 
 // ---------------------------------------------------------------------------
+// Cycle 7 chat-history — explicit "start a new session" and "switch to an
+// existing session" verbs.
+//
+// `getOrCreateSession()` above is single-session: once a cookie/local id is
+// established, it short-circuits forever. The chat-history menu needs to
+// override that — both for the New-chat button (mint a fresh id) and the
+// dropdown rows (flip back to a prior id). Both calls re-issue the BE-owned
+// `agentic_sid` cookie so subsequent /api/chat writes land in the right row.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mint a brand-new session row server-side, set the cookie to it, return
+ * the new id. The local-storage mirror is updated so `getOrCreateSession()`
+ * starts returning the new id on subsequent calls. The previous session row
+ * remains intact (the 90d TTL sweep is what eventually drops it).
+ */
+export async function createNewSession(): Promise<SessionRef> {
+  const res = await fetch('/api/session', { method: 'POST' });
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'session create failed');
+  }
+  const json = (await res.json()) as { id: string };
+  writeStoredSessionId(json.id);
+  return { id: json.id };
+}
+
+/**
+ * Flip the active session cookie to point at an existing session id. Used
+ * by the chat-history dropdown when the user clicks a prior chat. The BE
+ * recreates the row if it's been TTL'd, which means the dropdown is
+ * forgiving even when the user's cookie list got out of sync with the DB.
+ */
+export async function activateSession(id: string): Promise<SessionRef> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(id)}/activate`,
+    { method: 'POST' },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'session activate failed');
+  }
+  const json = (await res.json()) as { id: string };
+  writeStoredSessionId(json.id);
+  return { id: json.id };
+}
+
+// ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
 

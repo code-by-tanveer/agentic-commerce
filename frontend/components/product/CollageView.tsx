@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ExternalLink, Heart, Store } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { clientLocale, formatMoney } from '@/lib/format';
+import { originCountryDisplay } from '@/lib/country';
 import type { Product } from '@/types/product';
 import {
   DRAG_MIME,
@@ -98,6 +99,27 @@ function CollageCard({ product, index }: CardProps) {
   const isLoved = shortlist?.shortlist.some(
     (i) => i.productId === product.id && i.lane === 'love',
   );
+
+  // T7.4 (Priya) — currency + origin trust signals. Mirrors the ProductCard
+  // treatment (see that file for the full rationale): non-USD currencies get
+  // a parenthetical badge inline with the price, the Open-at-merchant CTA
+  // grows a small dim subtext underneath, and the native `title` tooltip
+  // surfaces the full trust copy (currency / origin / ships-to list).
+  const displayCurrency = (currency || 'USD').toUpperCase();
+  const showCurrencyBadge = displayCurrency !== 'USD';
+  const originDisplay = originCountryDisplay(product.merchantInfo?.originCountry);
+  const trustParts: string[] = [];
+  if (displayCurrency) trustParts.push(`Prices in ${displayCurrency}`);
+  if (originDisplay) trustParts.push(`Ships from ${originDisplay}`);
+  const trustLine = trustParts.join(' · ');
+  const shipsTo = product.merchantInfo?.shipsTo;
+  const tooltipLines: string[] = [`Open at ${product.merchant}`];
+  if (displayCurrency) tooltipLines.push(`Prices in ${displayCurrency}`);
+  if (originDisplay) tooltipLines.push(`Ships from ${originDisplay}`);
+  if (shipsTo && shipsTo.length > 0) {
+    tooltipLines.push(`Ships to: ${shipsTo.join(', ')}`);
+  }
+  const buyTooltip = tooltipLines.join('\n');
 
   function buy() {
     if (!checkoutUrl) return;
@@ -312,29 +334,48 @@ function CollageCard({ product, index }: CardProps) {
               <div className="flex items-center justify-between gap-2 pt-1">
                 <p className="text-base font-semibold text-ink-900">
                   {formatMoney(price, currency, locale)}
+                  {/* T7.4 (Priya) — currency badge on non-USD prices. */}
+                  {showCurrencyBadge ? (
+                    <span
+                      className="ml-1 align-middle text-[11px] font-medium text-ink-400"
+                      aria-label={`Currency ${displayCurrency}`}
+                    >
+                      ({displayCurrency})
+                    </span>
+                  ) : null}
                 </p>
                 {/* T1.6 — Collage variant uses "Open at {merchant}" wording
                     (the card is image-first; "Buy" felt transactional).
-                    T1.29 — focus-visible:shadow-glow on the primary CTA. */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (canBuy) buy();
-                  }}
-                  disabled={!canBuy}
-                  aria-label={canBuy ? `Open at ${product.merchant}` : 'Unavailable'}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition',
-                    'focus:outline-none focus-visible:shadow-glow',
-                    canBuy
-                      ? 'bg-accent-500 text-white hover:bg-accent-600'
-                      : 'cursor-not-allowed bg-ink-100 text-ink-400',
-                  )}
-                >
-                  Open at {product.merchant}
-                  <ExternalLink className="h-3 w-3" aria-hidden />
-                </button>
+                    T1.29 — focus-visible:shadow-glow on the primary CTA.
+                    T7.4 (Priya) — trust subtext + tooltip, same treatment
+                    as ProductCard. */}
+                <div className="flex flex-col items-end">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (canBuy) buy();
+                    }}
+                    disabled={!canBuy}
+                    aria-label={canBuy ? `Open at ${product.merchant}` : 'Unavailable'}
+                    title={canBuy ? buyTooltip : undefined}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition',
+                      'focus:outline-none focus-visible:shadow-glow',
+                      canBuy
+                        ? 'bg-accent-500 text-white hover:bg-accent-600'
+                        : 'cursor-not-allowed bg-ink-100 text-ink-400',
+                    )}
+                  >
+                    Open at {product.merchant}
+                    <ExternalLink className="h-3 w-3" aria-hidden />
+                  </button>
+                  {trustLine ? (
+                    <p className="mt-1 text-right text-[11px] text-ink-400">
+                      {trustLine}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </motion.div>

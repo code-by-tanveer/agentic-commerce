@@ -79,6 +79,22 @@ const listStmt = () =>
     'SELECT * FROM messages WHERE session_id = ? ORDER BY ordinal ASC LIMIT ?',
   );
 
+// Cycle 8 history-restore (ARCH §8): cursor is the next `ordinal` to fetch,
+// not opaque. Rows are ordered ASC and LIMIT is bounded; the route layer
+// caps `limit` to 200.
+const pageStmt = () =>
+  db.prepare<[string, number, number]>(
+    `SELECT * FROM messages
+     WHERE session_id = ? AND ordinal >= ?
+     ORDER BY ordinal ASC
+     LIMIT ?`,
+  );
+
+const countStmt = () =>
+  db.prepare<[string]>(
+    'SELECT COUNT(*) AS n FROM messages WHERE session_id = ?',
+  );
+
 export async function appendMessage(
   sessionId: string,
   message: MessageInput,
@@ -117,4 +133,42 @@ export async function listMessages(
 ): Promise<Message[]> {
   const rows = listStmt().all(sessionId, limit) as MessageRow[];
   return Promise.resolve(rows.map(rowToMessage));
+}
+
+export interface MessagePage {
+  rows: Message[];
+  nextCursor: number | null;
+  totalCount: number;
+}
+
+/**
+ * Cycle 8 history-restore (ARCH §8). Returns one page of messages ordered by
+ * `ordinal` ASC starting at `cursor`. `nextCursor` is the next `ordinal` to
+ * fetch (a number, not opaque) — `null` when no more rows remain.
+ *
+ * `cursor` and `limit` are validated at the route boundary; this function
+ * trusts its inputs.
+ */
+export async function listMessagesPage(
+  sessionId: string,
+  cursor: number,
+  limit: number,
+): Promise<MessagePage> {
+  const rawRows = pageStmt().all(sessionId, cursor, limit) as MessageRow[];
+  const rows = rawRows.map(rowToMessage);
+  const total = (countStmt().get(sessionId) as { n: number } | undefined)?.n ?? 0;
+  // Next cursor: if we got a full page AND there's still more rows beyond the
+  // last ordinal in this batch, point at `lastOrdinal + 1`.
+  let nextCursor: number | null = null;
+  if (rows.length === limit && rows.length > 0) {
+    const lastOrdinal = rows[rows.length - 1].ordinal;
+    // Cheap follow-up existence check — avoids a second full COUNT.
+    const more = db
+      .prepare<[string, number]>(
+        'SELECT 1 FROM messages WHERE session_id = ? AND ordinal > ? LIMIT 1',
+      )
+      .get(sessionId, lastOrdinal);
+    if (more) nextCursor = lastOrdinal + 1;
+  }
+  return Promise.resolve({ rows, nextCursor, totalCount: total });
 }

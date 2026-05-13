@@ -72,6 +72,20 @@ export function ProfileMenu() {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
+  // Cycle-7 §2.11 — `NoResultsBlock`'s "Edit your preferences" tertiary CTA
+  // fires a `open-profile-menu` CustomEvent on window. Listening here keeps
+  // the avatar trigger as the single owner of the popover's open/close state
+  // — the empty-state card never reaches across the tree to setState. If the
+  // popover is already open this is a no-op (setOpen(true) on `true` is a
+  // bailout in React 18). Removed on unmount via the effect cleanup.
+  useEffect(() => {
+    function onOpen() {
+      setOpen(true);
+    }
+    window.addEventListener('open-profile-menu', onOpen);
+    return () => window.removeEventListener('open-profile-menu', onOpen);
+  }, []);
+
   const popoverT = reduced
     ? { duration: 0.1 }
     : { duration: 0.18, ease: 'easeOut' as const };

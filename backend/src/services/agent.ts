@@ -11,6 +11,7 @@ import { listPreferences } from '../db/repos/preferences.js';
 import { Cache } from './cache.js';
 import { ContentSanitizer } from './contentSanitizer.js';
 import { streamChatCompletion } from './groqClient.js';
+import { RateLimitedError } from './groqBreaker.js';
 import type { ToolRegistry } from './toolRegistry.js';
 import type { ServerEvent } from '../stream/events.js';
 import type { PreferencesSnapshot, ToolContext } from '../types/tool.js';
@@ -685,6 +686,20 @@ function classifyError(err: unknown): ClassifiedError {
     return {
       code: 'internal',
       message: 'Something went wrong on our side.',
+      retryable: true,
+    };
+  }
+
+  // Circuit-breaker short-circuit (ARCH §9). Distinct from the single-request
+  // 429 branch below: this means the SERVER decided not to even attempt the
+  // Groq call because the process-wide breaker is OPEN (or HALF_OPEN with a
+  // probe in flight). The user sees a clean copy line instead of stuck
+  // "thinking..." and FE retry logic can use the longer breaker cooldown.
+  if (err instanceof RateLimitedError) {
+    return {
+      code: 'rate_limited',
+      message:
+        'Search is briefly paused due to upstream limits — try again in a few minutes.',
       retryable: true,
     };
   }

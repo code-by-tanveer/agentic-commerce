@@ -54,6 +54,13 @@ export interface MerchantInfo {
   // otherwise. Absent → MerchantBlock surfaces the existing
   // "merchant didn't publish this" line (PRODUCT.md acceptance #5).
   originCountry?: string;
+  // Cycle 7 (T7.4, persona-priya): ISO-3166 alpha-2 country codes the
+  // merchant publishes as supported destinations. Mirrors
+  // `packages/events::merchantInfoSchema.shipsTo`. Used by the Buy-button
+  // tooltip to enumerate where the merchant ships; absent / empty array
+  // both mean "merchant didn't publish destinations" — the trust line
+  // omits the row rather than asserting "ships to: unknown".
+  shipsTo?: string[];
 }
 
 export interface Product {

@@ -10,8 +10,13 @@ import type {
   ChatCompletionToolChoiceOption,
 } from 'groq-sdk/resources/chat/completions';
 import { env } from '../config/env.js';
+import { groqBreaker, RateLimitedError } from './groqBreaker.js';
 
 const client = new Groq({ apiKey: env.GROQ_API_KEY });
+
+// Re-export so route/agent code can `instanceof`-check via the groqClient
+// barrel without reaching into the breaker module directly.
+export { RateLimitedError } from './groqBreaker.js';
 
 /**
  * polish-round-2 T2.14: minimal logger surface so this module doesn't need to
@@ -61,6 +66,63 @@ function isRetriable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { status?: number };
   return typeof e.status === 'number' && RETRIABLE_HTTP.has(e.status);
+}
+
+function is429(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { status?: number; error?: { code?: string }; code?: string | number };
+  return e.status === 429 || e.error?.code === 'rate_limit_exceeded' || e.code === 'rate_limit_exceeded';
+}
+
+/**
+ * Parse the raw `Retry-After` header off an error response into a ms value
+ * the breaker can use as a cooldown hint. Distinct from `retryAfterDelay`
+ * (which adds jitter + caps at MAX_RETRY_AFTER_MS for use as a per-call
+ * sleep duration) — the breaker wants the unjittered server hint and is
+ * willing to honour up to a hard 5min ceiling internally.
+ */
+function parseRetryAfterMsFromHeader(err: unknown): number | null {
+  if (!err || typeof err !== 'object') return null;
+  const headers = (err as { headers?: Record<string, string | string[] | undefined> }).headers;
+  const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return null;
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber) && asNumber >= 0) return Math.round(asNumber * 1000);
+  const asDate = Date.parse(value);
+  if (Number.isFinite(asDate)) return Math.max(asDate - Date.now(), 0);
+  return null;
+}
+
+/**
+ * Gate every Groq SDK call through the circuit-breaker. If the breaker is
+ * OPEN (or HALF_OPEN with an in-flight probe), this throws a
+ * `RateLimitedError` BEFORE the SDK call lands — saving the request from
+ * burning its AGENT_MAX_TURNS budget on doomed retries.
+ *
+ * On success → noteSuccess.
+ * On 429    → noteRateLimited(serverHint), then re-throw so the caller's
+ *             existing retry+fallback logic runs (the breaker doesn't itself
+ *             trigger a retry — that's the per-call path).
+ * On other  → noteError, re-throw.
+ */
+async function withBreaker<T>(fn: () => Promise<T>): Promise<T> {
+  const gate = groqBreaker.canCall();
+  if (!gate.allow) {
+    throw new RateLimitedError(gate.retryAfterMs, gate.reason);
+  }
+  try {
+    const result = await fn();
+    groqBreaker.noteSuccess();
+    return result;
+  } catch (err) {
+    if (is429(err)) {
+      groqBreaker.noteRateLimited(parseRetryAfterMsFromHeader(err));
+    } else {
+      groqBreaker.noteError(err);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -171,25 +233,29 @@ export async function streamChatCompletion(
   const startedAt = performance.now();
 
   const tryOnce = async (model: string) =>
-    client.chat.completions.create(
-      {
-        model,
-        messages: opts.messages,
-        tools: opts.tools,
-        tool_choice: opts.tool_choice,
-        temperature: opts.temperature,
-        max_tokens: opts.max_tokens,
-        frequency_penalty: opts.frequency_penalty,
-        presence_penalty: opts.presence_penalty,
-        stream: true,
-      },
-      { signal: opts.signal },
+    withBreaker(() =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: opts.messages,
+          tools: opts.tools,
+          tool_choice: opts.tool_choice,
+          temperature: opts.temperature,
+          max_tokens: opts.max_tokens,
+          frequency_penalty: opts.frequency_penalty,
+          presence_penalty: opts.presence_penalty,
+          stream: true,
+        },
+        { signal: opts.signal },
+      ),
     );
 
   try {
     const stream = await tryOnce(primary);
     return wrapStream(stream, primary, tag, log, startedAt);
   } catch (err) {
+    // Breaker short-circuit: do NOT retry — that's the whole point.
+    if (err instanceof RateLimitedError) throw err;
     if (!isRetriable(err)) throw err;
     // Edge-case hardening (2026-05): honour `Retry-After` if present, and
     // make the wait abort-aware — a user who navigated away should not
@@ -257,19 +323,21 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
   const startedAt = performance.now();
 
   const tryOnce = (model: string) =>
-    client.chat.completions.create(
-      {
-        model,
-        messages: opts.messages,
-        tools: opts.tools,
-        tool_choice: opts.tool_choice,
-        temperature: opts.temperature,
-        max_tokens: opts.max_tokens,
-        frequency_penalty: opts.frequency_penalty,
-        presence_penalty: opts.presence_penalty,
-        stream: false,
-      },
-      { signal: opts.signal },
+    withBreaker(() =>
+      client.chat.completions.create(
+        {
+          model,
+          messages: opts.messages,
+          tools: opts.tools,
+          tool_choice: opts.tool_choice,
+          temperature: opts.temperature,
+          max_tokens: opts.max_tokens,
+          frequency_penalty: opts.frequency_penalty,
+          presence_penalty: opts.presence_penalty,
+          stream: false,
+        },
+        { signal: opts.signal },
+      ),
     );
 
   let model = primary;
@@ -277,6 +345,7 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
   try {
     resp = await tryOnce(primary);
   } catch (err) {
+    if (err instanceof RateLimitedError) throw err;
     if (!isRetriable(err)) throw err;
     await abortableDelay(retryAfterDelay(err, 400), opts.signal);
     if (opts.signal?.aborted) throw err;

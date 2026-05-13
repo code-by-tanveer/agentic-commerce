@@ -10,9 +10,22 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { ApiError, appendMessage, getOrCreateSession, type PreferenceKey } from '@/lib/api';
+import {
+  ApiError,
+  activateSession,
+  appendMessage,
+  createNewSession as createNewSessionApi,
+  getOrCreateSession,
+  type PreferenceKey,
+} from '@/lib/api';
 import { streamChat, StreamError, type ChatRequestMessage } from '@/lib/stream';
 import type { NormalizedProduct, ServerEvent } from '@/lib/events';
+import {
+  DEFAULT_LABEL,
+  labelFromText,
+  readSessionHistory,
+  upsertEntry,
+} from '@/lib/sessionHistory';
 import { useOptionalPreferences } from './usePreferences';
 
 // ---------------------------------------------------------------------------
@@ -127,7 +140,12 @@ type Action =
   | { type: 'apply_event'; assistantId: string; event: ServerEvent }
   | { type: 'finalize'; assistantId: string }
   | { type: 'fail'; assistantId: string; error: ErrorBlock }
-  | { type: 'reset' };
+  | { type: 'hydrate'; messages: Message[] }
+  | { type: 'reset' }
+  // Cycle 7 chat-history — switch_session resets the conversation state AND
+  // points sessionId at the target. Triggers the hydrate effect (which keys
+  // on state.sessionId) to fetch the target's messages.
+  | { type: 'switch_session'; sessionId: string };
 
 const WELCOME: Message = {
   id: 'welcome',
@@ -349,8 +367,28 @@ function reducer(state: State, action: Action): State {
         })),
       };
 
+    case 'hydrate': {
+      // Cycle 8 history-restore (ARCH §8). Replace the current `state.messages`
+      // with the hydrated list and clear any spurious streaming flag. Idempotent
+      // by shallow-equal id sequence: re-firing with the same array is a no-op
+      // so an over-eager StrictMode double-invocation can't corrupt state.
+      if (
+        state.messages.length === action.messages.length &&
+        state.messages.every((m, i) => m.id === action.messages[i]?.id)
+      ) {
+        return state;
+      }
+      return { ...state, messages: action.messages, isStreaming: false };
+    }
+
     case 'reset':
       return { ...initialState, sessionId: state.sessionId };
+
+    case 'switch_session':
+      // Cycle 7 — drop the current conversation state and re-key on the
+      // target session id. The hydrate effect (which watches `sessionId`)
+      // will fetch this session's persisted messages on the next tick.
+      return { ...initialState, sessionId: action.sessionId };
 
     default:
       return state;
@@ -385,6 +423,12 @@ interface ConversationActionsValue {
   retry: (messageId: string) => Promise<void>;
   refineMoodboard: (messageId: string, attributes: string[]) => Promise<void>;
   reset: () => void;
+  // Cycle 7 chat-history — start a brand-new session, or flip back to a
+  // prior one from the dropdown. Both abort the in-flight stream cleanly
+  // and re-mount the chat canvas via the reducer's `switch_session` /
+  // initialState reset; no page reload.
+  createNewSession: () => Promise<void>;
+  switchSession: (id: string) => Promise<void>;
 }
 
 type ConversationContextValue = ConversationStateValue & ConversationActionsValue;
@@ -431,7 +475,17 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void getOrCreateSession()
       .then((s) => {
-        if (!cancelled) dispatch({ type: 'session_ready', sessionId: s.id });
+        if (cancelled) return;
+        dispatch({ type: 'session_ready', sessionId: s.id });
+        // Cycle 7 chat-history — register this session in the cookie list
+        // on first resolve. Label is provisional ("New chat") until the
+        // user types something; the post-send upsert below overwrites it
+        // with the truncated first-user-message label.
+        try {
+          upsertEntry(s.id, DEFAULT_LABEL);
+        } catch {
+          // ignore cookie write failures (size / blocked-by-policy)
+        }
       })
       .catch(() => {
         // ignore; sessionId stays null
@@ -440,6 +494,78 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  // Cycle 8 history-restore (ARCH §8). Once the sessionId is known, fetch the
+  // first page of persisted messages and rehydrate the chat. The WELCOME card
+  // is only seeded on truly empty sessions — if there's prior history, it'd
+  // be confusing to see "Tell me what you're shopping for…" sandwiched between
+  // yesterday's reply and today's question.
+  //
+  // Race safety: the hydration AbortController is stashed on `abortRef` so a
+  // user `send()` cancels it synchronously before the new turn dispatches.
+  // The post-fetch `.then()` also guards on `cancelled` (StrictMode unmount)
+  // and on the current message count (a user message arriving before fetch
+  // resolves must not be clobbered).
+  useEffect(() => {
+    if (!state.sessionId) return;
+    let cancelled = false;
+    const ctl = new AbortController();
+    // Share the same controller slot used by the streaming pump. `send()`
+    // aborts whatever's there before starting a new turn, which gives us
+    // free synchronous cancellation if the user types fast.
+    abortRef.current = ctl;
+    const messageCountAtMount = state.messages.length;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/session/${encodeURIComponent(state.sessionId as string)}/messages?limit=50`,
+          { signal: ctl.signal, headers: { accept: 'application/json' } },
+        );
+        if (cancelled || ctl.signal.aborted) return;
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          messages: Array<{
+            id: string;
+            role: 'user' | 'assistant' | 'tool';
+            status: 'done' | 'truncated' | 'error';
+            blocks: unknown;
+          }>;
+        };
+        if (cancelled || ctl.signal.aborted) return;
+        // If a user `send()` ran between mount and fetch-resolve, the
+        // message list has already grown past the initial WELCOME-only
+        // baseline. Don't clobber that new turn with stale history.
+        if (state.messages.length !== messageCountAtMount) return;
+        const fetched = (body.messages ?? [])
+          // The wire schema includes `tool` rows for completeness; the FE
+          // only renders user/assistant bubbles.
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map<Message>((m) => ({
+            id: m.id,
+            role: m.role as MessageRole,
+            // Wire-side `truncated` collapses to FE-side `error` so the
+            // affected bubble renders its retry affordance.
+            status: m.status === 'truncated' ? 'error' : m.status,
+            blocks: Array.isArray(m.blocks) ? (m.blocks as Block[]) : [],
+          }));
+        if (fetched.length === 0) return;
+        dispatch({ type: 'hydrate', messages: fetched });
+      } catch {
+        // Aborted or network — leave the WELCOME state intact.
+      } finally {
+        if (abortRef.current === ctl) abortRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      // If the streaming pump took the slot, do NOT abort it.
+      if (abortRef.current === ctl) {
+        ctl.abort();
+        abortRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.sessionId]);
 
   // Core streaming pump. Shared by send + retry.
   const run = useCallback(
@@ -529,6 +655,14 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const trimmed = text.trim();
       if (!trimmed || state.isStreaming) return;
 
+      // Cycle 8: cancel any in-flight history-restore fetch SYNCHRONOUSLY
+      // before the `send` dispatch. The hydration effect's post-resolve
+      // guard also re-checks message count, but aborting here gives belt +
+      // suspenders against the fetch resolving after `dispatch send` but
+      // before the next event loop tick.
+      abortRef.current?.abort();
+      abortRef.current = null;
+
       const userMessage: Message = {
         id: rid(),
         role: 'user',
@@ -543,6 +677,20 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         blocks: [],
       };
       dispatch({ type: 'send', userMessage, assistantPlaceholder });
+
+      // Cycle 7 chat-history — when this is the FIRST user message in the
+      // session (everything before it was just WELCOME), update the cookie
+      // entry's label so the dropdown row reads "wool sweater" instead of
+      // "New chat". Subsequent sends overwrite with the same first-message
+      // label (a no-op stamp on `lastUsedAt`).
+      const priorUserCount = state.messages.filter((m) => m.role === 'user').length;
+      if (state.sessionId && priorUserCount === 0) {
+        try {
+          upsertEntry(state.sessionId, labelFromText(trimmed));
+        } catch {
+          // ignore
+        }
+      }
 
       const wire = toWireHistory([...state.messages, userMessage]);
       // When a signed upload URL rides along, append it to the user content so
@@ -621,6 +769,65 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'reset' });
   }, []);
 
+  // Cycle 7 chat-history — mint a brand-new session row, point the cookie at
+  // it, and re-mount the conversation canvas in-place. The previous session
+  // row stays intact (it's still in the dropdown under its existing label).
+  // The post-resolve `upsertEntry` registers the new id under the default
+  // "New chat" label; the first-user-message send() above renames it.
+  const createNewSession = useCallback(async () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    try {
+      const fresh = await createNewSessionApi();
+      // `switch_session` resets state.messages back to [WELCOME] and re-keys
+      // the hydrate effect on the new sessionId. The hydrate fetch will hit
+      // an empty page (the new row has no messages yet) and bail.
+      dispatch({ type: 'switch_session', sessionId: fresh.id });
+      try {
+        upsertEntry(fresh.id, DEFAULT_LABEL);
+      } catch {
+        // ignore
+      }
+    } catch {
+      // Best-effort — if the BE is unreachable we leave the user on the
+      // current session rather than stranding them in a half-reset state.
+    }
+  }, []);
+
+  // Cycle 7 chat-history — flip to a prior session from the dropdown. Order
+  // of operations matters:
+  //   1. abort any in-flight stream/hydrate (synchronous).
+  //   2. flip the BE-owned `agentic_sid` cookie via /activate (so the GET
+  //      messages endpoint in the hydrate effect doesn't 403 on the cookie
+  //      vs. path mismatch).
+  //   3. dispatch `switch_session` — resets state.messages and triggers the
+  //      hydrate effect on the new id.
+  //   4. bump the cookie-list entry to the head with `upsertEntry`. We keep
+  //      its existing label (the hydrate fetch hasn't landed yet, so we
+  //      can't recompute from the first user message here — the next send
+  //      to that session will re-stamp it anyway).
+  const switchSession = useCallback(async (id: string) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    try {
+      await activateSession(id);
+    } catch {
+      // If the cookie flip fails the hydrate fetch will 403 and we'll be
+      // stuck on WELCOME. Surface nothing — the user can retry; the row
+      // they clicked stays in the dropdown.
+      return;
+    }
+    dispatch({ type: 'switch_session', sessionId: id });
+    // Bump to head with whatever label is already in the cookie list (the
+    // dropdown re-reads on every open, so this is enough to reorder).
+    try {
+      const existing = readSessionHistory().find((e) => e.id === id);
+      upsertEntry(id, existing?.label ?? DEFAULT_LABEL);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const stateValue = useMemo<ConversationStateValue>(
     () => ({
       sessionId: state.sessionId,
@@ -635,8 +842,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   // own deps shift), so this memo barely ever invalidates — components that
   // only consume actions don't re-render per text_delta.
   const actionsValue = useMemo<ConversationActionsValue>(
-    () => ({ send, retry, refineMoodboard, reset }),
-    [send, retry, refineMoodboard, reset],
+    () => ({ send, retry, refineMoodboard, reset, createNewSession, switchSession }),
+    [send, retry, refineMoodboard, reset, createNewSession, switchSession],
   );
 
   return (

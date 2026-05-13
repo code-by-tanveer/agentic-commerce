@@ -1,7 +1,7 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { RATE_LIMITS } from '../config/env.js';
-import { appendMessage, listMessages } from '../db/repos/messages.js';
+import { env, RATE_LIMITS } from '../config/env.js';
+import { appendMessage, listMessages, listMessagesPage } from '../db/repos/messages.js';
 import {
   deleteOutfit,
   listOutfits,
@@ -102,10 +102,78 @@ const viewModePutBodySchema = z
   })
   .strict();
 
+// Cycle 8 history-restore (ARCH §8). `cursor` is the next `ordinal` to fetch
+// (non-opaque, non-negative int). `limit` defaults to 50, hard-capped at 200.
+const MESSAGES_DEFAULT_LIMIT = 50;
+const MESSAGES_MAX_LIMIT = 200;
+const messagesQuerySchema = z.object({
+  cursor: z.coerce.number().int().nonnegative().optional(),
+  limit: z.coerce.number().int().min(1).max(MESSAGES_MAX_LIMIT).optional(),
+});
+
+const HISTORY_COOKIE_NAME = 'agentic_sid';
+
+// Cycle 7 chat-history (PRODUCT §6 AC #1). The FE keeps the most recent N
+// session ids in a client-readable cookie; flipping the active session here
+// updates the BE-owned `agentic_sid` cookie so subsequent /api/chat writes
+// land in the correct row. 30d max-age mirrors the cookie writes in
+// `routes/chat.ts`. Re-issuing the cookie is the only side-effect; the DB
+// row(s) are untouched.
+function setSessionCookie(reply: FastifyReply, id: string): void {
+  reply.setCookie(HISTORY_COOKIE_NAME, id, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+  });
+}
+
 export async function sessionRoutes(app: FastifyInstance) {
   // R3-cleanup (architect-code MEDIUM): rate-limit values sourced from the
   // centralised `RATE_LIMITS` matrix in `config/env.ts`.
   const rateLimit = RATE_LIMITS.session;
+
+  // ---------------------------------------------------------------------------
+  // Cycle 7 chat-history (PRODUCT §6 AC #1).
+  // POST /api/session — mint a brand-new session row, set the cookie to it,
+  // and return the new id. The previous session row stays intact in SQLite
+  // (the 90d TTL sweep is what eventually drops it). The FE uses this when
+  // the user hits the New-chat button; pairs with the client-side cookie
+  // list (`agentic_sessions`) that tracks the user's last-5 chats.
+  // ---------------------------------------------------------------------------
+  app.post(
+    '/api/session',
+    { config: { rateLimit } },
+    async (request, reply) => {
+      const session = await getOrCreateSession(null, {
+        userAgent: request.headers['user-agent'] ?? null,
+        ip: request.ip,
+      });
+      setSessionCookie(reply, session.id);
+      return { id: session.id };
+    },
+  );
+
+  // POST /api/session/:id/activate — flip the `agentic_sid` cookie to point at
+  // an existing session row. Used by the chat-history menu when the user
+  // clicks a prior chat. We do NOT 404 on an unknown id here: the FE may be
+  // resurrecting a row that's already been TTL'd, in which case
+  // getOrCreateSession recreates it. That keeps the dropdown forgiving even
+  // when the user's cookie list got out of sync with the DB.
+  app.post<{ Params: { id: string } }>(
+    '/api/session/:id/activate',
+    { config: { rateLimit } },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = await getOrCreateSession(id, {
+        userAgent: request.headers['user-agent'] ?? null,
+        ip: request.ip,
+      });
+      setSessionCookie(reply, session.id);
+      return { id: session.id };
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     '/api/session/:id',
@@ -116,6 +184,57 @@ export async function sessionRoutes(app: FastifyInstance) {
       if (!session) return reply.code(404).send({ error: 'not_found' });
       const messages = await listMessages(id);
       return { session, messages };
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // History restore (Cycle 8, ARCH §8). Cursor-paginated read of the persisted
+  // message timeline so a page reload can rehydrate the chat. The FE calls
+  // this once per session-mount when a sessionId is present.
+  //
+  // - `cursor` is the next `ordinal` to fetch (NOT opaque). Default 0.
+  // - `limit` defaults to 50, hard-capped at 200.
+  // - `Cache-Control: no-store` — the timeline is per-user, mutable, and the
+  //   FE always wants the freshest copy on reload.
+  // - 403 when the path :id doesn't match the cookie session id. This
+  //   prevents one tab from peeking at another session's history if a
+  //   `sessionId` somehow leaks into a URL.
+  // ---------------------------------------------------------------------------
+  app.get<{ Params: { id: string }; Querystring: { cursor?: string; limit?: string } }>(
+    '/api/session/:id/messages',
+    { config: { rateLimit } },
+    async (request, reply) => {
+      const { id } = request.params;
+      const cookieSid = request.cookies?.[HISTORY_COOKIE_NAME];
+      // Only enforce when a cookie is actually present. Tests + the very
+      // first request after cookie-clear have no cookie; in those cases we
+      // fall back to no auth check (the session table is the gate — an
+      // unknown :id returns an empty list, never another user's history).
+      if (cookieSid && cookieSid !== id) {
+        return reply.code(403).send({ error: 'forbidden' });
+      }
+
+      const parsedQuery = messagesQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        return reply
+          .code(400)
+          .send({ error: 'invalid_request', details: parsedQuery.error.flatten() });
+      }
+      const cursor = parsedQuery.data.cursor ?? 0;
+      const limit = parsedQuery.data.limit ?? MESSAGES_DEFAULT_LIMIT;
+
+      const page = await listMessagesPage(id, cursor, limit);
+      reply.header('Cache-Control', 'no-store');
+      return {
+        messages: page.rows.map((m) => ({
+          id: m.id,
+          role: m.role,
+          status: m.status,
+          blocks: m.blocks,
+        })),
+        nextCursor: page.nextCursor,
+        totalCount: page.totalCount,
+      };
     },
   );
 

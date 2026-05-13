@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ExternalLink, Heart, Loader2, Store, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { clientLocale, formatMoney } from '@/lib/format';
+import { originCountryDisplay } from '@/lib/country';
 import type { Product } from '@/types/product';
 import {
   DRAG_MIME,
@@ -68,6 +69,39 @@ export function ProductCard({ product, index = 0 }: Props) {
   const isLoved = shortlist?.shortlist.some(
     (i) => i.productId === product.id && i.lane === 'love',
   );
+
+  // T7.4 (Priya) — currency + origin trust signals on the Buy surface.
+  // The collapsed-row price gets a "(CCY)" badge for any non-USD currency so
+  // an Indian user evaluating a US-priced product can't mistake the unit.
+  // USD (the default) renders no badge to keep the dominant case clean.
+  // Empty string currency falls back to USD silently (formatMoney already does
+  // the same), so we treat "" as USD here too.
+  const displayCurrency = (currency || 'USD').toUpperCase();
+  const showCurrencyBadge = displayCurrency !== 'USD';
+  // Origin country — resolves alpha-2 codes to display names; passes free-form
+  // strings through verbatim. Empty when the merchant didn't publish it.
+  const originDisplay = originCountryDisplay(product.merchantInfo?.originCountry);
+  // Trust subtext below the button: "Prices in USD · Ships from US".
+  // Suppressed entirely when both pieces are unknown (currency falls back to
+  // USD silently — we still surface "Prices in USD" because the BE may have
+  // sent "" or omitted the field, and showing the unit is the point).
+  const trustParts: string[] = [];
+  if (displayCurrency) trustParts.push(`Prices in ${displayCurrency}`);
+  if (originDisplay) trustParts.push(`Ships from ${originDisplay}`);
+  const trustLine = trustParts.join(' · ');
+  // Native `title` tooltip on the Buy CTA — multi-line plain text. Lists
+  // currency, origin, and (when published) the merchant's supported
+  // destinations. We deliberately don't infer the user's country (ADR-0005 /
+  // anti-goals: no IP-geo, no auth), so the line reads "Ships to: GB, US, …"
+  // rather than filtering against an inferred locale.
+  const shipsTo = product.merchantInfo?.shipsTo;
+  const tooltipLines: string[] = [`Buy on ${product.merchant}`];
+  if (displayCurrency) tooltipLines.push(`Prices in ${displayCurrency}`);
+  if (originDisplay) tooltipLines.push(`Ships from ${originDisplay}`);
+  if (shipsTo && shipsTo.length > 0) {
+    tooltipLines.push(`Ships to: ${shipsTo.join(', ')}`);
+  }
+  const buyTooltip = tooltipLines.join('\n');
 
   function buy() {
     if (!checkoutUrl) return;
@@ -284,34 +318,58 @@ export function ProductCard({ product, index = 0 }: Props) {
           <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pt-2">
             <p className="shrink-0 text-base font-semibold text-ink-900">
               {formatMoney(price, currency, locale)}
+              {/* T7.4 (Priya) — currency badge on non-USD prices so the unit
+                  is unambiguous. USD users see no badge (dominant case stays
+                  clean); everyone else sees "(INR)" / "(GBP)" / etc. inline. */}
+              {showCurrencyBadge ? (
+                <span
+                  className="ml-1 align-middle text-[11px] font-medium text-ink-400"
+                  aria-label={`Currency ${displayCurrency}`}
+                >
+                  ({displayCurrency})
+                </span>
+              ) : null}
             </p>
             {/* T1.6 — "Buy now" → "Buy on {merchant}" everywhere. T1.14 —
                 now a sibling <button>, no longer a nested role="button"
                 inside an outer <button>. The button is constrained with
                 `min-w-0` + `max-w-full` and the inner merchant span uses
                 `truncate` so long merchant strings (e.g. "Commonwealthrunning")
-                shrink instead of pushing past the card's right edge. */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (canBuy) buy();
-              }}
-              disabled={!canBuy}
-              aria-label={canBuy ? `Buy on ${product.merchant}` : 'Unavailable'}
-              className={cn(
-                'inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-3 py-2 text-xs font-medium transition',
-                'focus:outline-none focus-visible:shadow-glow',
-                canBuy
-                  ? 'bg-ink-900 text-white hover:bg-ink-600'
-                  : 'cursor-not-allowed bg-ink-100 text-ink-400',
-              )}
-            >
-              <span className="min-w-0 truncate">
-                Buy on <span className="font-semibold">{product.merchant}</span>
-              </span>
-              <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
-            </button>
+                shrink instead of pushing past the card's right edge.
+                T7.4 (Priya) — wrapped in a column so the trust subtext
+                ("Prices in USD · Ships from US") can sit beneath the button
+                without bleeding into the button's tap target. Native `title`
+                tooltip exposes the full trust copy on hover (no JS, accessible
+                via the existing browser affordance). */}
+            <div className="flex min-w-0 max-w-full flex-col items-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (canBuy) buy();
+                }}
+                disabled={!canBuy}
+                aria-label={canBuy ? `Buy on ${product.merchant}` : 'Unavailable'}
+                title={canBuy ? buyTooltip : undefined}
+                className={cn(
+                  'inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-3 py-2 text-xs font-medium transition',
+                  'focus:outline-none focus-visible:shadow-glow',
+                  canBuy
+                    ? 'bg-ink-900 text-white hover:bg-ink-600'
+                    : 'cursor-not-allowed bg-ink-100 text-ink-400',
+                )}
+              >
+                <span className="min-w-0 truncate">
+                  Buy on <span className="font-semibold">{product.merchant}</span>
+                </span>
+                <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
+              </button>
+              {trustLine ? (
+                <p className="mt-1 text-right text-[11px] text-ink-400">
+                  {trustLine}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
@@ -369,9 +427,20 @@ export function ProductCard({ product, index = 0 }: Props) {
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-ink-400">Total</p>
                   {/* T1.28 — `font-display` on the expanded Total price. One of
-                      the four allowed serif homes per DESIGN.md §2.4 #1. */}
+                      the four allowed serif homes per DESIGN.md §2.4 #1.
+                      T7.4 (Priya) — currency badge on non-USD prices, same
+                      treatment as the collapsed row so the unit stays
+                      unambiguous when the card opens. */}
                   <p className="font-display text-lg leading-tight text-ink-900">
                     {formatMoney(price, currency, locale)}
+                    {showCurrencyBadge ? (
+                      <span
+                        className="ml-1 align-middle font-sans text-[11px] font-medium text-ink-400"
+                        aria-label={`Currency ${displayCurrency}`}
+                      >
+                        ({displayCurrency})
+                      </span>
+                    ) : null}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -402,26 +471,37 @@ export function ProductCard({ product, index = 0 }: Props) {
                   </button>
                   {/* T1.6 — unified "Buy on {merchant}" wording.
                       T1.29 — focus-visible:shadow-glow on the primary CTA
-                      (DESIGN.md §2.7 hard rule). */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      buy();
-                    }}
-                    disabled={!canBuy}
-                    aria-label={canBuy ? `Buy on ${product.merchant}` : 'Unavailable'}
-                    className={cn(
-                      'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition',
-                      'focus:outline-none focus-visible:shadow-glow',
-                      canBuy
-                        ? 'bg-accent-500 text-white hover:bg-accent-600'
-                        : 'cursor-not-allowed bg-ink-100 text-ink-400',
-                    )}
-                  >
-                    Buy on {product.merchant}
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                  </button>
+                      (DESIGN.md §2.7 hard rule).
+                      T7.4 (Priya) — wrapped in a column so the trust subtext
+                      sits beneath the button; native `title` exposes the full
+                      currency + origin + ships-to copy on hover. */}
+                  <div className="flex flex-col items-end">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        buy();
+                      }}
+                      disabled={!canBuy}
+                      aria-label={canBuy ? `Buy on ${product.merchant}` : 'Unavailable'}
+                      title={canBuy ? buyTooltip : undefined}
+                      className={cn(
+                        'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-medium transition',
+                        'focus:outline-none focus-visible:shadow-glow',
+                        canBuy
+                          ? 'bg-accent-500 text-white hover:bg-accent-600'
+                          : 'cursor-not-allowed bg-ink-100 text-ink-400',
+                      )}
+                    >
+                      Buy on {product.merchant}
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    {trustLine ? (
+                      <p className="mt-1 text-right text-[11px] text-ink-400">
+                        {trustLine}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>

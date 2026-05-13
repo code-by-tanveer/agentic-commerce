@@ -31,6 +31,16 @@ const schema = z
     GROQ_FALLBACK_MODEL: z.string().default('llama-3.1-8b-instant'),
     GROQ_VISION_MODEL: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
 
+    // Groq rate-limit circuit-breaker (ARCH §9). Module-scoped singleton in
+    // `services/groqBreaker.ts`. Defaults chosen for a single-machine Fly
+    // deploy serving low-double-digit concurrent SSE streams: 5 consecutive
+    // 429s inside 60s trips the breaker, which then short-circuits for 60s
+    // before granting one probe request. See ADR-0004 for the
+    // single-machine constraint (clustering needs Redis-shared state).
+    GROQ_BREAKER_THRESHOLD: z.coerce.number().int().min(1).max(100).default(5),
+    GROQ_BREAKER_WINDOW_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
+    GROQ_BREAKER_COOLDOWN_MS: z.coerce.number().int().min(1_000).max(600_000).default(60_000),
+
     // Persistence.
     DB_PATH: z.string().default('data/agentic.db'),
     UPLOAD_DIR: z.string().default('data/uploads'),

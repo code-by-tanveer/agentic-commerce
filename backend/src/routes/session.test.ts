@@ -113,6 +113,97 @@ describe('routes/session — smoke via fastify.inject', () => {
     expect(flat).toContain('http(s)://');
   });
 
+  // ---------------------------------------------------------------------------
+  // Cycle 8 history-restore (ARCH §8).
+  // GET /api/session/:id/messages — cursor-paginated read of persisted turns.
+  // ---------------------------------------------------------------------------
+
+  it('GET /api/session/:id/messages returns an empty page + null cursor for a fresh session', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/session/sess-empty/messages',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    const body = res.json() as {
+      messages: unknown[];
+      nextCursor: number | null;
+      totalCount: number;
+    };
+    expect(body).toEqual({ messages: [], nextCursor: null, totalCount: 0 });
+  });
+
+  it('GET /api/session/:id/messages paginates across two pages by ordinal', async () => {
+    const sid = 'sess-paginate';
+    // Seed: ensure the session row exists for FK, then write 3 messages.
+    const { getOrCreateSession } = await import('../db/repos/sessions.js');
+    const { appendMessage } = await import('../db/repos/messages.js');
+    await getOrCreateSession(sid);
+    await appendMessage(sid, { role: 'user', blocks: [{ type: 'text', text: 'one' }] });
+    await appendMessage(sid, {
+      role: 'assistant',
+      blocks: [{ type: 'text', text: 'two' }],
+    });
+    await appendMessage(sid, { role: 'user', blocks: [{ type: 'text', text: 'three' }] });
+
+    // Page 1: limit=2 → first two ordinals, nextCursor = 3.
+    const page1 = await app.inject({
+      method: 'GET',
+      url: `/api/session/${sid}/messages?limit=2`,
+    });
+    expect(page1.statusCode).toBe(200);
+    const body1 = page1.json() as {
+      messages: Array<{ role: string; blocks: unknown; status: string }>;
+      nextCursor: number | null;
+      totalCount: number;
+    };
+    expect(body1.messages.length).toBe(2);
+    expect(body1.messages[0].role).toBe('user');
+    expect(body1.messages[1].role).toBe('assistant');
+    expect(body1.totalCount).toBe(3);
+    expect(body1.nextCursor).toBe(3);
+    // blocks_json round-trips parsed (not a raw string).
+    expect(Array.isArray(body1.messages[0].blocks)).toBe(true);
+
+    // Page 2: cursor=3 picks up the last row, nextCursor null.
+    const page2 = await app.inject({
+      method: 'GET',
+      url: `/api/session/${sid}/messages?cursor=3&limit=2`,
+    });
+    expect(page2.statusCode).toBe(200);
+    const body2 = page2.json() as {
+      messages: Array<{ role: string }>;
+      nextCursor: number | null;
+      totalCount: number;
+    };
+    expect(body2.messages.length).toBe(1);
+    expect(body2.messages[0].role).toBe('user');
+    expect(body2.nextCursor).toBeNull();
+    expect(body2.totalCount).toBe(3);
+  });
+
+  it('GET /api/session/:id/messages returns 403 when the cookie session id does not match the path', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/session/sess-victim/messages',
+      cookies: { agentic_sid: 'sess-attacker' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ error: 'forbidden' });
+  });
+
+  it.each([
+    ['cursor=-1', '/api/session/sess-bad/messages?cursor=-1'],
+    ['cursor=abc', '/api/session/sess-bad/messages?cursor=abc'],
+    ['limit=0', '/api/session/sess-bad/messages?limit=0'],
+    ['limit=201', '/api/session/sess-bad/messages?limit=201'],
+    ['limit=abc', '/api/session/sess-bad/messages?limit=abc'],
+  ])('GET messages rejects %s with 400', async (_label, url) => {
+    const res = await app.inject({ method: 'GET', url });
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { error: string }).error).toBe('invalid_request');
+  });
+
   it('outfits POST with the same id is idempotent (two calls → one row)', async () => {
     const sid = 'sess-outfit-idem';
     const outfitId = 'abcdefgh12345678ijkl';

@@ -10,6 +10,7 @@ import {
 import { useSession } from '@/hooks/useSession';
 import { useShortlist } from '@/hooks/useShortlist';
 import { ProfileMenu } from '@/components/preferences/ProfileMenu';
+import { ChatHistoryMenu } from './ChatHistoryMenu';
 import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
@@ -23,7 +24,7 @@ import { ViewToggle } from './ViewToggle';
 // brand presence without flattening the gift downstream.
 export function Header() {
   const { messages } = useConversationState();
-  const { reset } = useConversationActions();
+  const { createNewSession } = useConversationActions();
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
   const hasHistory = messages.length > 1;
@@ -64,6 +65,13 @@ export function Header() {
         <div className="flex items-center gap-1 min-[380px]:gap-2">
           <ViewToggle />
           {canShare && sessionId && <ShareButton sessionId={sessionId} />}
+          {/* Cycle 7 chat-history (PRODUCT §6 AC #1) — anchored between the
+              ViewToggle and the existing trailing chrome so it lives next
+              to the New-chat button (per the task brief). Collapses to
+              icon-only at <480px and disappears entirely under 380px to
+              match the existing narrow-viewport rule (same as the
+              Shortlist label collapse and the New-chat button). */}
+          <ChatHistoryMenu />
           <button
             type="button"
             // Stable id so the drawer's outside-click detector can exclude
@@ -107,8 +115,17 @@ export function Header() {
             // narrow phone width). The action is recoverable via the
             // ProfileMenu / page reload, so dropping it from the chrome at
             // narrow widths is the lower-cost option than further squeezing.
+            //
+            // Cycle 7 chat-history — the click handler is now
+            // `createNewSession` (mints a fresh BE session row and updates
+            // the cookie list), NOT `reset` (which just cleared the in-memory
+            // messages but left the user on the same backing row). The
+            // previous session stays in the chat-history dropdown so the
+            // user can still hop back to it.
             <button
-              onClick={reset}
+              onClick={() => {
+                void createNewSession();
+              }}
               aria-label="Start a new chat"
               className="hidden min-[380px]:inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
             >

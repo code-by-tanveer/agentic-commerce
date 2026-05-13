@@ -8,13 +8,14 @@
 
 import { useEffect, useRef } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { AlertCircle, RotateCcw, SearchX } from 'lucide-react';
+import { AlertCircle, RotateCcw } from 'lucide-react';
 import { useConversationActions, type Block } from '@/hooks/useConversation';
 import { ProductCardGroup } from '../product/ProductCardGroup';
 import { ComparisonTable } from '../product/ComparisonTable';
 import { OutfitBundle } from '../product/OutfitBundle';
 import { Moodboard } from '../product/Moodboard';
 import { ToolStatus } from './ToolStatus';
+import { NoResultsBlock, type NoResultsAppliedFilters } from './NoResultsBlock';
 
 // Stateless. Walks blocks in arrival order and dispatches each to its
 // rendering component. The block list is what makes assistant messages
@@ -34,12 +35,57 @@ export function MessageRenderer({ blocks, messageId, onRetry }: Props) {
         <BlockView
           key={blockKey(b, i)}
           block={b}
+          blocks={blocks}
           messageId={messageId}
           onRetry={onRetry}
         />
       ))}
     </div>
   );
+}
+
+// Cycle-7 §2.11 — pull the `args.filters` payload off the sibling tool_status
+// block (matched by toolCallId) and shape it into the NoResultsBlock prop
+// `appliedFilters`. The args shape is `{ query, filters?: { price?: {min?, max?},
+// ships_to?, available? } }` per `searchCatalog.ts` argsSchema; we project
+// only the fields the empty-state card cares about and degrade to `undefined`
+// for any malformed payload.
+interface SearchCatalogArgsShape {
+  filters?: {
+    price?: { min?: number; max?: number };
+    ships_to?: string;
+  };
+}
+
+function extractAppliedFilters(
+  blocks: Block[],
+  toolCallId: string,
+  productCurrency: string | undefined,
+): NoResultsAppliedFilters | undefined {
+  const sibling = blocks.find(
+    (b) => b.type === 'tool_status' && b.toolCallId === toolCallId,
+  );
+  if (!sibling || sibling.type !== 'tool_status') return undefined;
+  const args = sibling.args as SearchCatalogArgsShape | undefined;
+  if (!args || typeof args !== 'object') return undefined;
+  const filters = args.filters;
+  if (!filters) return undefined;
+  const out: NoResultsAppliedFilters = {};
+  if (typeof filters.price?.min === 'number') out.priceMin = filters.price.min;
+  if (typeof filters.price?.max === 'number') out.priceMax = filters.price.max;
+  if (typeof filters.ships_to === 'string' && filters.ships_to.trim().length > 0) {
+    out.shipsTo = filters.ships_to;
+  }
+  // The args payload doesn't carry the currency directly — search_catalog is
+  // currency-agnostic (the MCP returns whatever each merchant publishes).
+  // The product-list's per-card currency is the next-best proxy, but on a
+  // zero-result payload there's no card. Fall back to undefined, which makes
+  // the formatter render `$N` (the historical USD default the wider UI uses
+  // when currency is missing on a NormalizedProduct). Wiring the user's
+  // saved currency preference would require importing usePreferences here;
+  // we keep this block prop-only to match the file constraints.
+  if (productCurrency) out.currency = productCurrency;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function blockKey(b: Block, i: number): string {
@@ -57,14 +103,16 @@ function blockKey(b: Block, i: number): string {
 
 function BlockView({
   block,
+  blocks,
   messageId,
   onRetry,
 }: {
   block: Block;
+  blocks: Block[];
   messageId: string;
   onRetry?: () => void;
 }) {
-  const { refineMoodboard } = useConversationActions();
+  const { refineMoodboard, send } = useConversationActions();
   switch (block.type) {
     case 'text':
       if (!block.text) return null;
@@ -85,24 +133,21 @@ function BlockView({
       );
 
     case 'products':
-      // T1.13 — empty result set renders a recovery card instead of vanishing.
-      // The prior behaviour (ProductCardGroup → null) left the user in a
-      // prose-only state with no next move; the inline card surfaces both
-      // the cause and two concrete escapes.
+      // Cycle-7 §2.11 — empty result set renders the canonical NoResultsBlock
+      // instead of the prior inline ink-50 recovery card. The new component
+      // owns the iconography, names the active filters, and exposes two
+      // recovery affordances (relax filters / edit preferences). See
+      // `NoResultsBlock.tsx` for the filter-surfacing rationale (we read
+      // `args.filters` off the sibling `tool_status` block rather than
+      // bumping the wire schema).
       if (block.products.length === 0) {
+        const applied = extractAppliedFilters(blocks, block.toolCallId, undefined);
         return (
-          <div
-            role="status"
-            className="flex items-start gap-3 rounded-2xl bg-ink-50 px-4 py-3 text-sm leading-relaxed text-ink-600 shadow-soft"
-          >
-            <SearchX className="mt-1 h-4 w-4 shrink-0 text-ink-400" aria-hidden />
-            <p>
-              Nothing matched
-              {block.query ? <> for <span className="font-medium text-ink-900">{block.query}</span></> : null}
-              . Try fewer constraints, or paste an image of what you have in
-              mind.
-            </p>
-          </div>
+          <NoResultsBlock
+            query={block.query}
+            appliedFilters={applied}
+            onRelax={(relaxedQuery) => void send(relaxedQuery)}
+          />
         );
       }
       // ProductCardGroup expects the existing FE Product shape. Backend's
