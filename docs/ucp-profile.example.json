@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "agent_id": "agentic-commerce",
+  "name": "Agentic Commerce",
+  "description": "A conversational shopping companion that helps users decide what to buy. Renders streamed product results, reasoning chips, and preference memory. Operates over the Shopify Catalog MCP; never places orders on a user's behalf.",
+  "homepage": "https://github.com/yatclaude/agentic-commerce",
+  "operator": {
+    "name": "Sam",
+    "contact": "yatclaude@gmail.com"
+  },
+  "purpose": "decision-support shopping discovery",
+  "behavior": {
+    "checkout": "redirect-only; no automated purchase",
+    "ranking": "preference-driven, no paid placement (see docs/adr/0006)",
+    "data_handling": "anonymous sessions identified by signed cookie; user preferences persisted server-side keyed to session id; client IP is hashed (HMAC) and stored only for rate-limiting"
+  },
+  "tools_used": [
+    "search_products",
+    "get_product"
+  ],
+  "rate_limits": {
+    "max_requests_per_minute": 60,
+    "max_requests_per_session": 500
+  },
+  "compliance": {
+    "respects_robots": true,
+    "respects_no_index": true,
+    "user_agent": "agentic-commerce/0.1 (+https://github.com/yatclaude/agentic-commerce)"
+  },
+  "contact_for_abuse": "yatclaude@gmail.com",
+  "version": "0.1.0"
+}
