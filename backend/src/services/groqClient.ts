@@ -18,7 +18,11 @@ export interface StreamChatOpts {
   tools?: ChatCompletionTool[];
   tool_choice?: ChatCompletionToolChoiceOption;
   temperature?: number;
+  /** Hard cap on output tokens. Cycle 4 uses this on the vision call. */
+  max_tokens?: number;
   signal?: AbortSignal;
+  /** Free-form tag forwarded into usage_log.jsonl so we can break out vision vs chat spend (cycle-4.md open question Q3). */
+  usageTag?: string;
 }
 
 export interface NonStreamChatOpts extends Omit<StreamChatOpts, never> {
@@ -86,26 +90,28 @@ export async function streamChatCompletion(
         tools: opts.tools,
         tool_choice: opts.tool_choice,
         temperature: opts.temperature,
+        max_tokens: opts.max_tokens,
         stream: true,
       },
       { signal: opts.signal },
     );
 
+  const tag = opts.usageTag;
   try {
     const stream = await tryOnce(primary);
-    return wrapStream(stream, primary);
+    return wrapStream(stream, primary, tag);
   } catch (err) {
     if (!isRetriable(err)) throw err;
     // retry once with jitter
     await new Promise((r) => setTimeout(r, jitter(400)));
     try {
       const stream = await tryOnce(primary);
-      return wrapStream(stream, primary);
+      return wrapStream(stream, primary, tag);
     } catch (err2) {
       if (!isRetriable(err2) || primary === fallback) throw err2;
       // fallback model — single attempt
       const stream = await tryOnce(fallback);
-      return wrapStream(stream, fallback);
+      return wrapStream(stream, fallback, tag);
     }
   }
 }
@@ -113,6 +119,7 @@ export async function streamChatCompletion(
 function wrapStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   model: string,
+  tag?: string,
 ): AsyncIterable<ChatCompletionChunk> & { model: string } {
   // Tap to record usage when the final chunk arrives.
   const tapped = (async function* () {
@@ -120,7 +127,7 @@ function wrapStream(
       // The chunk's `usage` field (when present) reflects cumulative usage at
       // stream end on Groq's OpenAI-shape stream.
       const usage = (chunk as ChatCompletionChunk & { usage?: ChatCompletion['usage'] }).usage;
-      if (usage) void recordUsage(model, usage, { mode: 'stream' });
+      if (usage) void recordUsage(model, usage, tag ? { mode: 'stream', tag } : { mode: 'stream' });
       yield chunk;
     }
   })();
@@ -142,6 +149,7 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
         tools: opts.tools,
         tool_choice: opts.tool_choice,
         temperature: opts.temperature,
+        max_tokens: opts.max_tokens,
         stream: false,
       },
       { signal: opts.signal },
@@ -162,6 +170,6 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
       resp = await tryOnce(fallback);
     }
   }
-  void recordUsage(model, resp.usage, { mode: 'sync' });
+  void recordUsage(model, resp.usage, opts.usageTag ? { mode: 'sync', tag: opts.usageTag } : { mode: 'sync' });
   return resp;
 }

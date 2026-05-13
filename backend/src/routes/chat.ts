@@ -6,6 +6,7 @@ import { sharedCache } from '../services/cache.js';
 import { SYSTEM_PROMPT } from '../services/prompts.js';
 import { ToolRegistry } from '../services/toolRegistry.js';
 import { compareProductsTool } from '../services/tools/compareProducts.js';
+import { extractStyleFromImageTool } from '../services/tools/extractStyleFromImage.js';
 import { getPreferencesTool } from '../services/tools/getPreferences.js';
 import { getProductDetailsTool } from '../services/tools/getProductDetails.js';
 import { recommendOutfitTool } from '../services/tools/recommendOutfit.js';
@@ -37,7 +38,8 @@ const registry = new ToolRegistry()
   .register(compareProductsTool)
   .register(savePreferenceTool)
   .register(getPreferencesTool)
-  .register(recommendOutfitTool);
+  .register(recommendOutfitTool)
+  .register(extractStyleFromImageTool);
 
 export async function chatRoutes(app: FastifyInstance) {
   app.post('/api/chat', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {

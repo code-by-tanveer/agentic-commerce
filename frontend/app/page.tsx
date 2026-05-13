@@ -6,6 +6,7 @@ import { SessionProvider, useSession } from '@/hooks/useSession';
 import { ShortlistProvider } from '@/hooks/useShortlist';
 import { Header } from '@/components/chat/Header';
 import { ConversationCanvas } from '@/components/chat/ConversationCanvas';
+import { ImageDropzone } from '@/components/chat/ImageDropzone';
 import { InputBar } from '@/components/chat/InputBar';
 import { Shortlist } from '@/components/chat/Shortlist';
 import { PreferencesCard } from '@/components/preferences/PreferencesCard';
@@ -28,6 +29,11 @@ export default function Page() {
       <ShortlistProvider>
         <PreferencesShell>
           <ConversationProvider>
+            {/* ImageDropzone — sibling to <main> so it can listen at the
+                document level for drag/drop anywhere on the page (DESIGN.md
+                §4: paste-or-drop anywhere, idle invisible). Overlay renders
+                full-viewport via fixed positioning when dragging starts. */}
+            <ImageDropzone />
             <main className="grain relative flex min-h-dvh flex-col bg-ink-50">
               <Header />
               <div className="flex flex-1 flex-col">

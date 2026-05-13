@@ -1,10 +1,11 @@
 'use client';
 
 import { AlertCircle, RotateCcw } from 'lucide-react';
-import type { Block } from '@/hooks/useConversation';
+import { useConversation, type Block } from '@/hooks/useConversation';
 import { ProductCardGroup } from '../product/ProductCardGroup';
 import { ComparisonTable } from '../product/ComparisonTable';
 import { OutfitBundle } from '../product/OutfitBundle';
+import { Moodboard } from '../product/Moodboard';
 import { ToolStatus } from './ToolStatus';
 
 // Stateless. Walks blocks in arrival order and dispatches each to its
@@ -13,15 +14,21 @@ import { ToolStatus } from './ToolStatus';
 
 interface Props {
   blocks: Block[];
+  messageId: string;
   onRetry?: () => void;
 }
 
-export function MessageRenderer({ blocks, onRetry }: Props) {
+export function MessageRenderer({ blocks, messageId, onRetry }: Props) {
   if (!blocks.length) return null;
   return (
     <div className="flex flex-col gap-3">
       {blocks.map((b, i) => (
-        <BlockView key={blockKey(b, i)} block={b} onRetry={onRetry} />
+        <BlockView
+          key={blockKey(b, i)}
+          block={b}
+          messageId={messageId}
+          onRetry={onRetry}
+        />
       ))}
     </div>
   );
@@ -32,14 +39,24 @@ function blockKey(b: Block, i: number): string {
     b.type === 'tool_status' ||
     b.type === 'products' ||
     b.type === 'comparison' ||
-    b.type === 'outfit'
+    b.type === 'outfit' ||
+    b.type === 'moodboard'
   ) {
     return `${b.type}:${b.toolCallId}`;
   }
   return `${b.type}:${i}`;
 }
 
-function BlockView({ block, onRetry }: { block: Block; onRetry?: () => void }) {
+function BlockView({
+  block,
+  messageId,
+  onRetry,
+}: {
+  block: Block;
+  messageId: string;
+  onRetry?: () => void;
+}) {
+  const { refineMoodboard } = useConversation();
   switch (block.type) {
     case 'text':
       if (!block.text) return null;
@@ -76,6 +93,19 @@ function BlockView({ block, onRetry }: { block: Block; onRetry?: () => void }) {
           anchorProductId={block.anchorProductId}
           items={block.items as never}
           rationale={block.rationale}
+        />
+      );
+
+    case 'moodboard':
+      // Cycle 4 — editable attribute chips drive `refineMoodboard`, which
+      // re-issues `search_catalog` with the new query.
+      return (
+        <Moodboard
+          imageUrl={block.imageUrl}
+          description={block.description}
+          attributes={block.attributes}
+          suggestedQuery={block.suggestedQuery}
+          onRefine={(next) => void refineMoodboard(messageId, next)}
         />
       );
 

@@ -27,13 +27,15 @@ export function MessageBubble({ message }: Props) {
     ? { duration: 0.1, ease: 'easeOut' as const }
     : { duration: 0.25, ease: [0.16, 1, 0.3, 1] as const };
 
-  // User messages always carry a single text block.
+  // User messages always carry a single text block (optionally with an
+  // attached image URL — Cycle 4).
   if (isUser) {
-    const text = message.blocks
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    if (!text) return null;
+    const textBlocks = message.blocks.filter(
+      (b): b is TextBlock => b.type === 'text',
+    );
+    const text = textBlocks.map((b) => b.text).join('');
+    const imageUrl = textBlocks.find((b) => b.imageUrl)?.imageUrl;
+    if (!text && !imageUrl) return null;
     return (
       <motion.div
         initial={initial}
@@ -41,8 +43,22 @@ export function MessageBubble({ message }: Props) {
         transition={transition}
         className="flex w-full justify-end"
       >
-        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-ink-900 px-4 py-3 text-sm leading-relaxed text-white">
-          {text}
+        <div className="flex max-w-[80%] flex-col items-end gap-2">
+          {imageUrl ? (
+            <div className="overflow-hidden rounded-2xl bg-ink-100 shadow-soft">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imageUrl}
+                alt="Attached reference image"
+                className="block max-h-40 w-auto object-cover"
+              />
+            </div>
+          ) : null}
+          {text ? (
+            <div className="rounded-2xl rounded-br-md bg-ink-900 px-4 py-3 text-sm leading-relaxed text-white">
+              {text}
+            </div>
+          ) : null}
         </div>
       </motion.div>
     );
@@ -82,6 +98,7 @@ export function MessageBubble({ message }: Props) {
       >
         <MessageRenderer
           blocks={message.blocks}
+          messageId={message.id}
           onRetry={message.status === 'error' ? () => void retry(message.id) : undefined}
         />
       </div>

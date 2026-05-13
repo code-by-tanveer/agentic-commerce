@@ -29,8 +29,15 @@ const schema = z.object({
   // Persistence.
   DB_PATH: z.string().default('data/agentic.db'),
   UPLOAD_DIR: z.string().default('data/uploads'),
+  UPLOAD_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 
-  // Hashing salt for IP forensics.
+  // Vision spend cap (input tokens). Bounds the size of the base64-encoded
+  // image data URL we ship to Groq vision.
+  VISION_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).max(32_000).default(4096),
+
+  // Hashing salt for IP forensics. NOTE: this same secret currently signs
+  // upload URLs (see services/uploads.ts). Cycle 6 splits this into a
+  // dedicated `UPLOAD_SIGNING_SECRET`.
   IP_HASH_SALT: z.string().min(8).optional(),
 
   PORT: z.coerce.number().default(4000),

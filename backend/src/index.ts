@@ -2,12 +2,15 @@ import { createHash } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env.js';
 import { runMigrations } from './db/migrations/runner.js';
 import { chatRoutes } from './routes/chat.js';
 import { preferencesRoutes } from './routes/preferences.js';
 import { sessionRoutes } from './routes/session.js';
+import { uploadRoutes } from './routes/upload.js';
+import { purgeStaleUploads } from './services/uploadsPurge.js';
 
 // ARCH §9 — raw IPs must never hit logs. The session DB stores them salted as
 // `sessions.ip_hash`; the logger emits the same salted hash so log lines and
@@ -60,6 +63,17 @@ async function main() {
 
   await app.register(cookie);
 
+  // ARCH §9 / cycle-4.md hard rule: 8 MB cap is enforced at the multipart
+  // parser, NOT in application logic. We also bound to a single file per
+  // upload — the route shape is `POST /api/upload` with one part.
+  await app.register(multipart, {
+    limits: {
+      fileSize: 8 * 1024 * 1024,
+      files: 1,
+      fields: 0,
+    },
+  });
+
   await app.register(rateLimit, {
     global: false,
     // Per-route overrides set via { config: { rateLimit: ... } }.
@@ -74,6 +88,26 @@ async function main() {
   await app.register(chatRoutes);
   await app.register(sessionRoutes);
   await app.register(preferencesRoutes);
+  await app.register(uploadRoutes);
+
+  // Upload retention (cycle-4.md / ARCH §9): boot-time sweep + hourly cron.
+  // Best-effort — never blocks boot.
+  void purgeStaleUploads(app.log).catch((err) => {
+    app.log.warn({ err }, 'initial purgeStaleUploads failed');
+  });
+  const purgeInterval = setInterval(
+    () => {
+      void purgeStaleUploads(app.log).catch((err) => {
+        app.log.warn({ err }, 'scheduled purgeStaleUploads failed');
+      });
+    },
+    60 * 60 * 1000,
+  );
+  // Don't keep the event loop alive on the timer alone.
+  if (typeof purgeInterval.unref === 'function') purgeInterval.unref();
+  app.addHook('onClose', async () => {
+    clearInterval(purgeInterval);
+  });
 
   try {
     await app.listen({ port: env.PORT, host: '0.0.0.0' });

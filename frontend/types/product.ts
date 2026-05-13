@@ -87,3 +87,17 @@ export interface SavedOutfit {
 }
 
 export type ViewMode = 'list' | 'collage';
+
+// ---------------------------------------------------------------------------
+// Cycle 4 — Moodboard. Mirrors the backend `moodboard` SSE event payload
+// (see `frontend/lib/events.ts::MoodboardEventSchema`). The `extract_style_
+// from_image` vision tool produces these; the FE renders one as a sub-block
+// above the next assistant turn's search results.
+// ---------------------------------------------------------------------------
+export interface Moodboard {
+  toolCallId: string;
+  imageUrl: string;
+  description: string;
+  attributes: string[];
+  suggestedQuery: string;
+}

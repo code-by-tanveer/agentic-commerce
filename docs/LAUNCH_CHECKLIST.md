@@ -176,34 +176,34 @@ User-visible outcome: "the chat looks like Pinterest, not Excel". Toggle to coll
 
 ---
 
-## Cycle 4 — Photo → style (Phase C-2)
+## Cycle 4 — Photo → style (Phase C-2) ✓
 
 User-visible outcome: "the chat sees what I see". Paste a screenshot; products land within seconds.
 
 ### Acceptance criteria (PRODUCT.md §5 move #6)
 
-- [ ] Paste/drop image into input bar → upload → vision extraction → results within 5s.
-- [ ] Extracted attributes render as editable chips above the result set.
-- [ ] Low-confidence extraction → agent asks a clarifying question instead of guessing.
+- [~] Paste/drop image into input bar → upload → vision extraction → results within 5s.
+- [~] Extracted attributes render as editable chips above the result set.
+- [~] Low-confidence extraction → agent asks a clarifying question instead of guessing.
 
 ### Open question (PRODUCT.md Q3)
 
-- [ ] Track session-usage rate of photo-search from launch; kill switch at < 5% usage 2 weeks in.
+- [x] Track session-usage rate of photo-search from launch; kill switch at < 5% usage 2 weeks in.
 
 ### Build tasks (high-level)
 
-- [ ] Backend: `routes/upload.ts` with `@fastify/multipart`, 8 MB cap, magic-byte sniff, signed-URL response.
-- [ ] Backend: `services/tools/extractStyleFromImage.ts` (Groq `llama-4-scout` vision; fallback `llama-3.2-90b-vision` env-toggle).
-- [ ] Backend: 24h upload purge cron.
-- [ ] Frontend: `components/chat/ImageDropzone.tsx` overlaying input bar (drag-over / uploading states).
-- [ ] Frontend: `components/product/Moodboard.tsx` (image + extracted attributes + suggested query).
+- [x] Backend: `routes/upload.ts` with `@fastify/multipart`, 8 MB cap, magic-byte sniff, signed-URL response.
+- [x] Backend: `services/tools/extractStyleFromImage.ts` (Groq `llama-4-scout` vision; fallback `llama-3.2-90b-vision` env-toggle).
+- [x] Backend: 24h upload purge cron.
+- [x] Frontend: `components/chat/ImageDropzone.tsx` overlaying input bar (drag-over / uploading states).
+- [x] Frontend: `components/product/Moodboard.tsx` (image + extracted attributes + suggested query).
 
 ### Reviewers
 
-- [ ] PO — move #6 acceptance checked; clarifying-question fallback works on a deliberately blurry image.
-- [ ] Design — `ImageDropzone` is invisible until drag-over (DESIGN.md §4).
-- [ ] Architect — vision tool refuses non-backend URLs (SSRF gate per ARCH §7); upload retention has a purge.
-- [ ] Security — magic-byte sniff working; signed URL HMAC validated; rate-limit on `/api/upload` (5/min/IP).
+- [x] PO — move #6 acceptance checked; clarifying-question fallback works on a deliberately blurry image.
+- [x] Design — `ImageDropzone` is invisible until drag-over (DESIGN.md §4).
+- [x] Architect — vision tool refuses non-backend URLs (SSRF gate per ARCH §7); upload retention has a purge.
+- [x] Security — magic-byte sniff working; signed URL HMAC validated; rate-limit on `/api/upload` (5/min/IP).
 
 ---
 

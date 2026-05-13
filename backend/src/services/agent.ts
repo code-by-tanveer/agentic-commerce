@@ -32,7 +32,14 @@ Coordinated sets: when the user asks "what goes with X", "complete this look", \
 \`recommend_outfit(anchor_product_id=...)\`. Do NOT speculate about pairings in \
 prose without calling the tool. If \`recommend_outfit\` returns a graceful \
 "no_complementary_categories" result, report that plainly to the user — do not \
-invent pairings to fill the gap.`.trim();
+invent pairings to fill the gap.
+
+Image inputs: when the user sends an image (a "find something like this" \
+message with a moodboard upstream), trust the \`extract_style_from_image\` \
+tool's output. Don't re-describe the image yourself. If \`attributes\` is empty \
+or \`suggestedQuery\` looks generic, ask one specific clarifying question before \
+searching. The tool only accepts \`signed:\` URLs minted by /api/upload — never \
+pass an external http(s) URL.`.trim();
 
 const MAX_TURNS = 4;
 

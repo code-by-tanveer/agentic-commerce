@@ -26,6 +26,22 @@ export type ToolStatusKind = 'running' | 'done' | 'error';
 export interface TextBlock {
   type: 'text';
   text: string;
+  // Cycle 4 — when the user drops/pastes an image, the text block carries a
+  // signed upload URL so the bubble can render a thumbnail next to the text.
+  // Optional and additive; pure-text messages omit it.
+  imageUrl?: string;
+}
+
+// Cycle 4 — vision-extracted moodboard. Rendered as a small card above the
+// next product results. Editable: each attribute chip is removable; the user
+// can add new chips and trigger a refine (`useConversation.refineMoodboard`).
+export interface MoodboardBlock {
+  type: 'moodboard';
+  toolCallId: string;
+  imageUrl: string;
+  description: string;
+  attributes: string[];
+  suggestedQuery: string;
 }
 
 export interface ToolStatusBlock {
@@ -76,6 +92,7 @@ export type Block =
   | ProductsBlock
   | ComparisonBlock
   | OutfitBlock
+  | MoodboardBlock
   | ErrorBlock;
 
 export type MessageStatus = 'streaming' | 'done' | 'error';
@@ -242,6 +259,24 @@ function reducer(state: State, action: Action): State {
                   },
                 ],
               };
+            case 'moodboard':
+              // Cycle 4 — push as a sub-block. The Moodboard component
+              // renders inline above the next `products` block on the same
+              // assistant turn.
+              return {
+                ...m,
+                blocks: [
+                  ...m.blocks,
+                  {
+                    type: 'moodboard',
+                    toolCallId: event.toolCallId,
+                    imageUrl: event.imageUrl,
+                    description: event.description,
+                    attributes: event.attributes,
+                    suggestedQuery: event.suggestedQuery,
+                  },
+                ],
+              };
             case 'error':
               return {
                 ...m,
@@ -256,8 +291,8 @@ function reducer(state: State, action: Action): State {
                   },
                 ],
               };
-            // 'done' handled by 'finalize'; 'preference_update' forwarded above;
-            // 'moodboard', 'reasoning_chip' arrive in later cycles — ignore.
+            // 'done' handled by 'finalize'; 'preference_update' forwarded
+            // above; 'reasoning_chip' is a Cycle 5+ side-channel — ignore.
             default:
               return m;
           }
@@ -298,14 +333,25 @@ function reducer(state: State, action: Action): State {
 // Context + provider
 // ---------------------------------------------------------------------------
 
+// Cycle 4 — send options. `imageUrl` rides on the user text block so the
+// bubble can render an inline thumbnail; the wire history strips the image
+// since the BE looks at the upstream `moodboard` event for the vision tool.
+export interface SendOptions {
+  imageUrl?: string;
+}
+
 interface ConversationContextValue {
   sessionId: string | null;
   messages: Message[];
   isStreaming: boolean;
   // Back-compat for InputBar / Header — same field name, new meaning.
   isSearching: boolean;
-  send: (text: string) => Promise<void>;
+  send: (text: string, opts?: SendOptions) => Promise<void>;
   retry: (messageId: string) => Promise<void>;
+  // Cycle 4 — re-send the conversation up to (and including) the moodboard's
+  // turn with the edited attributes joined into a refined query. Triggers a
+  // fresh assistant turn that will fan out to `search_catalog`.
+  refineMoodboard: (messageId: string, attributes: string[]) => Promise<void>;
   reset: () => void;
 }
 
@@ -444,7 +490,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   latestMessageRef.current = (id: string) => state.messages.find((m) => m.id === id);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, opts?: SendOptions) => {
       const trimmed = text.trim();
       if (!trimmed || state.isStreaming) return;
 
@@ -452,7 +498,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         id: rid(),
         role: 'user',
         status: 'done',
-        blocks: [{ type: 'text', text: trimmed }],
+        blocks: [{ type: 'text', text: trimmed, imageUrl: opts?.imageUrl }],
       };
       const assistantId = rid();
       const assistantPlaceholder: Message = {
@@ -464,6 +510,55 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'send', userMessage, assistantPlaceholder });
 
       const wire = toWireHistory([...state.messages, userMessage]);
+      // When a signed upload URL rides along, append it to the user content so
+      // the backend agent can pass it to `extract_style_from_image`. The
+      // BE-side SSRF gate rejects anything that's not a `signed:` URL.
+      if (opts?.imageUrl && wire.length > 0) {
+        const last = wire[wire.length - 1];
+        wire[wire.length - 1] = {
+          ...last,
+          content: `${last.content}\n\n[attached image: ${opts.imageUrl}]`,
+        };
+      }
+      await run(assistantId, wire, state.sessionId);
+    },
+    [run, state.isStreaming, state.messages, state.sessionId],
+  );
+
+  const refineMoodboard = useCallback(
+    async (messageId: string, attributes: string[]) => {
+      if (state.isStreaming) return;
+      const idx = state.messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+      const refined = attributes
+        .map((a) => a.trim())
+        .filter(Boolean)
+        .join(', ');
+      if (!refined) return;
+
+      // Re-send the conversation up to (and including) the moodboard's turn,
+      // appending a synthetic user message that nudges the agent to re-search
+      // with the edited attributes. The agent's existing system prompt will
+      // route this through `search_catalog`.
+      const priorWire = toWireHistory(state.messages.slice(0, idx + 1));
+      const userMessage: Message = {
+        id: rid(),
+        role: 'user',
+        status: 'done',
+        blocks: [{ type: 'text', text: `Refine search: ${refined}` }],
+      };
+      const assistantId = rid();
+      const assistantPlaceholder: Message = {
+        id: assistantId,
+        role: 'assistant',
+        status: 'streaming',
+        blocks: [],
+      };
+      dispatch({ type: 'send', userMessage, assistantPlaceholder });
+      const wire: ChatRequestMessage[] = [
+        ...priorWire,
+        { role: 'user', content: `Refine search: ${refined}` },
+      ];
       await run(assistantId, wire, state.sessionId);
     },
     [run, state.isStreaming, state.messages, state.sessionId],
@@ -499,9 +594,18 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       isSearching: state.isStreaming,
       send,
       retry,
+      refineMoodboard,
       reset,
     }),
-    [state.sessionId, state.messages, state.isStreaming, send, retry, reset],
+    [
+      state.sessionId,
+      state.messages,
+      state.isStreaming,
+      send,
+      retry,
+      refineMoodboard,
+      reset,
+    ],
   );
 
   return <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>;

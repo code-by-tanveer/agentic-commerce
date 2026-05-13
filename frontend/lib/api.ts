@@ -395,6 +395,36 @@ export async function putViewMode(
 }
 
 // ---------------------------------------------------------------------------
+// Image upload (Cycle 4). Backend mints a signed URL valid for 24h; the FE
+// only ever sees the opaque `signed:<token>` form, which is what the vision
+// tool will accept (SSRF gate per ARCH §7).
+// ---------------------------------------------------------------------------
+
+export interface UploadedImage {
+  url: string;
+  expiresAt: string;
+}
+
+/**
+ * POST a single image to `/api/upload` as multipart form-data. The backend
+ * enforces 8 MB cap, MIME allowlist, and magic-byte sniff; this client
+ * surfaces the typed error so the dropzone can render an inline retry banner.
+ */
+export async function uploadImage(
+  file: File,
+  signal?: AbortSignal,
+): Promise<UploadedImage> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/upload', { method: 'POST', body: fd, signal });
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'upload failed');
+  }
+  return (await res.json()) as UploadedImage;
+}
+
+// ---------------------------------------------------------------------------
 // Product detail — kept for future non-chat surfaces (not called in Cycle 1).
 // ---------------------------------------------------------------------------
 
