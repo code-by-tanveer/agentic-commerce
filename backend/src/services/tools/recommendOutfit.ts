@@ -98,7 +98,8 @@ export const recommendOutfitTool: Tool<RecommendOutfitArgs, RecommendOutfitResul
     const maxItems = Math.min(args.max_items ?? 3, 4);
 
     // 1. Fetch anchor.
-    const anchor = await getProduct(args.anchor_product_id, { signal: ctx.signal });
+    // R3-cleanup (architect-code LOW): thread `ctx.log` for MCP retry visibility.
+    const anchor = await getProduct(args.anchor_product_id, { signal: ctx.signal, log: ctx.log });
     if (!anchor) {
       return {
         ok: false,
@@ -124,7 +125,8 @@ export const recommendOutfitTool: Tool<RecommendOutfitArgs, RecommendOutfitResul
     const settled = await Promise.all(
       categories.map(async (q) => {
         try {
-          const products = await searchCatalog(q, 4, { signal: ctx.signal });
+          // R3-cleanup (architect-code LOW): thread `ctx.log` for MCP retry visibility.
+          const products = await searchCatalog(q, 4, { signal: ctx.signal, log: ctx.log });
           return { query: q, products };
         } catch (err) {
           ctx.log.warn({ err, query: q }, 'recommend_outfit sub-search failed');

@@ -233,9 +233,16 @@ export function normalizeProduct(raw: RawProduct): NormalizedProduct {
   const price =
     firstAvailable?.price ??
     parseMoney(raw.price ?? raw.price_range?.min).amount;
+  // R3-cleanup (architect-code MEDIUM): `price_range` carries its currency on
+  // the wrapper object (`{min,max,currency}`), but `parseMoney` only inspects
+  // `{amount,currency}` — so passing the wrapper used to silently fall back to
+  // 'USD' for non-USD merchants. Read the wrapper's currency explicitly here
+  // before falling back. Order: variant currency → product `price` money →
+  // `price_range.currency` → 'USD'.
   const currency =
     firstAvailable?.currency ??
-    parseMoney(raw.price ?? raw.price_range).currency ??
+    (raw.price != null ? parseMoney(raw.price).currency : undefined) ??
+    raw.price_range?.currency ??
     'USD';
 
   const merchant = pickMerchantName(raw);

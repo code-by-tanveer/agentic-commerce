@@ -129,7 +129,9 @@ or \`suggestedQuery\` looks generic, ask one specific clarifying question before
 searching. The tool only accepts \`signed:\` URLs minted by /api/upload — never \
 pass an external http(s) URL.`.trim();
 
-const MAX_TURNS = 4;
+// R3-cleanup (architect-code LOW): promoted from file-local to
+// `env.AGENT_MAX_TURNS` so ops can tune the turn budget without a code edit.
+const MAX_TURNS = env.AGENT_MAX_TURNS;
 
 export interface RunAgentOpts {
   sessionId: string;
@@ -244,7 +246,11 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
   try {
     for (let turn = 1; turn <= MAX_TURNS; turn++) {
       if (signal.aborted) {
-        await emit({ type: 'error', code: 'internal', message: 'aborted', retryable: false });
+        // R3-cleanup (architect-code MEDIUM): the prior `emit({...message:
+        // 'aborted'...})` here was a no-op — `chat.ts` already closes the
+        // writer in its `onClose` handler before this branch fires, so the
+        // event would never reach the FE. Persisting `truncated` per ADR-0002
+        // and returning is sufficient.
         await persistAssistant('truncated');
         return;
       }
@@ -465,7 +471,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (!err || typeof err !== 'object') {
     return {
       code: 'internal',
-      message: "Something went wrong on our side. Try again?",
+      message: 'Something went wrong on our side.',
       retryable: true,
     };
   }
@@ -480,7 +486,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (e.name === 'McpError') {
     return {
       code: 'mcp_error',
-      message: "Couldn't reach the catalog. Retry?",
+      message: "Couldn't reach the catalog.",
       retryable: true,
     };
   }
@@ -490,7 +496,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (e.status === 429 || groqErrCode === 'rate_limit_exceeded') {
     return {
       code: 'rate_limited',
-      message: 'Hitting traffic — retrying in a few seconds.',
+      message: 'Hitting traffic. Retrying.',
       retryable: true,
     };
   }
@@ -519,7 +525,7 @@ function classifyError(err: unknown): ClassifiedError {
   if (e.name === 'ToolDispatchError') {
     return {
       code: 'tool_error',
-      message: 'A tool failed. Try rephrasing?',
+      message: 'A tool failed.',
       retryable: false,
     };
   }
@@ -529,14 +535,14 @@ function classifyError(err: unknown): ClassifiedError {
   if (typeof e.status === 'number' && e.status >= 500) {
     return {
       code: 'internal',
-      message: "Something went wrong on our side. Try again?",
+      message: 'Something went wrong on our side.',
       retryable: true,
     };
   }
   if (e.name === 'APIConnectionError' || e.name === 'APIConnectionTimeoutError') {
     return {
       code: 'internal',
-      message: "Something went wrong on our side. Try again?",
+      message: 'Something went wrong on our side.',
       retryable: true,
     };
   }

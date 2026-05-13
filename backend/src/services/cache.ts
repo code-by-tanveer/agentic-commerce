@@ -65,7 +65,14 @@ export class Cache {
   }
 }
 
-/** Stable JSON stringify for cache key construction (sorts object keys). */
+/**
+ * Stable JSON stringify for cache key construction (sorts object keys).
+ *
+ * NOTE (R3-cleanup architect-code LOW): this is canonical-JSON only — NOT
+ * cryptographically secure. Do not use the output as input to a signature,
+ * MAC, or any tamper-detection path. The purpose is collision-free
+ * deterministic cache keys for the in-memory LRU; nothing more.
+ */
 export function stableKey(parts: unknown[]): string {
   return parts.map(stableStringify).join('|');
 }

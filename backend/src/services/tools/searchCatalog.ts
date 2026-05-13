@@ -97,12 +97,15 @@ export const searchCatalogTool: Tool<SearchCatalogArgs, SearchCatalogResult> = {
     }
 
     if (ctx.signal.aborted) throw new Error('aborted');
+    // R3-cleanup (architect-code LOW): thread `ctx.log` into the MCP call so
+    // retry attempts surface in the per-request log namespace.
     const products = await searchCatalog(args.query, limit, {
       filters: {
         ships_to: args.filters?.ships_to,
         available: args.filters?.available,
       },
       signal: ctx.signal,
+      log: ctx.log,
     });
 
     // Post-fetch price filter (MCP `filters.price` not guaranteed honoured).

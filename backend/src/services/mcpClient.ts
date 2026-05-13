@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import { request } from 'undici';
 import { env } from '../config/env.js';
 import { getAccessToken } from './tokenCache.js';
@@ -34,6 +35,13 @@ interface CallOpts {
    * See cycle-2.md gating carry-over #1.
    */
   signal?: AbortSignal;
+  /**
+   * R3-cleanup (architect-code LOW): when supplied, emit a `mcp retry` debug
+   * log line on each retry attempt with `{ retryAttempt, status, durationMs }`.
+   * Existing callers don't need to thread anything — the parameter is
+   * optional and the absence is the prior silent-retry behaviour.
+   */
+  log?: FastifyBaseLogger;
 }
 
 export async function callTool<T = unknown>(
@@ -43,6 +51,7 @@ export async function callTool<T = unknown>(
 ): Promise<T> {
   const retries = opts.retries ?? 2;
   const signal = opts.signal;
+  const log = opts.log;
 
   const enriched = {
     ...args,
@@ -62,6 +71,7 @@ export async function callTool<T = unknown>(
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (signal?.aborted) throw new McpError('aborted', undefined, undefined);
+    const attemptStart = Date.now();
     try {
       const token = await getAccessToken();
       const res = await request(env.CATALOG_MCP_URL, {
@@ -78,6 +88,16 @@ export async function callTool<T = unknown>(
       if (res.statusCode >= 500 || res.statusCode === 429) {
         const text = await res.body.text();
         lastErr = new McpError(`MCP ${res.statusCode}: ${text}`, undefined, res.statusCode);
+        // R3-cleanup (architect-code LOW): structured retry observability.
+        log?.debug?.(
+          {
+            tool: name,
+            retryAttempt: attempt + 1,
+            status: res.statusCode,
+            durationMs: Date.now() - attemptStart,
+          },
+          'mcp retry',
+        );
         await delay(backoff(attempt), signal);
         continue;
       }
@@ -96,6 +116,17 @@ export async function callTool<T = unknown>(
       lastErr = err;
       if (signal?.aborted) throw err;
       if (attempt === retries) throw err;
+      // R3-cleanup (architect-code LOW): structured retry observability for
+      // the transport-error branch (no HTTP status, so log `status: undefined`).
+      log?.debug?.(
+        {
+          tool: name,
+          retryAttempt: attempt + 1,
+          status: (err as { status?: number } | undefined)?.status,
+          durationMs: Date.now() - attemptStart,
+        },
+        'mcp retry',
+      );
       await delay(backoff(attempt), signal);
     }
   }

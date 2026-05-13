@@ -464,15 +464,6 @@ export async function fetchSummary(
   return (await res.json()) as SummaryBlob;
 }
 
-// ---------------------------------------------------------------------------
-// Product detail — kept for future non-chat surfaces (not called in Cycle 1).
-// ---------------------------------------------------------------------------
-
-export async function getProduct(id: string, signal?: AbortSignal): Promise<Product> {
-  const res = await fetch(`/api/product/${encodeURIComponent(id)}`, { signal });
-  if (!res.ok) {
-    const body = await safeJson(res);
-    throw new ApiError(res.status, body?.message ?? 'Product lookup failed');
-  }
-  return (await res.json()) as Product;
-}
+// R3-cleanup (architect-code MEDIUM): `getProduct(id)` was deleted in
+// round 3 — it called `/api/product/:id`, a route the backend has never
+// exposed, and no FE caller imported it. Dead export removed.

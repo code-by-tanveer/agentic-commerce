@@ -1,4 +1,5 @@
 import { ETHICS_SYNONYMS, isEthicsValue, type EthicsValue } from '@agentic/events';
+import { env } from '../config/env.js';
 import type { NormalizedProduct, ReasoningChip } from '../types/product.js';
 import type { PreferenceEntrySnapshot, PreferencesSnapshot } from '../types/tool.js';
 
@@ -18,7 +19,10 @@ import type { PreferenceEntrySnapshot, PreferencesSnapshot } from '../types/tool
  * returned array. See cycle-2.md "Backend engineer" hard rules.
  */
 
-const MAX_CHIPS = 4;
+// R3-cleanup (architect-code LOW): promoted from file-local to
+// `env.REASONING_MAX_CHIPS` so ops can widen/narrow the chip strip without a
+// code edit. Default remains 4 per DESIGN.md §8.
+const MAX_CHIPS = env.REASONING_MAX_CHIPS;
 
 const RANK: Record<string, number> = {
   size_match: 0,

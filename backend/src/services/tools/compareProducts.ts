@@ -57,8 +57,9 @@ export const compareProductsTool: Tool<CompareProductsArgs, CompareProductsResul
     if (cached) {
       products = cached;
     } else {
+      // R3-cleanup (architect-code LOW): thread `ctx.log` for MCP retry visibility.
       const fetched = await Promise.all(
-        args.ids.map((id) => getProduct(id, { signal: ctx.signal })),
+        args.ids.map((id) => getProduct(id, { signal: ctx.signal, log: ctx.log })),
       );
       products = fetched.filter((p): p is NormalizedProduct => p !== null);
       ctx.cache.set(cacheKey, products);

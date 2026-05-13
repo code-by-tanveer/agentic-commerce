@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { RATE_LIMITS } from '../config/env.js';
 import {
   deletePreference,
   isPreferenceKey,
@@ -9,11 +10,11 @@ import {
 } from '../db/repos/preferences.js';
 import { getOrCreateSession } from '../db/repos/sessions.js';
 
-// Same bucket as the rest of /api/session/* (cycle-2.md: "Reuse the existing
-// /api/session/* rate-limit bucket (60/min/IP)"). We don't share a registry
-// across files, so we re-state the limit; the IP key is set globally in
-// index.ts so this stays consistent.
-const RATE_LIMIT = { max: 60, timeWindow: '1 minute' as const };
+// R3-cleanup (architect-code MEDIUM): same bucket as the rest of /api/session/*
+// (cycle-2.md: "Reuse the existing /api/session/* rate-limit bucket
+// (60/min/IP)"). Values sourced from the centralised `RATE_LIMITS` matrix; the
+// per-key keying is set globally in `index.ts`.
+const RATE_LIMIT = RATE_LIMITS.preferences;
 
 const putBodySchema = z
   .object({

@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import { callTool } from './mcpClient.js';
 import { extractProduct, extractProducts, normalizeProduct } from './normalize.js';
 import type { NormalizedProduct } from '../types/product.js';
@@ -10,6 +11,9 @@ export interface SearchCatalogFilters {
 export interface SearchCatalogOpts {
   filters?: SearchCatalogFilters;
   signal?: AbortSignal;
+  // R3-cleanup (architect-code LOW): optional logger threaded through to
+  // `mcpClient.callTool` so retry attempts emit a `mcp retry` debug line.
+  log?: FastifyBaseLogger;
 }
 
 export async function searchCatalog(
@@ -35,21 +39,23 @@ export async function searchCatalog(
         limit,
       },
     },
-    { signal: opts.signal },
+    { signal: opts.signal, log: opts.log },
   );
   return extractProducts(result).map(normalizeProduct);
 }
 
 export async function getProduct(
   id: string,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; log?: FastifyBaseLogger } = {},
 ): Promise<NormalizedProduct | null> {
   const result = await callTool(
     'get_product',
     {
       catalog: { id },
     },
-    { signal: opts.signal },
+    // R3-cleanup (architect-code LOW): forward the logger to `callTool` so
+    // retry observability lights up without the caller writing custom plumbing.
+    { signal: opts.signal, log: opts.log },
   );
   const raw = extractProduct(result);
   return raw ? normalizeProduct(raw) : null;

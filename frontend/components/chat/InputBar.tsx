@@ -176,7 +176,7 @@ export function InputBar() {
           treatment so the line break reads as one paragraph, not a bolted-on
           notice. */}
       <p className="pb-3 text-center text-[11px] text-ink-400">
-        Prices and availability come from Shopify merchants via the Catalog MCP.
+        Prices and availability come from Shopify merchants.
         <br />
         Ranking is preference-driven, not paid placement.
       </p>

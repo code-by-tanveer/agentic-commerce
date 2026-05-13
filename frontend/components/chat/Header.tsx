@@ -38,12 +38,11 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
-          {/* Wordmark — serif, magazine-masthead. DESIGN.md §2.4 #2. */}
+          {/* Wordmark — serif, magazine-masthead. DESIGN.md §2.4 #2.
+              R3 polish: tagline dropped per Skeptic re-walk (defensive
+              marketing copy was the strongest remaining bot-tell). */}
           <p className="font-display text-xl leading-none text-ink-900">
             Agentic Commerce
-          </p>
-          <p className="mt-1 text-[11px] text-ink-400">
-            Conversational product discovery
           </p>
         </div>
 

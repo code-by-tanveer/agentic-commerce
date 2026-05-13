@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { fileTypeFromBuffer } from 'file-type';
 import { nanoid } from 'nanoid';
-import { env } from '../config/env.js';
+import { env, RATE_LIMITS } from '../config/env.js';
 import { signUploadUrl } from '../services/uploads.js';
 import { purgeStaleUploads } from '../services/uploadsPurge.js';
 
@@ -32,7 +32,9 @@ const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export async function uploadRoutes(app: FastifyInstance) {
   app.post(
     '/api/upload',
-    { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
+    // R3-cleanup (architect-code MEDIUM): rate-limit values now sourced from
+    // the centralised `RATE_LIMITS` matrix in `config/env.ts`.
+    { config: { rateLimit: RATE_LIMITS.upload } },
     async (request, reply) => {
       // Multipart parser is registered at app level (index.ts). If a caller
       // hits this route without a multipart body, `isMultipart()` is false.
@@ -46,8 +48,11 @@ export async function uploadRoutes(app: FastifyInstance) {
       } catch (err) {
         // RequestFileTooLargeError when content exceeds the 8 MB cap.
         const e = err as { code?: string; statusCode?: number };
+        // R3-cleanup (architect-code MEDIUM): `maxBytes` echoes the centralised
+        // `env.UPLOAD_MAX_BYTES` so the response matches whatever the parser is
+        // actually enforcing.
         if (e?.code === 'FST_REQ_FILE_TOO_LARGE' || e?.statusCode === 413) {
-          return reply.code(413).send({ error: 'file_too_large', maxBytes: 8 * 1024 * 1024 });
+          return reply.code(413).send({ error: 'file_too_large', maxBytes: env.UPLOAD_MAX_BYTES });
         }
         request.log.warn({ err }, 'upload: multipart parse failed');
         return reply.code(400).send({ error: 'invalid_multipart' });
@@ -62,7 +67,7 @@ export async function uploadRoutes(app: FastifyInstance) {
       } catch (err) {
         const e = err as { code?: string };
         if (e?.code === 'FST_REQ_FILE_TOO_LARGE') {
-          return reply.code(413).send({ error: 'file_too_large', maxBytes: 8 * 1024 * 1024 });
+          return reply.code(413).send({ error: 'file_too_large', maxBytes: env.UPLOAD_MAX_BYTES });
         }
         request.log.warn({ err }, 'upload: buffer read failed');
         return reply.code(400).send({ error: 'read_failed' });

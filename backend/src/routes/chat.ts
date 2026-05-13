@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ChatCompletionMessageParam } from 'groq-sdk/resources/chat/completions';
 import { z } from 'zod';
-import { env } from '../config/env.js';
+import { env, RATE_LIMITS } from '../config/env.js';
 import { runAgent } from '../services/agent.js';
 import { sharedCache } from '../services/cache.js';
 import { SYSTEM_PROMPT } from '../services/prompts.js';
@@ -45,7 +45,9 @@ const registry = new ToolRegistry()
   .register(extractStyleFromImageTool);
 
 export async function chatRoutes(app: FastifyInstance) {
-  app.post('/api/chat', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
+  // R3-cleanup (architect-code MEDIUM): rate-limit values sourced from the
+  // centralised `RATE_LIMITS` matrix in `config/env.ts`.
+  app.post('/api/chat', { config: { rateLimit: RATE_LIMITS.chat } }, async (request, reply) => {
     const parsed = bodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply

@@ -40,6 +40,16 @@ const schema = z
     // image data URL we ship to Groq vision.
     VISION_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).max(32_000).default(4096),
 
+    // R3-cleanup (architect-code MEDIUM): upload size cap promoted from a
+    // 3-site magic number (index.ts multipart, routes/upload.ts 2x).
+    UPLOAD_MAX_BYTES: z.coerce.number().int().min(1024).default(8 * 1024 * 1024),
+
+    // R3-cleanup (architect-code LOW): per-file-local magic numbers
+    // (`agent.ts::MAX_TURNS`, `reasoning.ts::MAX_CHIPS`) promoted here so ops
+    // can tune turn budget and chip strip width without a code edit.
+    AGENT_MAX_TURNS: z.coerce.number().int().min(1).max(16).default(4),
+    REASONING_MAX_CHIPS: z.coerce.number().int().min(1).max(8).default(4),
+
     // Hashing salt for IP forensics.
     IP_HASH_SALT: z.string().min(8).optional(),
 
@@ -114,3 +124,16 @@ export const env = {
 
 export const hasJwtAuth =
   !!env.SHOPIFY_CLIENT_ID && !!env.SHOPIFY_CLIENT_SECRET && !!env.SHOPIFY_TOKEN_URL;
+
+// R3-cleanup (architect-code MEDIUM): rate-limit matrix unified here so the
+// audit happens in one place instead of grepping five routes. The previous
+// scattered `{ max, timeWindow }` literals across `routes/chat.ts`,
+// `routes/upload.ts`, `routes/preferences.ts`, `routes/session.ts`, and
+// `routes/summary.ts` are now imports of the corresponding entry.
+export const RATE_LIMITS = {
+  chat:        { max: 10, timeWindow: '1 minute' as const },
+  upload:      { max: 5,  timeWindow: '1 minute' as const },
+  session:     { max: 60, timeWindow: '1 minute' as const },
+  summary:     { max: 60, timeWindow: '1 minute' as const },
+  preferences: { max: 60, timeWindow: '1 minute' as const },
+} as const;

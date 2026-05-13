@@ -126,9 +126,10 @@ async function main() {
   // ARCH §9 / cycle-4.md hard rule: 8 MB cap is enforced at the multipart
   // parser, NOT in application logic. We also bound to a single file per
   // upload — the route shape is `POST /api/upload` with one part.
+  // R3-cleanup (architect-code MEDIUM): cap promoted to `env.UPLOAD_MAX_BYTES`.
   await app.register(multipart, {
     limits: {
-      fileSize: 8 * 1024 * 1024,
+      fileSize: env.UPLOAD_MAX_BYTES,
       files: 1,
       fields: 0,
     },

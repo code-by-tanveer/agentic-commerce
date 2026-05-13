@@ -105,8 +105,11 @@ export async function* streamChat(
       ];
       if (!schema) {
         // Unknown event type — log + drop; safer than crashing the stream.
+        // R3-cleanup (architect-code LOW): fixed prefix for greppability —
+        // searching `agentic.stream.unknown_event` in browser logs surfaces
+        // every wire-drift incident in one query.
         // eslint-disable-next-line no-console
-        console.warn('[stream] unknown event', msg.event);
+        console.warn('[agentic.stream.unknown_event]', msg.event);
         return;
       }
       let payload: unknown;

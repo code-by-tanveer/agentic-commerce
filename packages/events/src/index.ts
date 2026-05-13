@@ -200,6 +200,12 @@ export const moodboardEventSchema = z.object({
   suggestedQuery: z.string(),
 });
 
+// R3-cleanup (architect-code MEDIUM): [DEFERRED] reasoning_chip side-channel.
+// No tool emits this event today; chips ship inline on each product via
+// `normalizedProductSchema.reasoningChips`. The arm is preserved in the
+// discriminated union (and the events.test.ts fixtures) so a future per-product
+// late-binding push doesn't need a wire-schema migration. The FE switch
+// silently drops the event — see `frontend/hooks/useConversation.tsx`.
 export const reasoningChipEventSchema = z.object({
   type: z.literal('reasoning_chip'),
   productId: z.string(),

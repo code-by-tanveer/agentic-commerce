@@ -10,6 +10,7 @@
 // changes. No LLM call this cycle — composeSessionSummary is deterministic.
 
 import type { FastifyInstance } from 'fastify';
+import { RATE_LIMITS } from '../config/env.js';
 import {
   getSession,
   getSummaryBlob,
@@ -30,7 +31,9 @@ const POST_BODY_LIMIT = 16 * 1024;
 const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function summaryRoutes(app: FastifyInstance) {
-  const rateLimit = { max: 60, timeWindow: '1 minute' as const };
+  // R3-cleanup (architect-code MEDIUM): rate-limit values sourced from the
+  // centralised `RATE_LIMITS` matrix in `config/env.ts`.
+  const rateLimit = RATE_LIMITS.summary;
 
   app.post<{ Params: { id: string } }>(
     '/api/session/:id/summary',

@@ -70,11 +70,11 @@ export class SseWriter {
     await this.writeRaw(payload);
   }
 
-  /** Explicit heartbeat (in addition to the auto-ping interval). */
-  async ping(): Promise<void> {
-    if (this.closed) return;
-    await this.writeRaw('event: ping\ndata: {}\n\n');
-  }
+  // R3-cleanup (architect-code MEDIUM): the public `ping()` method was
+  // removed — the 15s auto-interval above covers every heartbeat path and no
+  // call site ever invoked it. If a future caller needs a slow-path beacon
+  // between agent turns, re-introduce as a typed event rather than reusing
+  // the comment-form ping.
 
   /**
    * Single point of contact with the underlying socket. Honors backpressure

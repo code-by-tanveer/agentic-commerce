@@ -76,7 +76,9 @@ async function recordUsage(
       }) + '\n';
     await appendFile(resolve(dir, 'usage_log.jsonl'), line, 'utf8');
   } catch {
-    // best-effort
+    // R3-cleanup (architect-code LOW): best-effort — usage telemetry must
+    // not break the request path. A full disk, EROFS, or any append failure
+    // silently drops the line; the chat completion already succeeded.
   }
 }
 

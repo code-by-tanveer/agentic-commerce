@@ -44,7 +44,8 @@ export const getProductDetailsTool: Tool<GetProductDetailsArgs, GetProductDetail
       product = cached.product;
     } else {
       if (ctx.signal.aborted) throw new Error('aborted');
-      product = await getProduct(args.id, { signal: ctx.signal });
+      // R3-cleanup (architect-code LOW): thread `ctx.log` for MCP retry visibility.
+      product = await getProduct(args.id, { signal: ctx.signal, log: ctx.log });
       ctx.cache.set(key, { product });
     }
 

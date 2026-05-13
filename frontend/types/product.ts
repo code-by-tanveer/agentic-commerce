@@ -9,10 +9,12 @@ export interface Variant {
 }
 
 // Reasoning chip — mirrors backend `ReasoningChip` and the wire schema in
-// `frontend/lib/events.ts::ReasoningChipSchema`. `kind` is open-ended on the
-// wire but the renderer (`ReasoningChips`) maps a fixed set per
-// DESIGN.md §8 Cycle 2 directive: size_match, price, discount, shipping,
-// ethics, low_stock. Unknown kinds fall through to a neutral ink treatment.
+// `@agentic/events::reasoningChipSchema` (the canonical home; `frontend/lib/
+// events.ts` is just a re-export — R3-cleanup architect-code MEDIUM). `kind`
+// is open-ended on the wire but the renderer (`ReasoningChips`) maps a fixed
+// set per DESIGN.md §8 Cycle 2 directive: size_match, price, discount,
+// shipping, ethics, low_stock. Unknown kinds fall through to a neutral ink
+// treatment.
 export type ReasoningChipKind =
   | 'size_match'
   | 'price'
@@ -96,7 +98,9 @@ export type ViewMode = 'list' | 'collage';
 
 // ---------------------------------------------------------------------------
 // Cycle 4 — Moodboard. Mirrors the backend `moodboard` SSE event payload
-// (see `frontend/lib/events.ts::MoodboardEventSchema`). The `extract_style_
+// (see `@agentic/events::moodboardEventSchema` — canonical home; the
+// `frontend/lib/events.ts` re-export is the import path. R3-cleanup
+// architect-code MEDIUM). The `extract_style_
 // from_image` vision tool produces these; the FE renders one as a sub-block
 // above the next assistant turn's search results.
 // ---------------------------------------------------------------------------

@@ -6,20 +6,33 @@ import type { ToolRegistry } from './toolRegistry.js';
 
 // Architect Top-5 #5 — turn-loop integration test with a scripted Groq stream
 // and a stubbed tool registry. Asserts the event sequence (tool_status running
-// → products → tool_status done → done turnsUsed=2). The abort-path test is
-// marked `todo` because the loop's tight coupling to AbortSignal mid-stream is
-// hard to script without an integration runner — see architect note.
+// → products → tool_status done → done turnsUsed=2). The Round-3 abort case
+// resolves the prior `it.todo`: a scripted stream that yields one text_delta,
+// then waits on the AbortSignal so abort fires mid-stream and the loop
+// persists `truncated` per ADR-0002 / polish-round-2 T2.1.
 
 // Mock the Groq client BEFORE importing the agent.
 vi.mock('./groqClient.js', () => ({
   streamChatCompletion: vi.fn(),
 }));
 
-// Import after the mock so the agent picks it up.
+// polish-round-3: capture `appendMessage` calls so the abort case can assert
+// the truncated-persist path without touching the real DB. The Round-2 test
+// run-pre-Round-3 didn't import the messages repo here at all; mocking it now
+// is harmless for the existing turn-loop case (that test reaches the `done`
+// branch and triggers `appendMessage(..., status:'done')`, which the spy
+// happily accepts).
+vi.mock('../db/repos/messages.js', () => ({
+  appendMessage: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Import after the mocks so the agent picks them up.
 const { streamChatCompletion } = await import('./groqClient.js');
+const { appendMessage } = await import('../db/repos/messages.js');
 const { runAgent } = await import('./agent.js');
 
 const mockStreamChatCompletion = vi.mocked(streamChatCompletion);
+const mockAppendMessage = vi.mocked(appendMessage);
 
 // Helper: build an async iterable of ChatCompletionChunk from a static list.
 function chunksOf(
@@ -71,6 +84,8 @@ function makeRegistry(opts: {
 describe('runAgent — turn loop with scripted Groq + stub registry', () => {
   beforeEach(() => {
     mockStreamChatCompletion.mockReset();
+    mockAppendMessage.mockReset();
+    mockAppendMessage.mockResolvedValue(undefined as never);
   });
 
   it('emits tool_status running → products → tool_status done → done(turnsUsed=2)', async () => {
@@ -189,13 +204,111 @@ describe('runAgent — turn loop with scripted Groq + stub registry', () => {
     expect(mockStreamChatCompletion).toHaveBeenCalledTimes(2);
   });
 
-  it.todo(
-    'abort mid-stream halts cleanly and persists a `truncated` assistant message',
-    // The current agent.ts loop polls `signal.aborted` between chunks but the
-    // route layer (chat.ts) closes the SSE writer before runAgent observes the
-    // abort, so this needs an integration runner with a real Fastify writer or
-    // a refactor to surface the partial assistant message via emit/callback.
-    // ADR-0002 still references the `truncated` persistence path, which is not
-    // wired today (see architect-code.md HIGH bullet on chat.ts:74-84).
-  );
+  it('aborts mid-stream cleanly and persists a `truncated` assistant message', async () => {
+    const controller = new AbortController();
+
+    // Hand-rolled async iterable so we can interleave a yield with the
+    // abort. Generator: yield chunk-1 (one text_delta), then await the
+    // AbortSignal, then yield chunk-2. The agent's `if (signal.aborted)`
+    // check fires at the top of the next iteration after chunk-2 lands.
+    //
+    // The shape mirrors what `wrapStream` returns: an async iterable with
+    // a `.model` field tacked on.
+    async function* gen(): AsyncGenerator<ChatCompletionChunk> {
+      yield {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'partial ' },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      } as ChatCompletionChunk;
+
+      // Wait for the abort to fire (or short fallback so the test can't
+      // hang if the abort never lands).
+      await new Promise<void>((resolve) => {
+        if (controller.signal.aborted) return resolve();
+        const onAbort = () => {
+          controller.signal.removeEventListener('abort', onAbort);
+          resolve();
+        };
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+        // Safety net in case something upstream forgets to abort.
+        setTimeout(resolve, 500).unref?.();
+      });
+
+      // After abort fires, deliver one more chunk so the agent loop comes
+      // back up the for-await and hits the `signal.aborted` guard at the
+      // top of the next iteration.
+      yield {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'never-emitted' },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      } as ChatCompletionChunk;
+    }
+    const stream = Object.assign(gen(), { model: 'mock-model' });
+    mockStreamChatCompletion.mockResolvedValueOnce(stream);
+
+    const registry = makeRegistry({
+      onDispatch: () => ({ assistantString: '{}', events: [] }),
+    });
+
+    const events: ServerEvent[] = [];
+
+    // Fire the abort shortly after `runAgent` starts. ~10ms is plenty for
+    // the loop to consume chunk-1 and emit the first `text_delta`.
+    const abortTimer = setTimeout(() => controller.abort(), 10);
+    abortTimer.unref?.();
+
+    await expect(
+      runAgent({
+        sessionId: 'abort-session',
+        history: [{ role: 'user', content: 'find lamps' }],
+        system: 'system prompt',
+        registry,
+        emit: (e) => {
+          events.push(e);
+        },
+        signal: controller.signal,
+        log,
+        preferences: {},
+      }),
+    ).resolves.toBeUndefined();
+
+    clearTimeout(abortTimer);
+
+    // 1. The early text_delta DID arrive before the abort.
+    const textDeltas = events.filter((e) => e.type === 'text_delta');
+    expect(textDeltas.length).toBeGreaterThanOrEqual(1);
+    if (textDeltas[0]?.type === 'text_delta') {
+      expect(textDeltas[0].text).toBe('partial ');
+    }
+
+    // 2. No `done` and no extra text_deltas after the abort.
+    expect(events.some((e) => e.type === 'done')).toBe(false);
+    expect(textDeltas.length).toBe(1);
+
+    // 3. `appendMessage` was called with status:'truncated' (ADR-0002 /
+    //    polish-round-2 T2.1 compliance).
+    expect(mockAppendMessage).toHaveBeenCalledTimes(1);
+    const [sessionArg, msgArg] = mockAppendMessage.mock.calls[0]!;
+    expect(sessionArg).toBe('abort-session');
+    expect(msgArg).toMatchObject({
+      role: 'assistant',
+      status: 'truncated',
+    });
+    // The accumulated block snapshot must contain the partial text.
+    const blocks = (msgArg as { blocks: Array<{ type: string; text?: string }> }).blocks;
+    expect(Array.isArray(blocks)).toBe(true);
+    expect(blocks.some((b) => b.type === 'text' && b.text === 'partial ')).toBe(
+      true,
+    );
+  });
 });

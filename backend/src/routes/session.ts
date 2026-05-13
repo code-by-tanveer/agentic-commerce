@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { RATE_LIMITS } from '../config/env.js';
 import { appendMessage, listMessages } from '../db/repos/messages.js';
 import {
   deleteOutfit,
@@ -102,7 +103,9 @@ const viewModePutBodySchema = z
   .strict();
 
 export async function sessionRoutes(app: FastifyInstance) {
-  const rateLimit = { max: 60, timeWindow: '1 minute' as const };
+  // R3-cleanup (architect-code MEDIUM): rate-limit values sourced from the
+  // centralised `RATE_LIMITS` matrix in `config/env.ts`.
+  const rateLimit = RATE_LIMITS.session;
 
   app.get<{ Params: { id: string } }>(
     '/api/session/:id',
