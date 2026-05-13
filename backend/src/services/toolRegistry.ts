@@ -116,11 +116,25 @@ export class ToolRegistry {
       finish(!errored);
       return out;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'tool execution failed';
+      const raw = err instanceof Error ? err.message : 'tool execution failed';
+      // User-visible `errorMessage` must never carry raw protocol payloads.
+      // `mcpClient` throws `McpError` with `"MCP 422: {jsonrpc:..., error:{...}}"`
+      // as the message; before this sanitizer that JSON shipped straight to
+      // ToolStatus and rendered as `Searching desk lamp — MCP 422: {"jsonrpc"...}`.
+      // The full raw stays in logs above for ops.
+      const isMcp = err instanceof Error && err.name === 'McpError';
+      const friendly = isMcp
+        ? "Couldn't reach the catalog."
+        : raw.length > 120 || /[{<]/.test(raw)
+          ? 'Tool failed.'
+          : raw;
       ctx.log.error({ err, tool: name }, 'tool execution error');
       finish(false, { reason: 'execute_threw' });
       return {
-        assistantString: JSON.stringify({ error: 'tool_error', detail: message }),
+        // assistantString keeps the raw — the LLM may benefit from the detail
+        // when deciding whether to retry or change tack. Only the FE-bound
+        // `errorMessage` is sanitized.
+        assistantString: JSON.stringify({ error: 'tool_error', detail: raw }),
         events: [
           {
             type: 'tool_status',
@@ -128,7 +142,7 @@ export class ToolRegistry {
             name,
             args,
             status: 'error',
-            errorMessage: message,
+            errorMessage: friendly,
           },
         ],
       };

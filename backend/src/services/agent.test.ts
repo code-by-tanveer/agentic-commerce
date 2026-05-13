@@ -204,6 +204,139 @@ describe('runAgent — turn loop with scripted Groq + stub registry', () => {
     expect(mockStreamChatCompletion).toHaveBeenCalledTimes(2);
   });
 
+  it('recovers an XML-style function call leaked into the content stream', async () => {
+    // Turn 1: the model emits a `<function(...)>...</function>` block in the
+    // content channel instead of using `tool_calls`. The sanitizer must
+    // strip it from the SSE text stream and synthesise a tool dispatch.
+    const turn1 = chunksOf([
+      {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'sure thing ' },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+      {
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content:
+                '<function(search_catalog){"query":"desk lamp"}</function>',
+            },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+      {
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            // The model thought it called the tool but emitted `stop` —
+            // the sanitizer should override finish_reason to tool_calls.
+            finish_reason: 'stop',
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+    ]);
+
+    // Turn 2: post-tool, model produces a clean text answer.
+    const turn2 = chunksOf([
+      {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'here are some lamps' },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+      {
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+    ]);
+
+    mockStreamChatCompletion
+      .mockResolvedValueOnce(turn1)
+      .mockResolvedValueOnce(turn2);
+
+    const registry = makeRegistry({
+      onDispatch: (name, _args, toolCallId) => ({
+        assistantString: '{"products":[]}',
+        events: [
+          {
+            type: 'products',
+            toolCallId,
+            query: 'desk lamp',
+            products: [],
+          },
+        ],
+      }),
+    });
+
+    const events: ServerEvent[] = [];
+    const controller = new AbortController();
+
+    await runAgent({
+      sessionId: 'xml-recovery-session',
+      history: [{ role: 'user', content: 'find me a desk lamp' }],
+      system: 'system prompt',
+      registry,
+      emit: (e) => {
+        events.push(e);
+      },
+      signal: controller.signal,
+      log,
+      preferences: {},
+    });
+
+    // 1. The XML never leaked into a text_delta.
+    const textDeltas = events.flatMap((e) =>
+      e.type === 'text_delta' ? [e.text] : [],
+    );
+    const joined = textDeltas.join('');
+    expect(joined).not.toContain('<function');
+    expect(joined).not.toContain('</function>');
+
+    // 2. The pre-XML text DID arrive.
+    expect(joined).toContain('sure thing');
+
+    // 3. A tool_status running fired (the sanitizer synthesised a call).
+    const running = events.find(
+      (e) => e.type === 'tool_status' && e.status === 'running',
+    );
+    expect(running).toBeDefined();
+    if (running && running.type === 'tool_status') {
+      expect(running.name).toBe('search_catalog');
+      expect(running.toolCallId).toMatch(/^xml_recovered_/);
+    }
+
+    // 4. The tool was dispatched and produced a products event.
+    expect(events.some((e) => e.type === 'products')).toBe(true);
+
+    // 5. The agent looped to turn 2 and finished cleanly.
+    const done = events.find((e) => e.type === 'done');
+    expect(done).toBeDefined();
+    if (done && done.type === 'done') expect(done.turnsUsed).toBe(2);
+
+    // 6. streamChatCompletion was called twice (one tool turn + one finish).
+    expect(mockStreamChatCompletion).toHaveBeenCalledTimes(2);
+  });
+
   it('aborts mid-stream cleanly and persists a `truncated` assistant message', async () => {
     const controller = new AbortController();
 

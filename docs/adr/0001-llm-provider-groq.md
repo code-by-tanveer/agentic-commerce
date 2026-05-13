@@ -57,3 +57,7 @@ Use **Groq Cloud** as the primary LLM provider.
 2. Per-query 15-minute LRU cache at the `search_catalog` tool level absorbs duplicates that would otherwise count against Groq quota.
 3. Daily-quota approaching banner in the FE: when usage exceeds 80% of estimated daily budget (tracked in `usage_log`), show a non-blocking "we're seeing high traffic — replies may be slower" pill in the header.
 4. `groqClient.ts` is the only file that imports `groq-sdk`. The rest of the codebase imports its shape. Swap provider in one file.
+
+## Addendum — Cycle 7
+
+Switched primary from `llama-3.3-70b-versatile` to `openai/gpt-oss-120b` because the 3.3 checkpoint emits Claude-style XML function calls (e.g. `<function(save_preference){...}</function>`) in the content stream rather than using OpenAI `tool_calls`. The XML leaks to the user as text and the backend never dispatches the tool — caught during local smoke. `openai/gpt-oss-*` and `meta-llama/llama-4-*` train against native OpenAI tool-call protocol and do not exhibit the bug. `llama-3.3-70b-versatile` retained as a name for testing only; a defensive `ContentSanitizer` in `services/agent.ts` recovers if any future model regresses.

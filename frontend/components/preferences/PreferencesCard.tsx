@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, Pencil, Plus, X } from 'lucide-react';
+import { Check, Plus, X } from 'lucide-react';
 import { ETHICS_VALUES, type EthicsValue } from '@agentic/events';
 import { cn } from '@/lib/cn';
 import type { PreferenceKey } from '@/lib/api';
@@ -11,34 +11,30 @@ import {
   PREFERENCE_LABEL,
   usePreferences,
 } from '@/hooks/usePreferences';
-import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 // ---------------------------------------------------------------------------
-// PreferencesCard — Cycle 2.
+// PreferencesCard — Cycle 5 refactor.
 //
-// Desktop (>640): a sticky card above the InputBar showing 3–5 active prefs
-// as inline-editable chips. Each chip: label + value + X to remove. Click
-// the value → inline edit. Click + (when there's an unset key) → adds an
-// editable empty chip.
+// Previously a standalone sticky panel that lived above the InputBar with its
+// own desktop/mobile fork and bottom-sheet wrapper. User feedback was that the
+// always-on chrome read as intrusive ("About you feels in your face"). The
+// card now renders as popover content owned by `ProfileMenu` — a quiet avatar
+// affordance in the header. The chip-edit semantics (size/budget/ethics/etc
+// with optimistic save and per-key revert) are unchanged; only the framing
+// chrome and viewport-specific layout machinery moved out.
 //
-// Mobile (≤640): collapses to a one-line "N preferences" affordance that
-// opens a bottom sheet with the same chip-edit semantics.
+// What lives here now: a single content block — eyebrow label, chip row,
+// inline revert message, transient "Saved" pulse. The popover (desktop) /
+// bottom sheet (mobile) container is owned by `ProfileMenu`.
 //
-// Both variants share `usePreferences` (the hook). The hook supplies the
-// optimistic-update logic; this component is presentational + edit-UI only.
+// Empty-state copy ("Tell me your size, budget…") lives in `ProfileMenu`
+// too — the wrapper knows whether to render this content or the explainer.
 //
 // Compliance:
-//   - DESIGN.md §2.7: `shadow-soft` on the card; no border.
-//   - DESIGN.md §2.5: spacing limited to 1/2/3/4.
-//   - DESIGN.md §6/7: motion ≤300ms; `useReducedMotion` swaps to 100ms
-//     opacity crossfades; the chip-edit swap stays under §2.8's `motion-quick`
-//     budget (200ms easeOut).
-//   - DESIGN.md §7: mobile tap targets ≥44px (the sheet trigger gets `h-11`;
-//     individual remove-buttons use a pseudo-element hit pad).
-//
-// Saved affordance: `usePreferences().lastSaved` is a small {key,at} pulse
-// that fades in/out for ≤2s after any commit. We render it below the card
-// (desktop) or inside the trigger (mobile).
+//   - DESIGN.md §2.7: shadow-soft on the popover (provided by ProfileMenu).
+//   - DESIGN.md §2.5: spacing 1/2/3/4.
+//   - DESIGN.md §6/7: motion ≤300ms; `useReducedMotion` collapses to 100ms
+//     opacity crossfades on the chip edit-mode swap.
 // ---------------------------------------------------------------------------
 
 const KEYS_IN_ORDER: PreferenceKey[] = [
@@ -52,144 +48,56 @@ const KEYS_IN_ORDER: PreferenceKey[] = [
 ];
 
 export function PreferencesCard() {
-  const { prefs, isLoading, lastSaved } = usePreferences();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const { lastSaved, isLoading, prefs } = usePreferences();
   const reduced = useReducedMotion();
-
-  // Stable ordering — pin to KEYS_IN_ORDER so chips don't jitter on edit.
-  const activeKeys = useMemo<PreferenceKey[]>(() => {
-    return KEYS_IN_ORDER.filter((k) => prefs[k] != null);
-  }, [prefs]);
-
-  const count = activeKeys.length;
-  // R2/T2.9 — pre-hydrate, render pulsing skeleton chips so the panel
-  // doesn't pop in. Post-hydrate with no prefs → EmptyPrompt. With prefs
-  // → real chip row.
+  const count = useMemo(
+    () => KEYS_IN_ORDER.filter((k) => prefs[k] != null).length,
+    [prefs],
+  );
   const hydrating = isLoading && count === 0;
-  const showCard = count > 0 || hydrating;
 
-  // Quiet on empty state on phone; on desktop we still show the placeholder
-  // line so the panel's purpose is discoverable.
   return (
-    <>
-      {/* DESKTOP variant — sticky panel above the input bar. Hidden on
-          mobile (sm:block). */}
-      <section
-        aria-label="About you"
-        className="hidden w-full sm:block"
-      >
-        {showCard ? (
-          <div className="relative w-full rounded-2xl bg-white p-3 shadow-soft">
-            <Header count={count} />
-            {hydrating ? (
-              <ChipSkeletonRow reduced={!!reduced} className="mt-2" />
-            ) : (
-              <ChipRow className="mt-2" />
-            )}
-            <SavedPulse lastSaved={lastSaved} reduced={!!reduced} />
-          </div>
-        ) : (
-          <EmptyPrompt />
-        )}
-      </section>
-
-      {/* MOBILE variant — single-line trigger that opens a bottom sheet. */}
-      <section
-        aria-label="About you"
-        className="block w-full sm:hidden"
-      >
-        <button
-          type="button"
-          onClick={() => setSheetOpen(true)}
-          className={cn(
-            'flex h-11 w-full items-center justify-between rounded-2xl bg-white px-4 text-sm text-ink-900 shadow-soft transition active:bg-ink-50',
-          )}
-          aria-haspopup="dialog"
-          aria-expanded={sheetOpen}
-        >
-          <span className="flex items-center gap-2">
-            <Pencil className="h-3.5 w-3.5 text-ink-400" aria-hidden />
-            <span>
-              {count === 0
-                ? 'About you'
-                : `${count} preference${count === 1 ? '' : 's'}`}
-            </span>
-          </span>
-          <span className="text-xs text-ink-400">
-            {count === 0 ? 'Tap to add' : 'Edit'}
-          </span>
-        </button>
-        <MobileSavedPulse lastSaved={lastSaved} reduced={!!reduced} />
-      </section>
-
-      <AnimatePresence>
-        {sheetOpen ? (
-          <BottomSheet onClose={() => setSheetOpen(false)} reduced={!!reduced}>
-            {/* T4.P (Aleksey, Round 5) — give the sheet title a stable id so
-                the dialog's `aria-labelledby` resolves; SR users hear "About
-                you" as the dialog name on focus. */}
-            <Header count={count} titleId="prefs-sheet-title" />
-            <ChipRow className="mt-3" />
-          </BottomSheet>
-        ) : null}
-      </AnimatePresence>
-    </>
+    <div className="flex flex-col gap-2">
+      <Header count={count} />
+      {hydrating ? (
+        <ChipSkeletonRow reduced={!!reduced} />
+      ) : (
+        <ChipRow />
+      )}
+      <SavedPulse lastSaved={lastSaved} reduced={!!reduced} />
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Header
+// Header — eyebrow inside the popover. Echoes the "About you" framing the
+// avatar's aria-label uses so screen-reader users hear the same noun.
 // ---------------------------------------------------------------------------
 
-function Header({ count, titleId }: { count: number; titleId?: string }) {
+function Header({ count }: { count: number }) {
   return (
-    <div className="flex items-center justify-between">
-      {/* T4.P (Aleksey, Round 5) — optional `id` so the parent dialog can
-          `aria-labelledby` this eyebrow as its title. Default null id keeps
-          the desktop variant unchanged. */}
+    <div className="flex items-baseline justify-between">
       <p
-        id={titleId}
+        id="profile-menu-title"
         className="text-[11px] uppercase tracking-wider text-ink-400"
       >
         About you
       </p>
       <p className="text-xs text-ink-400">
         {count === 0
-          ? 'Tell me your size, budget, where you ship to'
+          ? 'Tap to add'
           : 'Tap to edit · ✕ to clear'}
       </p>
     </div>
   );
 }
 
-function EmptyPrompt() {
-  return (
-    <div className="rounded-2xl bg-white p-3 shadow-soft">
-      <p className="text-[11px] uppercase tracking-wider text-ink-400">
-        About you
-      </p>
-      <p className="mt-1 text-xs text-ink-400">
-        I’ll save the basics here as we chat — size, budget, where you ship.
-      </p>
-    </div>
-  );
-}
-
-// R2/T2.9 — two placeholder chips while `usePreferences().isLoading` is true
-// and we don't yet have any prefs to render. Mirrors `Shortlist.LaneSkeleton`:
+// Two pulsing placeholder chips while `usePreferences().isLoading` is true and
+// we don't yet have any prefs to render. Mirrors `Shortlist.LaneSkeleton`:
 // `animate-pulse` is suppressed under `prefers-reduced-motion`.
-function ChipSkeletonRow({
-  reduced,
-  className,
-}: {
-  reduced: boolean;
-  className?: string;
-}) {
+function ChipSkeletonRow({ reduced }: { reduced: boolean }) {
   return (
-    <div
-      aria-hidden
-      className={cn('flex flex-wrap items-center gap-2', className)}
-    >
+    <div aria-hidden className="flex flex-wrap items-center gap-2">
       <span
         className={cn(
           'h-6 w-20 rounded-full bg-ink-100',
@@ -207,12 +115,12 @@ function ChipSkeletonRow({
 }
 
 // ---------------------------------------------------------------------------
-// Chip row — the meat of both variants.
+// Chip row — the meat of the popover. Unchanged from Cycle 2 modulo the
+// removal of the outer card container.
 // ---------------------------------------------------------------------------
 
 function ChipRow({ className }: { className?: string }) {
   const { prefs, set, remove, lastRevert } = usePreferences();
-  // Tracks which key is currently being edited; null = none.
   const [editingKey, setEditingKey] = useState<PreferenceKey | null>(null);
   // Locally-staged "new" keys — chips that haven't been saved yet. Adding a
   // key here lets the EditableChip mount with an empty value before any
@@ -226,7 +134,6 @@ function ChipRow({ className }: { className?: string }) {
     () => KEYS_IN_ORDER.filter((k) => prefs[k] != null),
     [prefs],
   );
-  // Render order = persisted first, then any staged-but-unsaved.
   const activeKeys = useMemo<PreferenceKey[]>(() => {
     return [...persistedKeys, ...staged.filter((k) => prefs[k] == null)];
   }, [persistedKeys, staged, prefs]);
@@ -239,11 +146,6 @@ function ChipRow({ className }: { className?: string }) {
       <div className="flex flex-wrap items-center gap-2">
       {activeKeys.map((key) => {
         const isStaged = prefs[key] == null;
-        // Round 2 polish (T2.10, persona-sasha): the `ethics` key is a
-        // multi-select against a closed vocabulary (ETHICS_VALUES). Free-text
-        // editing meant the user had to guess which magic words light a chip;
-        // the grid below makes the vocabulary legible and removes guessing.
-        // Other keys keep the inline-edit flow.
         if (key === 'ethics') {
           return (
             <EthicsChip
@@ -330,9 +232,8 @@ function ChipRow({ className }: { className?: string }) {
         )
       ) : null}
       </div>
-      {/* T1.33 — inline revert affordance. Renders directly under the chip
-          row, scoped to the failing key, auto-clears after 3s. No global
-          toast. */}
+      {/* Inline revert affordance — scoped to the failing key, auto-clears
+          after 3s. No global toast. */}
       {lastRevert.key ? (
         <p role="alert" className="text-xs text-rose-700">
           <span className="font-medium">{PREFERENCE_LABEL[lastRevert.key]}:</span>{' '}
@@ -348,7 +249,6 @@ function ChipRow({ className }: { className?: string }) {
 function parseValue(key: PreferenceKey, raw: string): unknown {
   const trimmed = raw.trim();
   if (key === 'budget') {
-    // Strip $ and commas, parse a number → store as {max}.
     const cleaned = trimmed.replace(/[\$,]/g, '').replace(/^≤/, '');
     const n = Number(cleaned);
     if (Number.isFinite(n)) return { max: n };
@@ -534,24 +434,8 @@ function EditableChip({
 }
 
 // ---------------------------------------------------------------------------
-// EthicsChip — Round 2 polish (T2.10). Renders the `ethics` preference as a
-// multi-select against the closed `ETHICS_VALUES` vocabulary instead of the
-// free-text path the other keys use. Two states:
-//
-//   - VIEW: a chip showing "Ethics: <comma-separated values>" with a pencil
-//     affordance to enter edit mode and an X to remove the preference entirely.
-//     Matches the visual rhythm of EditableChip's view-mode so the row stays
-//     coherent.
-//   - EDIT: an 8-chip toggle grid. Each chip is selected (emerald) or not
-//     (ink-50). Selecting a chip optimistically toggles the local draft;
-//     committing fires `usePreferences().set('ethics', value[], 'user')`,
-//     which the BE route stores as JSON (the PUT body schema is
-//     `value: z.unknown()`).
-//
-// Visual rule (DESIGN.md §2.2): orange is reserved for the commerce-intent
-// CTA. Selected ethics chips use `emerald-50 / emerald-600 / ring emerald-300`
-// — a non-orange "active" treatment that doesn't compete with the
-// "Save outfit" semantic.
+// EthicsChip — multi-select against the closed `ETHICS_VALUES` vocabulary.
+// VIEW: label + comma-joined values + X. EDIT: 8-chip toggle grid + Save.
 // ---------------------------------------------------------------------------
 
 const ETHICS_OPTION_LABEL: Record<EthicsValue, string> = {
@@ -575,10 +459,6 @@ interface EthicsChipProps {
 }
 
 function normalizeEthicsValue(value: unknown): EthicsValue[] {
-  // Accept the new shape (string[]) and the legacy free-text shape (string)
-  // so a preference row written in Round 1 doesn't render as empty after
-  // upgrade. Anything not in ETHICS_VALUES is dropped silently — the FE never
-  // exposes a way to add a value outside the closed vocabulary.
   if (Array.isArray(value)) {
     return value.filter(
       (v): v is EthicsValue =>
@@ -606,9 +486,6 @@ function EthicsChip({
   const [draft, setDraft] = useState<EthicsValue[]>(initial);
   const reduced = useReducedMotion();
 
-  // Keep the draft in sync with the persisted value whenever we transition
-  // into edit mode (so opening the editor on an existing preference shows
-  // the current selection, not a stale draft).
   useEffect(() => {
     setDraft(initial);
   }, [initial, isEditing]);
@@ -621,9 +498,6 @@ function EthicsChip({
     ? { duration: 0.1 }
     : { duration: 0.15, ease: 'easeOut' as const };
 
-  // VIEW MODE — render the same shape as EditableChip so the row reads as one
-  // coherent chip strip. We deliberately don't render a sub-chip-per-value
-  // here; the active values are joined into a single readable string.
   if (!isEditing) {
     const formatted =
       initial.map((v) => ETHICS_OPTION_LABEL[v]).join(', ') || '—';
@@ -665,9 +539,6 @@ function EthicsChip({
     );
   }
 
-  // EDIT MODE — the 8-option toggle grid. Breaks out of the inline-chip-row
-  // metaphor (the grid wouldn't fit in a single chip's width). The basis is a
-  // 2-column grid on narrow viewports widening to 4 on roomier ones.
   return (
     <motion.div
       key="ethics-edit"
@@ -678,9 +549,6 @@ function EthicsChip({
       role="group"
       aria-label={`${PREFERENCE_LABEL.ethics} values`}
       className={cn(
-        // Same chip-row bg as the inline edit affordance so it doesn't feel
-        // like a separate UI surface. `basis-full` makes the grid take a full
-        // row in the wrapping flex parent (DESIGN.md §2.5 spacing 2/3).
         'basis-full rounded-2xl bg-ink-50 p-3',
       )}
     >
@@ -741,77 +609,10 @@ function EthicsChip({
 }
 
 // ---------------------------------------------------------------------------
-// Bottom sheet (mobile)
-// ---------------------------------------------------------------------------
-
-function BottomSheet({
-  children,
-  onClose,
-  reduced,
-}: {
-  children: React.ReactNode;
-  onClose: () => void;
-  reduced: boolean;
-}) {
-  const sheetRef = useRef<HTMLDivElement | null>(null);
-
-  // Modal a11y per DESIGN.md §7: focus trap + Escape to close + restore focus
-  // to the previously-focused element on unmount. Cycle 2 landed this inline;
-  // Cycle 3 refactor extracts the pattern into `useFocusTrap` so the
-  // Shortlist mobile sheet can reuse it verbatim.
-  useFocusTrap(sheetRef, { enabled: true, onClose, initialFocus: 'last' });
-
-  const scrimT = reduced ? { duration: 0.1 } : { duration: 0.2, ease: 'easeOut' as const };
-  const sheetT = reduced ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const };
-
-  return (
-    <div
-      ref={sheetRef}
-      className="fixed inset-0 z-40 sm:hidden"
-      role="dialog"
-      aria-modal
-      // T4.P (Aleksey, Round 5) — name the dialog via the header's id. SR
-      // users hear "About you, dialog" on focus rather than just "dialog".
-      aria-labelledby="prefs-sheet-title"
-    >
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={scrimT}
-        onClick={onClose}
-        className="absolute inset-0 bg-ink-900/40"
-        aria-hidden
-      />
-      <motion.div
-        initial={reduced ? { opacity: 0 } : { y: '100%' }}
-        animate={reduced ? { opacity: 1 } : { y: 0 }}
-        exit={reduced ? { opacity: 0 } : { y: '100%' }}
-        transition={sheetT}
-        className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-white p-4 shadow-soft"
-      >
-        <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-ink-100" aria-hidden />
-        {children}
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className={cn(
-              'inline-flex h-11 items-center rounded-full bg-ink-900 px-4 text-sm font-medium text-white transition hover:bg-ink-600',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-            )}
-          >
-            Done
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Saved affordance — small fade in/out pill anchored under the card.
-// `lastSaved.key` is non-null for ≤2s after a commit; the hook auto-clears.
+// Saved affordance — small fade in/out pill that lives inline below the chip
+// row. `lastSaved.key` is non-null for ≤2s after a commit; the hook auto-
+// clears. Inside the popover, we anchor it inline (no absolute offset) so it
+// stacks naturally above the popover's bottom edge.
 // ---------------------------------------------------------------------------
 
 function SavedPulse({
@@ -830,38 +631,7 @@ function SavedPulse({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: reduced ? 0 : -4 }}
           transition={{ duration: reduced ? 0.1 : 0.2, ease: 'easeOut' }}
-          className="pointer-events-none absolute -bottom-6 right-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-600"
-          role="status"
-        >
-          <Check className="h-3 w-3" aria-hidden /> Saved
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
-// R2 bonus — mobile/desktop SavedPulse visual parity. Round 1 noted the
-// mobile pulse was plain text while desktop was a chip. We keep two separate
-// components (trigger paths and anchoring differ — desktop floats absolutely
-// under the card; mobile lays out inline beneath the single-line trigger),
-// but the visual is now identical: rounded pill, emerald-50 bg, check icon.
-function MobileSavedPulse({
-  lastSaved,
-  reduced,
-}: {
-  lastSaved: { key: string | null; at: number };
-  reduced: boolean;
-}) {
-  return (
-    <AnimatePresence>
-      {lastSaved.key ? (
-        <motion.div
-          key={`${lastSaved.key}-${lastSaved.at}`}
-          initial={{ opacity: 0, y: reduced ? 0 : -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: reduced ? 0 : -4 }}
-          transition={{ duration: reduced ? 0.1 : 0.2, ease: 'easeOut' }}
-          className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-600"
+          className="inline-flex w-fit items-center gap-1 self-end rounded-full bg-emerald-50 px-2 py-1 text-[11px] text-emerald-600"
           role="status"
         >
           <Check className="h-3 w-3" aria-hidden /> Saved

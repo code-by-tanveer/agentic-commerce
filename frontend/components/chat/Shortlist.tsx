@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Heart, HelpCircle, Layers, X, XCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -75,6 +75,7 @@ const LANE_META: Array<{
 export function Shortlist() {
   const { isOpen, closeDrawer, lastRevert } = useShortlist();
   const reduce = useReducedMotion();
+  const railRef = useRef<HTMLElement | null>(null);
 
   // T1.33 — surface revert errors inside the drawer header. Auto-clears
   // via the hook. Single line, rose-700 text. Both the rail and the
@@ -85,6 +86,71 @@ export function Shortlist() {
     </p>
   ) : null;
 
+  // Desktop rail dismissal — Escape + outside `pointerdown`. The rail is
+  // non-modal (chat behind stays interactive on lg+), so we don't trap
+  // focus or block scrolling. The mobile sheet handles its own dismissal
+  // via the scrim + `useFocusTrap` (Escape there too).
+  //
+  // `pointerdown` (not `mousedown`) covers touch + pen. We deliberately
+  // skip targets inside the rail and inside the trigger button so HTML5
+  // drag-and-drop within the lanes never closes the drawer, and so a
+  // toggle-click on the trigger isn't double-handled (close-then-reopen).
+  useEffect(() => {
+    if (!isOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (railRef.current?.contains(t)) return;
+      const trigger = document.getElementById('shortlist-trigger');
+      if (trigger?.contains(t)) return;
+      // Only the desktop rail should react to outside-click; the mobile
+      // sheet's own scrim already closes it. Guard by viewport width to
+      // avoid closing the rail from a click that landed on the (hidden
+      // on lg) mobile sheet scrim or vice-versa.
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        closeDrawer();
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && window.matchMedia('(min-width: 1024px)').matches) {
+        closeDrawer();
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [isOpen, closeDrawer]);
+
+  // Focus management for the desktop rail. On open, move focus to the
+  // close button (first focusable inside the rail). On close, return
+  // focus to the trigger. The mobile sheet's focus return is handled by
+  // `useFocusTrap`.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (isOpen && !wasOpen.current) {
+      wasOpen.current = true;
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        // Defer one frame so the AnimatePresence child has mounted.
+        const id = requestAnimationFrame(() => {
+          const first = railRef.current?.querySelector<HTMLElement>(
+            'button, [href], [tabindex]:not([tabindex="-1"])',
+          );
+          first?.focus();
+        });
+        return () => cancelAnimationFrame(id);
+      }
+    } else if (!isOpen && wasOpen.current) {
+      wasOpen.current = false;
+      if (typeof window !== 'undefined' &&
+          window.matchMedia('(min-width: 1024px)').matches) {
+        document.getElementById('shortlist-trigger')?.focus();
+      }
+    }
+  }, [isOpen]);
+
   return (
     <>
       {/* Desktop — 320px sticky right rail. Only visible when open. */}
@@ -92,11 +158,16 @@ export function Shortlist() {
         {isOpen ? (
           <motion.aside
             key="rail"
+            ref={railRef}
+            id="shortlist-drawer"
             initial={reduce ? { opacity: 0 } : { x: 320, opacity: 0 }}
             animate={reduce ? { opacity: 1 } : { x: 0, opacity: 1 }}
             exit={reduce ? { opacity: 0 } : { x: 320, opacity: 0 }}
             transition={reduce ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const }}
-            aria-label="Shortlist"
+            // Non-modal sidebar — chat behind stays interactive. `region`
+            // + `aria-labelledby` is more accurate than `dialog` here.
+            role="region"
+            aria-labelledby="shortlist-rail-title"
             className={cn(
               'fixed right-0 top-0 z-30 hidden h-dvh w-[320px] flex-col bg-white shadow-soft lg:flex',
             )}
@@ -143,7 +214,9 @@ function RailHeader({ onClose }: { onClose: () => void }) {
     <div className="flex items-center justify-between border-b border-ink-100 p-3">
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-ink-400" aria-hidden />
-        <p className="text-sm font-semibold text-ink-900">Shortlist</p>
+        <p id="shortlist-rail-title" className="text-sm font-semibold text-ink-900">
+          Shortlist
+        </p>
         <p className="text-xs text-ink-400">
           {counts.love} loved · {counts.maybe} maybe
           {savedOutfits.length > 0 ? ` · ${savedOutfits.length} outfit${savedOutfits.length === 1 ? '' : 's'}` : ''}

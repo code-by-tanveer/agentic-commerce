@@ -66,6 +66,7 @@ type Action =
   | { type: 'set_view_mode'; mode: ViewMode }
   | { type: 'open' }
   | { type: 'close' }
+  | { type: 'toggle' }
   | { type: 'upsert_item'; item: ShortlistItem }
   | { type: 'remove_item'; productId: string }
   | { type: 'replace_shortlist'; items: ShortlistItem[] }
@@ -100,6 +101,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, isOpen: true };
     case 'close':
       return { ...state, isOpen: false };
+    case 'toggle':
+      return { ...state, isOpen: !state.isOpen };
     case 'upsert_item': {
       const idx = state.shortlist.findIndex((i) => i.productId === action.item.productId);
       if (idx === -1) return { ...state, shortlist: [...state.shortlist, action.item] };
@@ -146,6 +149,7 @@ export interface ShortlistContextValue {
   remove: (productId: string) => Promise<void>;
   openDrawer: () => void;
   closeDrawer: () => void;
+  toggleDrawer: () => void;
   setViewMode: (mode: ViewMode) => Promise<void>;
   saveOutfit: (body: PostOutfitBody) => Promise<SavedOutfit | null>;
   removeOutfit: (outfitId: string) => Promise<void>;
@@ -264,6 +268,7 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
 
   const openDrawer = useCallback(() => dispatch({ type: 'open' }), []);
   const closeDrawer = useCallback(() => dispatch({ type: 'close' }), []);
+  const toggleDrawer = useCallback(() => dispatch({ type: 'toggle' }), []);
 
   const setViewMode = useCallback<ShortlistContextValue['setViewMode']>(
     async (mode) => {
@@ -335,6 +340,7 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
       remove,
       openDrawer,
       closeDrawer,
+      toggleDrawer,
       setViewMode,
       saveOutfit,
       removeOutfit,
@@ -352,6 +358,7 @@ export function ShortlistProvider({ children }: { children: ReactNode }) {
       remove,
       openDrawer,
       closeDrawer,
+      toggleDrawer,
       setViewMode,
       saveOutfit,
       removeOutfit,

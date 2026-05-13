@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useConversation';
 import { useSession } from '@/hooks/useSession';
 import { useShortlist } from '@/hooks/useShortlist';
+import { ProfileMenu } from '@/components/preferences/ProfileMenu';
 import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
@@ -24,7 +25,7 @@ export function Header() {
   const { messages } = useConversationState();
   const { reset } = useConversationActions();
   const { sessionId } = useSession();
-  const { shortlist, openDrawer } = useShortlist();
+  const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
   const hasHistory = messages.length > 1;
 
   // Header trigger badge = Love + Maybe (Skip not counted — DESIGN.md §4
@@ -57,8 +58,18 @@ export function Header() {
           {canShare && sessionId && <ShareButton sessionId={sessionId} />}
           <button
             type="button"
-            onClick={openDrawer}
-            aria-label={`Open shortlist (${badge} loved or maybe)`}
+            // Stable id so the drawer's outside-click detector can exclude
+            // the trigger (avoids "close then immediately re-open" on tap).
+            id="shortlist-trigger"
+            onClick={toggleDrawer}
+            aria-haspopup="dialog"
+            aria-expanded={shortlistOpen}
+            aria-controls="shortlist-drawer"
+            aria-label={
+              shortlistOpen
+                ? `Close shortlist (${badge} loved or maybe)`
+                : `Open shortlist (${badge} loved or maybe)`
+            }
             className={cn(
               // T1.30 — gap-2 / py-2 / px-3 (no decimal spacing).
               // T1.2 — sub-380px the label is hidden so the icon + badge are
@@ -91,6 +102,11 @@ export function Header() {
               <span className="hidden min-[380px]:inline">New chat</span>
             </button>
           )}
+          {/* ProfileMenu — Cycle 5. Replaces the always-on PreferencesCard
+              above the InputBar (read as intrusive). Quiet 36px avatar that
+              opens an anchored popover with the same chip-editing card. Dot
+              badge appears when ≥1 preference is saved. */}
+          <ProfileMenu />
         </div>
       </div>
     </header>

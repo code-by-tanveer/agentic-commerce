@@ -27,7 +27,7 @@ const schema = z
 
     // Groq / LLM.
     GROQ_API_KEY: z.string().min(1, 'GROQ_API_KEY is required'),
-    GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+    GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
     GROQ_FALLBACK_MODEL: z.string().default('llama-3.1-8b-instant'),
     GROQ_VISION_MODEL: z.string().default('meta-llama/llama-4-scout-17b-16e-instruct'),
 

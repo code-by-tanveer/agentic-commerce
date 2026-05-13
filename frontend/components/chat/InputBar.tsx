@@ -152,7 +152,12 @@ export function InputBar() {
             rows={1}
             placeholder="What are you looking for?"
             aria-label="Message"
-            className="w-full resize-none bg-transparent text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none"
+            // `py-2` lifts a single-line textarea (text-sm = 20px line-height,
+            // 16px symmetric vertical padding) to 36px — matching the adjacent
+            // h-9 buttons. With the outer `items-end`, single-line text now
+            // visually centers against the send/attach buttons instead of
+            // hugging the bottom edge.
+            className="w-full resize-none bg-transparent py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none"
           />
           <button
             type="submit"

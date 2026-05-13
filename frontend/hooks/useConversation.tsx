@@ -203,8 +203,15 @@ function reducer(state: State, action: Action): State {
 
     case 'apply_event': {
       const { assistantId, event } = action;
+      // Once the BE emits `error`, the SSE stream is terminal — the BE closes
+      // the writer without a `done` event. Flipping `isStreaming: false` here
+      // (in parallel with appending the error block below) unblocks `send`
+      // and `retry`, which both early-return on `state.isStreaming`. Without
+      // this, the input stays disabled and the Retry button is a no-op.
+      const nextIsStreaming = event.type === 'error' ? false : state.isStreaming;
       return {
         ...state,
+        isStreaming: nextIsStreaming,
         messages: updateAssistant(state.messages, assistantId, (m) => {
           switch (event.type) {
             case 'text_delta':

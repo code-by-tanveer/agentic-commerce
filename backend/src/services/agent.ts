@@ -9,6 +9,7 @@ import { env } from '../config/env.js';
 import { appendMessage } from '../db/repos/messages.js';
 import { listPreferences } from '../db/repos/preferences.js';
 import { Cache } from './cache.js';
+import { ContentSanitizer } from './contentSanitizer.js';
 import { streamChatCompletion } from './groqClient.js';
 import type { ToolRegistry } from './toolRegistry.js';
 import type { ServerEvent } from '../stream/events.js';
@@ -268,7 +269,7 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       turnsUsed = turn;
       const isFinalTurn = turn === MAX_TURNS;
 
-      const stream = await streamChatCompletion({
+      let stream = await streamChatCompletion({
         model: env.GROQ_MODEL,
         messages,
         tools,
@@ -282,37 +283,118 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       });
 
       let aggregateContent = '';
-      const toolCallAccumulator = new Map<number, AccumulatedToolCall>();
+      let toolCallAccumulator = new Map<number, AccumulatedToolCall>();
       let finishReason: 'stop' | 'length' | 'tool_calls' | 'function_call' | null = null;
+      // Slot keys for tool-call accumulator are normally the streamed
+      // `tc.index` from Groq. XML-recovered calls are synthesised after the
+      // stream's own indices, starting at a high offset that can't collide.
+      let xmlRecoveredSlotBase = 1_000_000;
 
-      for await (const chunk of stream) {
-        if (signal.aborted) {
-          await persistAssistant('truncated');
-          return;
-        }
-        const choice = chunk.choices?.[0];
-        if (!choice) continue;
-        const delta = choice.delta;
-        if (delta?.content) {
-          aggregateContent += delta.content;
-          await emit({ type: 'text_delta', text: delta.content });
-        }
-        if (delta?.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const slot = toolCallAccumulator.get(tc.index) ?? {
-              id: '',
-              name: '',
-              argsText: '',
-            };
-            if (tc.id) slot.id = tc.id;
-            if (tc.function?.name) slot.name = tc.function.name;
-            if (tc.function?.arguments) slot.argsText += tc.function.arguments;
-            toolCallAccumulator.set(tc.index, slot);
+      // Cycle 7: belt-and-braces sanitizer for any model that emits
+      // Claude-style XML function calls in the content stream (e.g.
+      // `<function(name){...}</function>`) instead of using OpenAI's
+      // `tool_calls` channel. Buffers content across chunks because the open
+      // tag may land in one chunk and the close in another. See
+      // contentSanitizer.ts for the parser.
+      let sanitizer = new ContentSanitizer();
+
+      // llama-3.3-70b on Groq occasionally emits a malformed function call
+      // (mixed XML/JSON syntax) for non-shopping messages, which surfaces as a
+      // 400 `tool_use_failed` partway through the stream. Recover by re-running
+      // the same turn with tools disabled — the model produces a clean text
+      // response and the user never sees the underlying glitch. Distinct from
+      // the XML-leak path above: this one fires when Groq itself rejects the
+      // call before it ever reaches `delta.content`.
+      const consume = async (s: AsyncIterable<unknown>): Promise<void> => {
+        for await (const chunk of s as AsyncIterable<{
+          choices?: Array<{ delta?: { content?: string; tool_calls?: unknown }; finish_reason?: typeof finishReason }>;
+        }>) {
+          if (signal.aborted) return;
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
+          const delta = choice.delta as
+            | { content?: string; tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }> }
+            | undefined;
+          if (delta?.content) {
+            const { safeText, foundCalls, droppedReasons } = sanitizer.feed(delta.content);
+            if (safeText) {
+              aggregateContent += safeText;
+              await emit({ type: 'text_delta', text: safeText });
+            }
+            for (const call of foundCalls) {
+              log.warn({ pattern: 'xml-function-call', name: call.name }, 'model emitted xml-style function call; recovered');
+              const idx = xmlRecoveredSlotBase++;
+              toolCallAccumulator.set(idx, {
+                id: `xml_recovered_${idx - 1_000_000}`,
+                name: call.name,
+                argsText: call.argsJson,
+              });
+              // Treat recovered calls as a tool_calls finish — the model
+              // thought it called the tool, so we should dispatch and let it
+              // continue rather than stop on the (possibly absent) finish
+              // reason.
+              finishReason = 'tool_calls';
+            }
+            for (const reason of droppedReasons) {
+              log.warn({ pattern: 'xml-function-call', reason }, 'dropped malformed xml-style function call');
+            }
           }
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const slot = toolCallAccumulator.get(tc.index) ?? { id: '', name: '', argsText: '' };
+              if (tc.id) slot.id = tc.id;
+              if (tc.function?.name) slot.name = tc.function.name;
+              if (tc.function?.arguments) slot.argsText += tc.function.arguments;
+              toolCallAccumulator.set(tc.index, slot);
+            }
+          }
+          if (choice.finish_reason) finishReason = choice.finish_reason;
         }
-        if (choice.finish_reason) {
-          finishReason = choice.finish_reason;
+        // End-of-stream flush: empty the sanitizer's tail buffer so any
+        // trailing safe text gets emitted (and any unclosed `<function` open
+        // tag gets dropped with a log line).
+        const tail = sanitizer.flush();
+        if (tail.safeText) {
+          aggregateContent += tail.safeText;
+          await emit({ type: 'text_delta', text: tail.safeText });
         }
+        for (const reason of tail.droppedReasons) {
+          log.warn({ pattern: 'xml-function-call', reason }, 'dropped malformed xml-style function call at flush');
+        }
+      };
+
+      try {
+        await consume(stream);
+      } catch (err) {
+        const apiErr = err as { status?: number; error?: { code?: string } };
+        const isToolUseFailed =
+          apiErr?.status === 400 && apiErr?.error?.code === 'tool_use_failed';
+        if (!isToolUseFailed || isFinalTurn) throw err;
+        log.warn({ err }, 'groq tool_use_failed; retrying turn without tools');
+        // Discard any partial accumulation from the failed attempt — the BE
+        // hasn't emitted anything FE-visible yet for this turn (text_delta
+        // would only fire on `delta.content`, which doesn't accompany the
+        // malformed tool call).
+        aggregateContent = '';
+        toolCallAccumulator = new Map();
+        finishReason = null;
+        sanitizer = new ContentSanitizer();
+        xmlRecoveredSlotBase = 1_000_000;
+        stream = await streamChatCompletion({
+          model: env.GROQ_MODEL,
+          messages,
+          tools: undefined,
+          tool_choice: 'none',
+          signal,
+          usageTag: 'text-fallback-no-tools',
+          log,
+        });
+        await consume(stream);
+      }
+
+      if (signal.aborted) {
+        await persistAssistant('truncated');
+        return;
       }
 
       // Append the assistant turn to history (with tool_calls if any).

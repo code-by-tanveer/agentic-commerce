@@ -10,7 +10,6 @@ import { ConversationCanvas } from '@/components/chat/ConversationCanvas';
 import { ImageDropzone } from '@/components/chat/ImageDropzone';
 import { InputBar } from '@/components/chat/InputBar';
 import { Shortlist } from '@/components/chat/Shortlist';
-import { PreferencesCard } from '@/components/preferences/PreferencesCard';
 
 // Provider stack:
 //   SessionProvider     — resolves the sessionId once (was inlined here in
@@ -49,18 +48,12 @@ export default function Page() {
               <div className="flex flex-1 flex-col">
                 <ConversationCanvas />
               </div>
-              {/* PreferencesCard — sticky above the InputBar on desktop
-                  (sm+), collapsed one-line trigger on mobile. Both
-                  variants live in the same component (DESIGN.md §4
-                  PreferencesCard).
-                  R2/T2.8 — the sticky offset reads `--input-bar-height`,
-                  which `useInputBarHeight` (attached to the InputBar outer
-                  wrapper) keeps in sync with the real measured height as
-                  the textarea auto-grows. `100px` is the pre-hydrate /
-                  no-JS fallback (~one-row InputBar). */}
-              <div className="sticky bottom-[var(--input-bar-height,100px)] z-10 mx-auto w-full max-w-3xl px-4 pb-2">
-                <PreferencesCard />
-              </div>
+              {/* Cycle 5: the PreferencesCard no longer renders here.
+                  User feedback ("About you feels in your face") moved the
+                  surface behind a quiet avatar affordance in the Header
+                  (`ProfileMenu`). The PreferencesProvider mounting above is
+                  unchanged so the chip-editing state still hydrates on the
+                  first SSE preference_update. */}
               <InputBar />
               {/* Shortlist — positions itself as a 320px desktop rail or a
                   mobile bottom-sheet based on viewport (DESIGN.md §5). */}

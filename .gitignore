@@ -7,5 +7,6 @@ dist
 .DS_Store
 .turbo
 backend/data
+*.tsbuildinfo
 
 .claude/
