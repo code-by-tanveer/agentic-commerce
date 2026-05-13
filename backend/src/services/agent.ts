@@ -12,6 +12,7 @@ import { Cache } from './cache.js';
 import { ContentSanitizer } from './contentSanitizer.js';
 import { streamChatCompletion } from './groqClient.js';
 import { RateLimitedError } from './groqBreaker.js';
+import { getTaskPrefs, summariseTaskPrefs } from './taskPrefs.js';
 import type { ToolRegistry } from './toolRegistry.js';
 import type { ServerEvent } from '../stream/events.js';
 import type { PreferencesSnapshot, ToolContext } from '../types/tool.js';
@@ -94,19 +95,48 @@ function appendBlock(blocks: AssistantBlock[], event: ServerEvent): AssistantBlo
 }
 
 /**
- * Appended to the base system prompt at agent-loop start. Cycle-2 directive
- * from cycle-2.md: extract size/budget/ships-to/shipping_speed proactively;
- * palette/ethics is user-initiated only.
+ * Appended to the base system prompt at agent-loop start. Rewritten
+ * 2026-05-13 for the preference tier model (see `services/taskPrefs.ts`).
+ *
+ * Two tiers the agent must keep straight:
+ *
+ *   - Identity tier (ships_to, palette, ethics): survives across shopping
+ *     topics; call `save_preference` for these.
+ *   - Task tier (budget, shipping_speed, shopping_for): bound to the
+ *     current shopping topic; pass via `search_catalog` filters per call,
+ *     do NOT call `save_preference`.
+ *
+ * `size` is a known gap: it's logically scoped (size:shoe vs size:dress)
+ * but today it still routes through `save_preference` until the v1.5
+ * scoped tier ships.
  */
 const PREFERENCE_SYSTEM_ADDENDUM = `
-Preference memory: this session has a persistent preferences store. If the \
-user states a preference (size, budget, ships-to, shipping speed), call \
-\`save_preference\` BEFORE responding so the chat remembers. Do NOT proactively \
-extract \`palette\`, \`ethics\`, or \`shopping_for\` — only save those when the \
-user explicitly mentions them. You can call \`get_preferences\` if the context \
-is unclear about what's already saved. When a relevant preference exists, fold \
-it into your search filters (e.g. pass \`filters.ships_to\` to \
-\`search_catalog\`).
+Preference memory has two tiers — keep them separate.
+
+Identity-tier preferences (\`ships_to\`, \`palette\`, \`ethics\`): when the \
+user states one, call \`save_preference\` BEFORE responding. These are \
+identity facts that should survive across shopping topics. \`size\` also \
+routes through \`save_preference\` for now (scoped-by-category support \
+ships later).
+
+Task-tier preferences (\`budget\`, \`shipping_speed\`, \`shopping_for\`): \
+when the user states a BUDGET, shipping_speed, or shopping_for, DO NOT call \
+\`save_preference\`. Instead include the value in your next tool call's \
+filters (e.g. \`search_catalog\` with \`filters.price.max\` for budget or \
+\`filters.shipping_speed\` for shipping speed). The runtime tracks the value \
+within this shopping-topic thread and clears it automatically when the \
+topic shifts. If the user says "lamp under $15" then later "running shoes", \
+the $15 cap is gone — only honour what the current message restates.
+
+Topic detection. Each turn, extract the product topic (the head noun phrase) \
+from the user's message. If it differs from the prior turn's topic, treat \
+task-tier prefs (budget / shipping_speed / shopping_for) as cleared and only \
+honour ones the user explicitly states in the current message. Identity \
+prefs are NOT cleared by topic shift.
+
+When a relevant identity preference exists, fold it into your search filters \
+(e.g. pass \`filters.ships_to\` to \`search_catalog\`). You can call \
+\`get_preferences\` if context is unclear about what's already saved.
 
 Ethics is user-initiated (don't proactively save). When a user says \
 "I care about ethical sourcing" or names a value, map it to the closest entry \
@@ -118,14 +148,12 @@ If a user says something vague like "ethical brands only" without naming a \
 specific value, ask one short clarifying question listing the vocabulary \
 before saving.
 
-Shopping-for (gift use case) is user-initiated — don't proactively save. When \
-a user explicitly states the recipient ("a gift for my niece", "buying for my \
-dad", "shopping for myself"), map to one of: self, partner, kid_4_to_12, \
-kid_13_to_17, adult_friend, parent. If the recipient doesn't cleanly map to \
-one of those values, save the user's own phrase as the value (free-text is \
-accepted). Save in a single \`save_preference\` call with \`key: \
-"shopping_for"\`. Don't ask for the recipient unprompted — the persona who'd \
-benefit from this lead will surface it themselves.
+Shopping-for (gift use case) is task-tier and user-initiated — pass it as a \
+filter when relevant, don't save it. When a user explicitly states the \
+recipient ("a gift for my niece", "buying for my dad", "shopping for \
+myself"), map to one of: self, partner, kid_4_to_12, kid_13_to_17, \
+adult_friend, parent. If the recipient doesn't cleanly map, use the user's \
+own phrase verbatim. Don't ask for the recipient unprompted.
 
 Comparisons: when the user asks "which is better at X", "compare X and Y on Z", \
 or any side-by-side question naming a specific criterion (battery, weight, \
@@ -275,9 +303,19 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
   }
 
   const prefsSummary = summarisePreferences(preferences);
-  const composedSystem = prefsSummary
-    ? `${system}\n\n${PREFERENCE_SYSTEM_ADDENDUM}\n\nCurrently saved preferences: ${prefsSummary}`
-    : `${system}\n\n${PREFERENCE_SYSTEM_ADDENDUM}\n\nNo preferences saved yet.`;
+  // Task-tier snapshot is read fresh per request. The scratchpad is
+  // module-scoped (single-machine per ADR-0004); for a brand-new session
+  // this is an empty object. We surface it alongside identity prefs so the
+  // LLM has the full picture when deciding which filters to inline.
+  const taskSnap = getTaskPrefs(sessionId);
+  const taskSummary = summariseTaskPrefs(taskSnap);
+  const idLine = prefsSummary
+    ? `Saved (identity-tier) preferences: ${prefsSummary}`
+    : 'No identity-tier preferences saved yet.';
+  const taskLine = taskSummary
+    ? `Active (task-tier) filters in this thread: ${taskSummary}`
+    : 'No task-tier filters active in this thread.';
+  const composedSystem = `${system}\n\n${PREFERENCE_SYSTEM_ADDENDUM}\n\n${idLine}\n${taskLine}`;
 
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: composedSystem },

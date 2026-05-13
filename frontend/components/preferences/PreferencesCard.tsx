@@ -1,11 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Plus, X } from 'lucide-react';
 import { ETHICS_VALUES, type EthicsValue } from '@agentic/events';
 import { cn } from '@/lib/cn';
-import type { PreferenceKey } from '@/lib/api';
+import {
+  ApiError,
+  deleteGenericPreference,
+  fetchPreferences,
+  putGenericPreference,
+  type PreferenceKey,
+} from '@/lib/api';
+import { useSession } from '@/hooks/useSession';
+import { useConversationState } from '@/hooks/useConversation';
 import {
   formatPreferenceValue,
   PREFERENCE_LABEL,
@@ -638,5 +646,354 @@ function SavedPulse({
         </motion.div>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DefaultFiltersSection — Round 8 polish.
+//
+// Backend behaviour shifted: `budget`, `shipping_speed`, and `shopping_for`
+// no longer auto-persist (per-session scratchpad, evicts on topic-shift). A
+// user who wants a hard $50 ceiling across every search needs an explicit
+// opt-in. This section is that opt-in — three controls that write through
+// the same `/preferences/:key` REST path as the chip-row, but framed as
+// "defaults that survive topics" rather than "things I just said".
+//
+// Renders as a sibling block under the chip-row ("About you" → identity)
+// and is visually subordinate: smaller header, helper subcopy, ghost empty
+// state. The three controls each manage their own optimistic state.
+//
+// Persistence keys (backend `PREFERENCE_KEYS` enum):
+//   - budget          (existing chip-row key; we reuse the hook's `set`)
+//   - shipping_speed  (existing chip-row key; we reuse the hook's `set`)
+//   - shopping_for    (FE chip-row doesn't surface this — written via the
+//                      generic API helper, hydrated from a parallel fetch
+//                      on mount so cross-tab edits land here too.)
+// ---------------------------------------------------------------------------
+
+const SHIPPING_OPTIONS: ReadonlyArray<{ value: string | null; label: string }> = [
+  { value: null, label: 'Any' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'express', label: 'Express' },
+];
+
+const SHOPPING_FOR_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '', label: '(unset)' },
+  { value: 'self', label: 'Myself' },
+  { value: 'partner', label: 'A partner' },
+  { value: 'kid_4_to_12', label: 'A kid (4–12)' },
+  { value: 'kid_13_to_17', label: 'A kid (13–17)' },
+  { value: 'adult_friend', label: 'An adult friend' },
+  { value: 'parent', label: 'A parent' },
+];
+
+// ISO-4217 → glyph for the half-dozen currencies merchants publish today.
+// Falls back to `$` for unknowns so the input prefix is never empty (matches
+// the lowest-friction behaviour: an unknown CCY rendering a `$` prefix is
+// less alarming than a blank box).
+const CURRENCY_GLYPH: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CAD: 'CA$',
+  AUD: 'A$',
+};
+
+function useFirstResultCurrency(): string {
+  // Picks the currency off the first product in the most-recent products
+  // block. Falls back to `USD` when nothing has streamed yet (initial page
+  // load) or when the run had no results. Cheap to compute — messages is
+  // already a memo in `useConversationState`.
+  const { messages } = useConversationState();
+  return useMemo(() => {
+    for (const m of messages) {
+      for (const b of m.blocks) {
+        if (b.type === 'products' && b.products.length > 0) {
+          const ccy = b.products[0].currency;
+          if (ccy && typeof ccy === 'string') return ccy.toUpperCase();
+        }
+      }
+    }
+    return 'USD';
+  }, [messages]);
+}
+
+function extractBudgetMax(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value && typeof value === 'object') {
+    const max = (value as Record<string, unknown>).max;
+    if (typeof max === 'number' && Number.isFinite(max)) return max;
+  }
+  return null;
+}
+
+function normalizeShippingSpeed(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const lower = value.toLowerCase();
+  if (lower === 'standard' || lower === 'express') return lower;
+  return null;
+}
+
+function normalizeShoppingFor(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value;
+}
+
+export function DefaultFiltersSection() {
+  const { prefs, set, remove } = usePreferences();
+  const { sessionId } = useSession();
+  const currency = useFirstResultCurrency();
+  const currencyGlyph = CURRENCY_GLYPH[currency] ?? '$';
+
+  // `shopping_for` isn't in the FE `PreferenceKey` enum (chip-row doesn't
+  // render it), so we maintain a parallel local mirror. Seeded from a
+  // dedicated GET on mount + when sessionId flips; written via the generic
+  // helper. Hook's optimistic-revert isn't reused here — a single string
+  // value with a dropdown is simple enough that a try/catch + manual revert
+  // covers the failure shape.
+  const [shoppingFor, setShoppingFor] = useState<string>('');
+  const [shoppingForError, setShoppingForError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetchPreferences(sessionId)
+      .then((p) => {
+        if (cancelled) return;
+        const raw = (p as Record<string, { value: unknown } | undefined>)[
+          'shopping_for'
+        ];
+        setShoppingFor(normalizeShoppingFor(raw?.value));
+      })
+      .catch(() => {
+        // Non-fatal — defaults section degrades to an empty `shopping_for`.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  const budgetMax = extractBudgetMax(prefs.budget?.value);
+  const shippingSpeed = normalizeShippingSpeed(prefs.shipping_speed?.value);
+  const anySet = budgetMax != null || shippingSpeed != null || shoppingFor !== '';
+
+  // Budget input — local draft so the user can type "≤$50" or "50" without
+  // every keystroke firing a PUT. Commits on blur / Enter; clears on empty.
+  const [budgetDraft, setBudgetDraft] = useState<string>(
+    budgetMax != null ? String(budgetMax) : '',
+  );
+  useEffect(() => {
+    setBudgetDraft(budgetMax != null ? String(budgetMax) : '');
+  }, [budgetMax]);
+
+  const budgetHelperId = useId();
+
+  const commitBudget = useCallback(
+    async (raw: string) => {
+      const trimmed = raw.trim().replace(/[\$,≤\s]/g, '');
+      if (trimmed.length === 0) {
+        if (budgetMax != null) await remove('budget');
+        return;
+      }
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n <= 0) {
+        // Bad input → restore the prior committed value as the visible draft.
+        setBudgetDraft(budgetMax != null ? String(budgetMax) : '');
+        return;
+      }
+      if (n === budgetMax) return; // no-op
+      await set('budget', { max: n }, 'user');
+    },
+    [budgetMax, remove, set],
+  );
+
+  const commitShipping = useCallback(
+    async (next: string | null) => {
+      if (next === null) {
+        if (shippingSpeed != null) await remove('shipping_speed');
+        return;
+      }
+      if (next === shippingSpeed) return;
+      await set('shipping_speed', next, 'user');
+    },
+    [remove, set, shippingSpeed],
+  );
+
+  const commitShoppingFor = useCallback(
+    async (next: string) => {
+      if (!sessionId) return;
+      const prior = shoppingFor;
+      setShoppingFor(next);
+      setShoppingForError(null);
+      try {
+        if (next === '') {
+          await deleteGenericPreference(sessionId, 'shopping_for');
+        } else {
+          await putGenericPreference(sessionId, 'shopping_for', next, 'user');
+        }
+      } catch (err) {
+        setShoppingFor(prior);
+        setShoppingForError(
+          err instanceof ApiError ? err.message : 'Could not save — try again',
+        );
+      }
+    },
+    [sessionId, shoppingFor],
+  );
+
+  const clearAll = useCallback(async () => {
+    const ops: Promise<unknown>[] = [];
+    if (budgetMax != null) ops.push(remove('budget'));
+    if (shippingSpeed != null) ops.push(remove('shipping_speed'));
+    if (shoppingFor !== '') ops.push(commitShoppingFor(''));
+    await Promise.all(ops);
+  }, [budgetMax, shippingSpeed, shoppingFor, remove, commitShoppingFor]);
+
+  return (
+    <section
+      aria-label="Default filters (optional)"
+      className="mt-3 flex flex-col gap-3 border-t border-ink-100 pt-3"
+    >
+      <div className="flex flex-col gap-1">
+        <p className="text-[11px] uppercase tracking-wider text-ink-400">
+          Default filters (optional)
+        </p>
+        <h3 className="text-sm font-medium text-ink-900">Your defaults</h3>
+        <p className="text-xs leading-snug text-ink-400">
+          Optional. Set values that apply to every search across topics. Leave
+          blank to let me ask each time.
+        </p>
+        {!anySet ? (
+          <p className="text-xs italic text-ink-400">No defaults set</p>
+        ) : null}
+      </div>
+
+      {/* Budget */}
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${budgetHelperId}-input`}
+          className="text-xs font-medium text-ink-600"
+        >
+          Default budget
+        </label>
+        <div className="relative">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-ink-400"
+          >
+            {currencyGlyph}
+          </span>
+          <input
+            id={`${budgetHelperId}-input`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={budgetDraft}
+            onChange={(e) => setBudgetDraft(e.target.value)}
+            onBlur={(e) => void commitBudget(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setBudgetDraft(budgetMax != null ? String(budgetMax) : '');
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            aria-label="Default budget cap"
+            aria-describedby={budgetHelperId}
+            placeholder="No default"
+            className={cn(
+              'h-9 w-full rounded-2xl border border-ink-100 bg-white py-2 pl-7 pr-3 text-sm text-ink-900 placeholder:text-ink-400',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+            )}
+          />
+        </div>
+        <p id={budgetHelperId} className="text-[11px] text-ink-400">
+          Applied to every search until you change it.
+        </p>
+      </div>
+
+      {/* Shipping speed — segmented pills */}
+      <div
+        role="radiogroup"
+        aria-label="Default shipping speed"
+        className="flex flex-col gap-1"
+      >
+        <p className="text-xs font-medium text-ink-600">Default shipping speed</p>
+        <div className="inline-flex w-full items-center gap-1 rounded-full bg-ink-50 p-1">
+          {SHIPPING_OPTIONS.map((opt) => {
+            const active = (opt.value ?? null) === shippingSpeed;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => void commitShipping(opt.value)}
+                className={cn(
+                  'flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
+                  active
+                    ? 'bg-white text-ink-900 shadow-soft'
+                    : 'text-ink-600 hover:bg-white/60',
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Shopping for — dropdown */}
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`${budgetHelperId}-shopping-for`}
+          className="text-xs font-medium text-ink-600"
+        >
+          Default shopping for
+        </label>
+        <select
+          id={`${budgetHelperId}-shopping-for`}
+          value={shoppingFor}
+          onChange={(e) => void commitShoppingFor(e.target.value)}
+          aria-label="Default shopping for"
+          className={cn(
+            'h-9 w-full rounded-2xl border border-ink-100 bg-white px-3 text-sm text-ink-900',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+          )}
+        >
+          {SHOPPING_FOR_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        {shoppingForError ? (
+          <p role="alert" className="text-xs text-rose-700">
+            {shoppingForError}
+          </p>
+        ) : null}
+      </div>
+
+      {anySet ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => void clearAll()}
+            className={cn(
+              'text-xs text-ink-400 transition hover:text-ink-900 hover:underline',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-sm',
+            )}
+          >
+            Clear all defaults
+          </button>
+        </div>
+      ) : null}
+    </section>
   );
 }

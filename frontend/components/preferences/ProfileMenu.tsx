@@ -7,7 +7,7 @@ import { User } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { usePreferences } from '@/hooks/usePreferences';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
-import { PreferencesCard } from './PreferencesCard';
+import { DefaultFiltersSection, PreferencesCard } from './PreferencesCard';
 
 // ---------------------------------------------------------------------------
 // ProfileMenu — Cycle 5.
@@ -205,6 +205,12 @@ function ProfilePopover({
         ) : (
           <EmptyExplainer onDismiss={close} />
         )}
+        {/* Round 8 polish — "Default filters (optional)" lives as a sibling
+            below the identity block. Renders in both states (chip-row +
+            empty) so first-time users can opt into a hard $50 ceiling
+            without ever filling in an identity pref. The section owns its
+            own ghost-state copy when nothing is set. */}
+        <DefaultFiltersSection />
       </motion.div>
     </>
   );

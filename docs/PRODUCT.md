@@ -119,8 +119,16 @@ These are the moat. Every cycle review checks the relevant subset against PASS/F
 2. **Reasoning chips on every product.**
    *Acceptance:* Every rendered product card shows ≥2 chips computed from current preferences + product metadata. The chip vocabulary is closed: `size_match`, `discount`, `price` (over-budget warning), `fast_shipping` (merchant ships in ≤3 days), `ships_to_match` (merchant ships to the user's preferred country — see ADR-0005), `ethics` (closed taxonomy: sustainable, fair-trade, organic, b-corp, women-owned, small-batch, vegan, recycled), `shipping`, `low_stock`. Each chip is tappable and reveals a one-sentence `detail`; chips degrade silently when data is missing (never show a chip with no backing data). Ranking honors `RANK` in `reasoning.ts`.
 
-3. **Persistent preference memory card.**
-   *Acceptance:* A visible "About you" panel shows the agent's current understanding. Closed preference vocabulary: `size`, `budget`, `ships_to`, `ships_from`, `shipping_speed`, `palette`, `ethics` (array of taxonomy values), `shopping_for` (gift-recipient indicator — see §7 cycle goals). Every field is inline-editable; edits round-trip to SQLite and are reflected in the next agent turn within one tool call; preferences survive a hard page reload in the same session.
+3. **Persistent preference memory card — with explicit tiers.**
+   *Acceptance:* A visible "About you" panel shows the agent's current understanding of the user's **identity-tier** preferences only. Task-tier knobs (budget, shipping speed) are bound to the current shopping topic and surface as per-message filter chips (via the `appliedFilters` field on `products` events), not in the "About you" panel. Identity edits round-trip to SQLite and survive page reload; task-tier values evict on topic-shift OR 30-minute idle and never leak into a new shopping topic. The closed vocabulary now partitions as:
+
+   | Tier        | Keys                                       | Storage                     | Lifetime                                          |
+   |-------------|--------------------------------------------|-----------------------------|---------------------------------------------------|
+   | Identity    | `ships_to`, `palette`, `ethics`, `size`*   | SQLite `preferences` table  | Survives across topics + reloads                  |
+   | Task        | `budget`, `shipping_speed`, `shopping_for` | In-memory scratchpad        | Evicts on topic-shift OR 30-min idle              |
+   | Scoped (v1.5) | `size:<category>` (e.g. `size:shoe`)     | SQLite with a category key  | Identity-like; **deferred** — *see future ADR*    |
+
+   *`size` stays in the identity tier today for back-compat; v1.5 will move it to the scoped tier so `size:shoe=8` and `size:dress=M` can coexist. Future ADRs may formalise (a) the tier partition itself and (b) the scoped-tier migration; not written yet.
 
 4. **Outfit / bundle completion.**
    *Acceptance:* On any product, the user can ask "what would go with this?" or tap the Pair-with affordance and receive a 2–4 item bundle rendered as a single coordinated card with a combined "save outfit" action. Bundles are not just three random products — each item carries a one-line "why this with that" rationale derived from real catalog data (shared merchant / matching tag / similar price band / shared shipsTo region); rationales are omitted, not invented, when no signal exists.

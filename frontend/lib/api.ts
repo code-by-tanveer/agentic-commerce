@@ -255,6 +255,57 @@ export async function deletePreference(
 }
 
 // ---------------------------------------------------------------------------
+// Generic preference write/delete — same `/preferences/:key` route, but
+// untyped key for prefs that aren't in the chip-row's closed enum (e.g.
+// `shopping_for`, which the ProfileMenu's "Default filters" section writes
+// without participating in the chip-row's `PREFERENCE_LABEL` map).
+//
+// These exist because the FE chip-row's `PreferenceKey` is intentionally
+// narrow — adding `shopping_for` there would force a label entry that the
+// chip-row doesn't actually render. Defaults section writes go through here
+// instead. The backend route accepts any key in the `PREFERENCE_KEYS` enum
+// (events package), so this stays correct even when callers pass strings
+// that aren't in the FE's chip subset.
+// ---------------------------------------------------------------------------
+
+export async function putGenericPreference(
+  sessionId: string,
+  key: string,
+  value: unknown,
+  source: PreferenceSource = 'user',
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/preferences/${encodeURIComponent(key)}`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value, source }),
+      signal,
+    },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'preference write failed');
+  }
+}
+
+export async function deleteGenericPreference(
+  sessionId: string,
+  key: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(
+    `/api/session/${encodeURIComponent(sessionId)}/preferences/${encodeURIComponent(key)}`,
+    { method: 'DELETE', signal },
+  );
+  if (!res.ok) {
+    const body = await safeJson(res);
+    throw new ApiError(res.status, body?.message ?? 'preference delete failed');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shortlist (Cycle 3) — three-lane (love/maybe/skip) drawer.
 //
 // The backend stores a `product_snapshot_json` per row so the share page

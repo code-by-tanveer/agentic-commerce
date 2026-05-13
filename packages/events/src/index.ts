@@ -202,11 +202,30 @@ export const toolStatusSchema = z.object({
   errorMessage: z.string().optional(),
 });
 
+// `appliedFilters` (2026-05-13). First-class attribution for the filter set
+// that drove a given product result. Populated by `search_catalog::toEvents`
+// from the merged identity-prefs (SQLite) + task-prefs (in-memory) + the
+// LLM-supplied `args.filters`. The FE renders it as per-message filter chips
+// AND as the NoResultsBlock attribution copy; it deprecates the prior path
+// of reading the sibling `tool_status.args` to figure out why nothing
+// matched. Every field is optional — an empty `appliedFilters` object means
+// "no filters applied", which is distinct from omitting the field entirely
+// (legacy clients before this field existed).
+export const appliedFiltersSchema = z.object({
+  budget: z
+    .object({ min: z.number().optional(), max: z.number().optional() })
+    .optional(),
+  shipsTo: z.string().optional(),
+  shippingSpeed: z.string().optional(),
+  shoppingFor: z.string().optional(),
+});
+
 export const productsEventSchema = z.object({
   type: z.literal('products'),
   toolCallId: z.string(),
   query: z.string(),
   products: z.array(normalizedProductSchema),
+  appliedFilters: appliedFiltersSchema.optional(),
 });
 
 export const comparisonEventSchema = z.object({
@@ -300,6 +319,7 @@ export type NormalizedProduct = z.infer<typeof normalizedProductSchema>;
 export type NormalizedVariant = z.infer<typeof normalizedVariantSchema>;
 export type ReasoningChip = z.infer<typeof reasoningChipSchema>;
 export type MerchantInfo = z.infer<typeof merchantInfoSchema>;
+export type AppliedFilters = z.infer<typeof appliedFiltersSchema>;
 
 export const eventSchemas = {
   text_delta: textDeltaSchema,
@@ -323,6 +343,7 @@ export const eventSchemas = {
 export const NormalizedVariantSchema = normalizedVariantSchema;
 export const ReasoningChipSchema = reasoningChipSchema;
 export const MerchantInfoSchema = merchantInfoSchema;
+export const AppliedFiltersSchema = appliedFiltersSchema;
 export const NormalizedProductSchema = normalizedProductSchema;
 export const NormalizedProductLenient = normalizedProductLenient;
 export const TextDeltaSchema = textDeltaSchema;

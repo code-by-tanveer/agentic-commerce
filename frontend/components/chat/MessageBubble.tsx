@@ -1,14 +1,18 @@
 'use client';
 
+import { useMemo } from 'react';
 import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageRenderer } from './MessageRenderer';
+import { MessageFilterChips, type FilterKey } from './MessageFilterChips';
 import {
   useConversationActions,
+  useConversationState,
   type Block,
   type Message,
+  type ProductsBlock,
   type TextBlock,
 } from '@/hooks/useConversation';
 
@@ -33,10 +37,80 @@ interface Props {
   message: Message;
 }
 
+// Natural-language hint appended to the re-run query. Phrased as a parenthetical
+// directive so it reads as a one-shot override (the agent's system prompt
+// treats trailing-parenthetical directives as ad-hoc overrides to the merged
+// filter view) rather than a profile-level edit.
+function filterDirective(filter: FilterKey): string {
+  switch (filter) {
+    case 'budget':
+      return 'without the budget filter';
+    case 'shipsTo':
+      return 'without the ships-to filter';
+    case 'shippingSpeed':
+      return 'without the shipping speed filter';
+    case 'shoppingFor':
+      return 'without the recipient filter';
+  }
+}
+
+// Pull the first `products` block off the assistant message that immediately
+// follows the given user message id, if any. The "first products block" is
+// the canonical attribution surface — when the assistant runs `search_catalog`
+// more than once in a turn (a relax cycle, say), the FIRST run is the one
+// whose `appliedFilters` reflects the inherited state we want to surface
+// under the user's bubble.
+function findNextAssistantProductsBlock(
+  messages: Message[],
+  userMessageId: string,
+): ProductsBlock | undefined {
+  const idx = messages.findIndex((m) => m.id === userMessageId);
+  if (idx === -1) return undefined;
+  const next = messages[idx + 1];
+  if (!next || next.role !== 'assistant') return undefined;
+  for (const b of next.blocks) {
+    if (b.type === 'products') return b;
+  }
+  return undefined;
+}
+
 export function MessageBubble({ message }: Props) {
-  const { retry } = useConversationActions();
+  const { retry, send } = useConversationActions();
+  const { messages } = useConversationState();
   const reduced = useReducedMotion();
   const isUser = message.role === 'user';
+
+  // Cycle 9 §2.5/§2.9 — chip strip attribution. Compute the user-bubble's
+  // matched products block (next assistant turn, first products event). We
+  // do this here (vs. in MessageFilterChips) to keep the chip component
+  // pure / context-free and to avoid pulling the whole `messages` array
+  // into a render that doesn't need it. The lookup is O(n) where n is the
+  // conversation length — cheap; no memoisation needed for typical chat
+  // lengths but `useMemo`-fenced behind the parent message id + length to
+  // dodge re-running on every text-delta tick.
+  const userText = useMemo(() => {
+    if (!isUser) return '';
+    return message.blocks
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+  }, [isUser, message.blocks]);
+
+  const productsBlock = useMemo(() => {
+    if (!isUser) return undefined;
+    return findNextAssistantProductsBlock(messages, message.id);
+  }, [isUser, messages, message.id]);
+
+  const handleRemoveFilter = (filter: FilterKey) => {
+    // PO/UX contract — re-run the SAME query without that filter for this
+    // turn only. The natural-language directive nudges the agent; the
+    // task-tier scratchpad's next-turn snapshot will omit the override.
+    // We DO NOT call any preference-mutation endpoint here.
+    const text = userText.trim();
+    if (!text) return;
+    const hint = filterDirective(filter);
+    void send(`${text} (${hint})`);
+  };
 
   // Entry motion: 250ms easeOut for new bubbles; 100ms opacity-only for
   // reduced-motion (DESIGN.md §2.8 / §7).
@@ -60,7 +134,7 @@ export function MessageBubble({ message }: Props) {
         initial={initial}
         animate={animate}
         transition={transition}
-        className="flex w-full justify-end"
+        className="flex w-full flex-col items-end"
       >
         <div className="flex max-w-[80%] flex-col items-end gap-2">
           {imageUrl ? (
@@ -86,6 +160,24 @@ export function MessageBubble({ message }: Props) {
             </div>
           ) : null}
         </div>
+        {/*
+          Cycle 9 §2.5 — filter chip attribution strip. Sits OUTSIDE the
+          bubble's max-width container but still inside the right-aligned
+          column wrapper, so it hugs the trailing edge of the canvas while
+          being free to wrap past the bubble's 80% column constraint when
+          all 4 chips render at once. `mt-1.5` is the spec's 6px tight gap
+          to the bubble above. Renders null when no filters were inherited,
+          which keeps the empty case true zero-height (no reserved space).
+        */}
+        {productsBlock ? (
+          <div className="mt-1.5">
+            <MessageFilterChips
+              userMessageText={userText}
+              appliedFilters={productsBlock.appliedFilters}
+              onRemove={handleRemoveFilter}
+            />
+          </div>
+        ) : null}
       </motion.div>
     );
   }

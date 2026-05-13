@@ -19,7 +19,7 @@ import {
   type PreferenceKey,
 } from '@/lib/api';
 import { streamChat, StreamError, type ChatRequestMessage } from '@/lib/stream';
-import type { NormalizedProduct, ServerEvent } from '@/lib/events';
+import type { AppliedFilters, NormalizedProduct, ServerEvent } from '@/lib/events';
 import {
   DEFAULT_LABEL,
   labelFromText,
@@ -71,6 +71,12 @@ export interface ProductsBlock {
   toolCallId: string;
   query: string;
   products: NormalizedProduct[];
+  // 2026-05-13 — first-class attribution for the filter set that drove this
+  // result. Forwarded verbatim from `productsEventSchema.appliedFilters`
+  // (post-merge view of LLM args + identity prefs + task-tier scratchpad).
+  // Optional: legacy persisted assistant turns and zero-filter runs both
+  // arrive without it.
+  appliedFilters?: AppliedFilters;
 }
 
 export interface ComparisonBlock {
@@ -256,6 +262,7 @@ function reducer(state: State, action: Action): State {
                     toolCallId: event.toolCallId,
                     query: event.query,
                     products: event.products,
+                    appliedFilters: event.appliedFilters,
                   },
                 ],
               };
