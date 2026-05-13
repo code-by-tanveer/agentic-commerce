@@ -369,7 +369,8 @@ function MobileHeader({ onClose }: { onClose: () => void }) {
 }
 
 function MobileLanes() {
-  const { shortlist, remove, addToLane } = useShortlist();
+  const { shortlist, remove, addToLane, isLoading } = useShortlist();
+  const reduced = useReducedMotion();
   const [activeLane, setActiveLane] = useState<ShortlistLane>('love');
   const items = shortlist.filter((i) => i.lane === activeLane);
   const meta = LANE_META.find((m) => m.lane === activeLane)!;
@@ -424,7 +425,11 @@ function MobileLanes() {
         }}
         className={cn('rounded-2xl bg-ink-50 p-3 transition', isOver && 'bg-accent-50')}
       >
-        {items.length === 0 ? (
+        {isLoading && items.length === 0 ? (
+          // R2/T2.9 — mirror the rail variant: a single skeleton row while
+          // hydrating, distinguished from the post-hydrate empty hint below.
+          <LaneSkeleton reduced={!!reduced} />
+        ) : items.length === 0 ? (
           <p className="text-[11px] text-ink-400">{meta.emptyHint}</p>
         ) : (
           <ul className="flex flex-col gap-2">

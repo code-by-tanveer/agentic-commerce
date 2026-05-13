@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import type { ChatCompletionTool } from 'groq-sdk/resources/chat/completions';
 import type { ServerEvent } from '../stream/events.js';
 import type { Tool, ToolContext } from '../types/tool.js';
@@ -56,9 +57,21 @@ export class ToolRegistry {
     ctx: ToolContext,
     meta: { toolCallId: string },
   ): Promise<DispatchResult> {
+    // polish-round-2 T2.14: per-tool latency log line so Pino-fed dashboards
+    // can compute p95 per tool. One log line per dispatch, every path emits.
+    const startedAt = performance.now();
+    const finish = (ok: boolean, extra: Record<string, unknown> = {}): void => {
+      const durationMs = Math.round(performance.now() - startedAt);
+      ctx.log.info(
+        { tool: name, durationMs, ok, sessionId: ctx.sessionId, ...extra },
+        'tool dispatch',
+      );
+    };
+
     const tool = this.tools.get(name);
     if (!tool) {
       const msg = `unknown_tool: ${name}`;
+      finish(false, { reason: 'unknown_tool' });
       return {
         assistantString: JSON.stringify({ error: msg }),
         events: [
@@ -78,6 +91,7 @@ export class ToolRegistry {
       args = tool.parseArgs(rawArgs);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'invalid arguments';
+      finish(false, { reason: 'invalid_arguments' });
       return {
         assistantString: JSON.stringify({ error: 'invalid_arguments', detail: message }),
         events: [
@@ -96,10 +110,15 @@ export class ToolRegistry {
     try {
       const result = await tool.execute(args, ctx);
       const out = tool.toEvents(args, result, { toolCallId: meta.toolCallId });
+      const errored = out.events.some(
+        (e) => e.type === 'tool_status' && e.status === 'error',
+      );
+      finish(!errored);
       return out;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'tool execution failed';
       ctx.log.error({ err, tool: name }, 'tool execution error');
+      finish(false, { reason: 'execute_threw' });
       return {
         assistantString: JSON.stringify({ error: 'tool_error', detail: message }),
         events: [

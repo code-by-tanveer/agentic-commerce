@@ -15,6 +15,7 @@ import {
   useConversationActions,
   useConversationState,
 } from '@/hooks/useConversation';
+import { useInputBarHeight } from '@/hooks/useInputBarHeight';
 import { useUpload } from '@/hooks/useUpload';
 
 export function InputBar() {
@@ -25,6 +26,13 @@ export function InputBar() {
   const [value, setValue] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // R2/T2.8 — publish the outer wrapper's height to `--input-bar-height` so
+  // the PreferencesCard sticky offset in `app/page.tsx` stays glued to the
+  // top of the InputBar as the textarea auto-grows (up to 160px). Coordinate:
+  // the parallel persona-depth engineer should NOT change the layout of this
+  // wrapper — the ResizeObserver assumes `offsetHeight` reflects the real
+  // sticky height including the iOS safe-area-inset-bottom padding.
+  const stickyRef = useInputBarHeight<HTMLDivElement>();
 
   useEffect(() => {
     const el = ref.current;
@@ -92,6 +100,7 @@ export function InputBar() {
     // `max()` keeps the existing visual padding floor when the device has no
     // physical inset (desktop / Android with on-screen nav).
     <div
+      ref={stickyRef}
       className="sticky bottom-0 z-10 border-t border-ink-100 bg-ink-50/80 backdrop-blur"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
     >
@@ -160,8 +169,16 @@ export function InputBar() {
           </button>
         </div>
       </form>
+      {/* Trust-promise disclosure — Round 2 polish (Mara). Source-of-truth +
+          ranking policy stated where the user composes, so the commitment is
+          visible at point-of-action rather than inferred from anti-goal #5 in
+          the PM doc. Both lines share the existing `text-[11px] text-ink-400`
+          treatment so the line break reads as one paragraph, not a bolted-on
+          notice. */}
       <p className="pb-3 text-center text-[11px] text-ink-400">
         Prices and availability come from Shopify merchants via the Catalog MCP.
+        <br />
+        Ranking is preference-driven, not paid placement.
       </p>
     </div>
   );

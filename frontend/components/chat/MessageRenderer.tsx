@@ -108,10 +108,13 @@ function BlockView({
     case 'outfit':
       // OutfitBundle expects the existing FE Product shape; NormalizedProduct
       // is structurally compatible (matches Cycle 1's product-block coercion).
+      // Round 2: pass the parallel `rationales` array so OutfitBundle can
+      // render per-cell provenance underneath each tile.
       return (
         <OutfitBundle
           anchorProductId={block.anchorProductId}
           items={block.items as never}
+          rationales={block.rationales}
           rationale={block.rationale}
         />
       );

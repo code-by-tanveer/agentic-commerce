@@ -135,6 +135,8 @@ export const extractStyleFromImageTool: Tool<ExtractStyleArgs, ExtractStyleToolR
         ],
         signal: ctx.signal,
         usageTag: 'vision',
+        // polish-round-2 T2.14: symmetric Groq duration log for the vision path.
+        log: ctx.log,
       });
       raw = resp.choices?.[0]?.message?.content ?? '';
     } catch (err) {

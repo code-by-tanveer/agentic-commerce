@@ -45,6 +45,56 @@ export function isPreferenceKey(value: string): value is PreferenceKey {
 }
 
 // ---------------------------------------------------------------------------
+// Ethics taxonomy — Round 2 polish (T2.10, persona-sasha).
+//
+// Before: `prefs.ethics` was a free-text string, and the `ethics` chip in
+// `reasoning.ts` did a literal case-insensitive `tags.includes(w)` against
+// `product.merchantTags`. The substring match meant a saved preference of
+// "sustainable" silently never fired against tags like `organic-cotton`,
+// `gots-certified`, or `b-corp` — the chip looked decorative but was broken
+// by design for the 90% of merchants who don't tag themselves "sustainable".
+//
+// After: a closed-set vocabulary (`ETHICS_VALUES`) plus a per-value synonym
+// list (`ETHICS_SYNONYMS`) that the reasoning rule walks. `prefs.ethics` is
+// expected to be `EthicsValue[]` (the FE renders a multi-select chip grid),
+// though `reasoning.ts` still accepts a bare string defensively. The
+// `save_preference` tool and the FE PreferencesCard both target this shape.
+// ---------------------------------------------------------------------------
+
+export const ETHICS_VALUES = [
+  'sustainable',
+  'fair-trade',
+  'organic',
+  'b-corp',
+  'women-owned',
+  'small-batch',
+  'vegan',
+  'recycled',
+] as const;
+
+export type EthicsValue = (typeof ETHICS_VALUES)[number];
+
+// Synonyms used by the BE reasoning rule for chip-firing. Lower-case, and
+// matched as case-insensitive substrings against `product.merchantTags`
+// entries (so "GOTS-certified-organic" matches `'organic'` via the
+// `'organic'` synonym; "Certified B Corp" matches `'b-corp'` via `'b corp'`).
+// Keep this owned in code and transparent — see persona-sasha §"What I'd need".
+export const ETHICS_SYNONYMS: Record<EthicsValue, readonly string[]> = {
+  sustainable: ['sustainable', 'eco', 'eco-friendly', 'low-impact'],
+  'fair-trade': ['fair-trade', 'fairtrade', 'fair trade'],
+  organic: ['organic', 'organic-cotton', 'gots'],
+  'b-corp': ['b-corp', 'b corp', 'bcorp', 'certified-b'],
+  'women-owned': ['women-owned', 'women owned', 'female-founded'],
+  'small-batch': ['small-batch', 'small batch', 'limited-run', 'limited run'],
+  vegan: ['vegan', 'plant-based'],
+  recycled: ['recycled', 'reclaimed', 'upcycled'],
+};
+
+export function isEthicsValue(v: unknown): v is EthicsValue {
+  return typeof v === 'string' && (ETHICS_VALUES as readonly string[]).includes(v);
+}
+
+// ---------------------------------------------------------------------------
 // Product shape (mirrors services/normalize.ts output on the BE).
 // ---------------------------------------------------------------------------
 
@@ -70,12 +120,20 @@ export const reasoningChipSchema = z.object({
   tone: z.enum(['positive', 'neutral', 'warning']).optional(), // visual treatment hint
 });
 
+// `originCountry` — Round 2 polish (T2.11, persona-sasha). Where the merchant
+// (or product) declares it's made. Normalized by `services/normalize.ts` to
+// uppercase ISO-3166 alpha-2 when the source looks like a code; passed through
+// verbatim otherwise so the FE can still render free-form strings like
+// "Made in northern Italy" without dropping them. Absent → MerchantBlock
+// renders the existing "merchant didn't publish this" line per PRODUCT.md
+// acceptance #5 (no fake provenance).
 export const merchantInfoSchema = z.object({
   name: z.string(),
   rating: z.number().optional(),
   returnsPolicy: z.string().optional(),
   shippingDays: z.string().optional(),
   carbon: z.string().optional(),
+  originCountry: z.string().optional(),
 });
 
 export const normalizedProductSchema = z.object({

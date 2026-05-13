@@ -69,13 +69,18 @@ export interface ComparisonBlock {
 
 // Cycle 3 — `outfit` SSE events render as a single OutfitBundle inside the
 // assistant message. The bundle is composition (anchor + 2-4 complementary
-// items + per-bundle rationale); per-item rationale strings ride on the
-// product's `reasoningChips` from the backend's `recommend_outfit` tool.
+// items + per-bundle rationale).
+//
+// Round 2 polish: the event now carries a parallel `rationales` array
+// (`rationales[i]` is the provenance string for `items[i]`, or null when no
+// real signal supports it) that `OutfitBundle` renders per cell. We keep the
+// bundle-level `rationale` for the header summary.
 export interface OutfitBlock {
   type: 'outfit';
   toolCallId: string;
   anchorProductId: string;
   items: NormalizedProduct[];
+  rationales?: (string | null)[];
   rationale: string;
 }
 
@@ -245,7 +250,10 @@ function reducer(state: State, action: Action): State {
             case 'outfit':
               // Cycle 3 — push as a sub-block on the assistant message. Do
               // NOT route through Shortlist; the user's explicit Save Outfit
-              // action is what persists items to the Love lane.
+              // action is what persists items to the Love lane. Round 2:
+              // forward the parallel `rationales` array (may be undefined
+              // when the BE has no per-item signal — OutfitBundle gates on
+              // length and null-entries safely).
               return {
                 ...m,
                 blocks: [
@@ -255,6 +263,7 @@ function reducer(state: State, action: Action): State {
                     toolCallId: event.toolCallId,
                     anchorProductId: event.anchorProductId,
                     items: event.items,
+                    rationales: event.rationales,
                     rationale: event.rationale,
                   },
                 ],
@@ -286,7 +295,19 @@ function reducer(state: State, action: Action): State {
                   {
                     type: 'error',
                     code: event.code,
-                    message: event.message,
+                    // Round 2 polish: when the BE classifies an error as
+                    // `rate_limited` it ships a Groq-flavoured message
+                    // ("Hitting traffic — retrying in a few seconds.") that
+                    // doesn't tell the user the real failure mode they hit in
+                    // this deploy: the daily Groq quota is finite and may be
+                    // exhausted (see `docs/ARCHITECTURE.md`). Honest copy that
+                    // names the daily-exhaust path keeps the retry affordance
+                    // (still useful for transient bursts) and avoids the
+                    // implicit "this will fix itself" promise.
+                    message:
+                      event.code === 'rate_limited'
+                        ? 'Hitting traffic — try again in a moment. If this keeps happening, daily quota may be exhausted.'
+                        : event.message,
                     retryable: event.retryable,
                   },
                 ],

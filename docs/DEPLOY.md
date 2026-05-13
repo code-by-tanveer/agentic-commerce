@@ -72,6 +72,24 @@ Then in `backend/fly.toml` add a mount stanza (Fly may have prefilled most of th
 
 The destination `/data` matches the `DB_PATH` and `UPLOAD_DIR` env values below. Migrations run automatically on boot; the SQLite file lands at `/data/agentic.db` and uploads at `/data/uploads`.
 
+### Backups & disaster recovery
+
+Stage 1 leans on Fly's built-in volume snapshots. polish-round-2 T2.18 makes the posture explicit:
+
+- **Automatic.** Fly takes a daily snapshot of every volume and retains the last 5 days. No action required for Stage-1 DR — a region-level mistake is recoverable from yesterday's snapshot.
+- **Before any risky migration.** Take a manual snapshot first and record the id so you can roll forward or back deterministically:
+  ```bash
+  fly volumes list                                   # find agentic_data's id
+  fly volumes snapshots create <volume-id>           # prints the snapshot id
+  ```
+- **Restore.** Create a new volume from the snapshot id, then swap the app's mount:
+  ```bash
+  fly volumes create agentic_data_restore \
+    --snapshot-id <snapshot-id> --size 1 --region <region>
+  ```
+  Update `fly.toml`'s `[[mounts]] source` to the restored volume name and `fly deploy`.
+- **Stage-2 trigger.** If RPO/RTO requirements tighten (sub-day recovery, off-region durability), add `litestream` replication of `/data/agentic.db` to S3. Cheap enough at Stage 2; overkill today.
+
 ### Secrets
 
 Set the sensitive values via `fly secrets` so they never appear in `fly.toml`:
@@ -114,7 +132,7 @@ Fly's default `[[services.http_checks]]` should hit `/health`. If `fly launch` d
   path = "/health"
 ```
 
-The backend exposes `GET /health` returning `{ ok: true }` plus a Groq-reachable boolean.
+The backend exposes `GET /health` returning `{ ok: true }`. This is **liveness-only** — it confirms the Fastify process is up, nothing more. A richer `/ready` probe (Groq + MCP reachability with 1s timeouts, 10s cache) is a Stage-2 add.
 
 ### Auto-scaling — keep it single-machine for now
 

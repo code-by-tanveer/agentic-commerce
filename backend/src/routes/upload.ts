@@ -5,6 +5,10 @@ import { fileTypeFromBuffer } from 'file-type';
 import { nanoid } from 'nanoid';
 import { env } from '../config/env.js';
 import { signUploadUrl } from '../services/uploads.js';
+import { purgeStaleUploads } from '../services/uploadsPurge.js';
+
+const DISK_FULL_CODES = new Set(['ENOSPC', 'EDQUOT']);
+const EMERGENCY_PURGE_MAX_AGE_MS = 60 * 60 * 1000;
 
 /**
  * POST /api/upload — multimodal entry point (cycle-4.md / ARCH §7, §9).
@@ -98,15 +102,53 @@ export async function uploadRoutes(app: FastifyInstance) {
       try {
         await writeFile(target, buf, { flag: 'wx' });
       } catch (err) {
-        // wx (exclusive) → near-impossible collision on a nanoid; if it
-        // happens, surface a clean 500 and we'll re-roll on retry.
-        request.log.error({ err, target }, 'upload: write failed');
-        try {
-          await unlink(target);
-        } catch {
-          /* best-effort */
+        const e = err as NodeJS.ErrnoException;
+        // polish-round-2 T2.4: disk-full fail-safe. On ENOSPC/EDQUOT, run an
+        // emergency 1h purge (regardless of UPLOAD_TTL_HOURS) and retry the
+        // write once before surfacing 503. 1h is short enough that the worst
+        // case is one user's just-uploaded image getting wiped — preferable
+        // to a wedged volume.
+        if (e?.code && DISK_FULL_CODES.has(e.code)) {
+          request.log.warn(
+            { err, target, code: e.code },
+            'upload: disk full — running emergency purge and retrying write',
+          );
+          try {
+            const purged = await purgeStaleUploads(request.log, {
+              maxAgeMs: EMERGENCY_PURGE_MAX_AGE_MS,
+            });
+            request.log.info(
+              { purged, code: e.code },
+              'upload: emergency purge complete; retrying write',
+            );
+          } catch (purgeErr) {
+            request.log.warn({ err: purgeErr }, 'upload: emergency purge failed');
+          }
+          try {
+            await writeFile(target, buf, { flag: 'wx' });
+          } catch (retryErr) {
+            request.log.error(
+              { err: retryErr, target },
+              'upload: write failed after emergency purge — returning 503',
+            );
+            try {
+              await unlink(target);
+            } catch {
+              /* best-effort */
+            }
+            return reply.code(503).send({ error: 'storage_unavailable' });
+          }
+        } else {
+          // wx (exclusive) → near-impossible collision on a nanoid; if it
+          // happens, surface a clean 500 and we'll re-roll on retry.
+          request.log.error({ err, target }, 'upload: write failed');
+          try {
+            await unlink(target);
+          } catch {
+            /* best-effort */
+          }
+          return reply.code(500).send({ error: 'storage_unavailable' });
         }
-        return reply.code(500).send({ error: 'storage_unavailable' });
       }
 
       const ttlMs = env.UPLOAD_TTL_HOURS * 60 * 60 * 1000;

@@ -70,8 +70,15 @@ const shortlistPutBodySchema = z
   })
   .strict();
 
+// polish-round-2 T2.16: optional client-generated id makes POST idempotent.
+// Shaped like the FE's `clientNanoid()` output (URL-safe alphabet, 21 chars).
+const NANOID_SHAPE = /^[A-Za-z0-9_-]{16,32}$/;
 const outfitsPostBodySchema = z
   .object({
+    id: z
+      .string()
+      .regex(NANOID_SHAPE, 'id must be a nanoid-shaped string')
+      .optional(),
     anchorProductId: z.string().trim().min(1).max(256),
     items: z.array(productSnapshotSchema).min(1).max(4),
   })
@@ -244,9 +251,11 @@ export async function sessionRoutes(app: FastifyInstance) {
           id,
           parsed.data.anchorProductId,
           parsed.data.items,
-          { maxRows: OUTFITS_MAX_ROWS },
+          { maxRows: OUTFITS_MAX_ROWS, id: parsed.data.id },
         );
-        return reply.code(200).send(saved);
+        // T2.16: same shape on first-write vs retry; FE doesn't need to
+        // distinguish (idempotent flag is informational for logs only).
+        return reply.code(200).send({ id: saved.id });
       } catch (err) {
         if (err instanceof Error && err.message === 'row_cap_exceeded') {
           return reply.code(409).send({

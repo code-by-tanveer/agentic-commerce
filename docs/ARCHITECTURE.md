@@ -146,7 +146,7 @@ The agent loop is **deterministic in its event protocol** — every tool maps to
 - `session.ts` — `GET /api/session/:id`, `GET /api/session/:id/summary`, `POST /api/session/:id/messages` (persistence checkpoint from FE).
 - `preferences.ts` — `GET /api/session/:id/preferences`, `PUT /api/session/:id/preferences/:key`.
 - `upload.ts` — `POST /api/upload` multipart, returns `{ url, expiresAt }`.
-- `health.ts` — `GET /health` for Fly.io healthchecks, returns liveness + Groq reachable boolean.
+- `health.ts` — `GET /health` for Fly.io healthchecks. **Liveness-only** — returns `{ ok: true }` if the Fastify process is up. (Reconciled in polish-round-2 T2.3 — the prior "Groq reachable boolean" claim never landed in code.) A richer `/ready` probe (Groq + MCP reachability with 1s timeouts, 10s cache) is a Stage-2 add.
 
 **Services (`backend/src/services/`)**
 - `agent.ts` — agent run loop; turn limit, tool dispatch, event emission.
@@ -402,7 +402,7 @@ type ServerEvent =
 
 | Failure                                    | What we do                                                                                                                                                                   |
 |--------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Groq 429 (rate limit)**                  | `groqClient` retries once with jittered backoff. If still 429, switch model `llama-3.3-70b-versatile` → `llama-3.1-8b-instant` for *this turn only*. Emit `error: rate_limited` with `retryable:true` if both fail. Daily-quota exhaustion surfaces an inline banner. |
+| **Groq 429 (rate limit)**                  | `groqClient` retries once with jittered backoff. If still 429, switch model `llama-3.3-70b-versatile` → `llama-3.1-8b-instant` for *this turn only* — this rescues per-minute RPM bursts. On Groq account-level daily-quota exhaustion (RPD/TPD), the `llama-3.1-8b-instant` fallback model also 429s — daily exhaust isn't a "few-second" retry. `/api/chat` returns `error code=rate_limited retryable=true`. The user-facing copy ("Hitting traffic — retrying in a few seconds") is intentionally optimistic; daily exhaust is not. A banner SSE arm that shifts copy after N consecutive 429s in M seconds is a Stage-2 add. |
 | **Groq 5xx or stream stall**               | Abort the stream, emit `error: internal`. No auto-retry inside the agent loop — the user kicks it off again. Logged with full request id.                                    |
 | **Catalog MCP 429**                        | `mcpClient` already retries 429/5xx with backoff (2 retries). If still failing, the tool returns `{ products: [], error: 'catalog_unavailable' }`. Agent receives the tool result, can recover ("I couldn't reach Shopify, try in a minute?"). |
 | **Catalog MCP timeout (>10 s)**            | Hard timeout via `AbortSignal` at the `mcpClient` level. Tool returns an error result. Same recovery path as 429.                                                            |
@@ -477,6 +477,9 @@ Triggers to move on: SQLite file > 200 MB, or daily Groq requests > 10K, or p95 
 - Per-session daily message cap (200) to bound Groq spend.
 - IP hash in `sessions.ip_hash` for forensic dedup without storing raw IPs.
 - Vision tool gated on backend-minted signed image URLs only (no SSRF risk).
+
+**Session retention.**
+- Anonymous sessions older than **90 days** (`sessions.updated_at < now - 90 days`) are deleted by a daily housekeeping job in `backend/src/index.ts`. Foreign-key `ON DELETE CASCADE` on `preferences`, `messages`, `shortlists`, and `saved_outfits` collapses the child rows in the same transaction. (polish-round-2 T2.5.)
 
 **Logs.**
 - Pino JSON logs. PII redaction list: image URLs (truncated), raw IPs (replaced by hash), Groq request bodies (truncated). User prompts are logged in full — they are not PII by themselves, and product debugging needs them. [ASSUMPTION — revisit if we add accounts.]

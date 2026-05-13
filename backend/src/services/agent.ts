@@ -6,12 +6,90 @@ import type {
   ChatCompletionToolMessageParam,
 } from 'groq-sdk/resources/chat/completions';
 import { env } from '../config/env.js';
+import { appendMessage } from '../db/repos/messages.js';
 import { listPreferences } from '../db/repos/preferences.js';
 import { Cache } from './cache.js';
 import { streamChatCompletion } from './groqClient.js';
 import type { ToolRegistry } from './toolRegistry.js';
 import type { ServerEvent } from '../stream/events.js';
 import type { PreferencesSnapshot, ToolContext } from '../types/tool.js';
+
+/**
+ * polish-round-2 T2.1: ADR-0002 compliance. The agent loop accumulates every
+ * user-visible block it emits (text deltas coalesced, tool result events
+ * passed through as-is) and persists the assembled assistant turn on every
+ * exit path — `done` writes status='done', the catch / abort branch writes
+ * status='truncated' (or 'error' for an explicit failure). The FE's
+ * `appendMessage` round-trip in `useConversation` is now defence-in-depth
+ * redundancy: if the BE persistence succeeds, the FE write is a no-op
+ * overwrite of the same shape; if either side drops, the other side has it.
+ * Do NOT remove the FE call.
+ */
+type AssistantBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_status'; toolCallId: string; name: string; args?: unknown; status: 'running' | 'done' | 'error'; errorMessage?: string }
+  | { type: 'products'; toolCallId: string; query: string; products: unknown[] }
+  | { type: 'comparison'; toolCallId: string; products: unknown[]; axes: string[] }
+  | { type: 'moodboard'; toolCallId: string; imageUrl: string; description: string; attributes: string[]; suggestedQuery: string }
+  | { type: 'outfit'; toolCallId: string; anchorProductId: string; items: unknown[]; rationales?: (string | null)[]; rationale: string };
+
+/**
+ * Append an emitted SSE event to the running assistantBlocks list. Returns a
+ * new list (immutable for traceability). Text deltas coalesce into the last
+ * text block; tool_status with the same toolCallId+name replaces the prior
+ * status frame so a running→done transition doesn't double-render on
+ * persistence-side reload.
+ */
+function appendBlock(blocks: AssistantBlock[], event: ServerEvent): AssistantBlock[] {
+  switch (event.type) {
+    case 'text_delta': {
+      const last = blocks[blocks.length - 1];
+      if (last && last.type === 'text') {
+        return [...blocks.slice(0, -1), { type: 'text', text: last.text + event.text }];
+      }
+      return [...blocks, { type: 'text', text: event.text }];
+    }
+    case 'tool_status': {
+      const next: AssistantBlock = {
+        type: 'tool_status',
+        toolCallId: event.toolCallId,
+        name: event.name,
+        args: event.args,
+        status: event.status,
+        errorMessage: event.errorMessage,
+      };
+      const idx = blocks.findIndex(
+        (b) => b.type === 'tool_status' && b.toolCallId === event.toolCallId && b.name === event.name,
+      );
+      if (idx === -1) return [...blocks, next];
+      return [...blocks.slice(0, idx), next, ...blocks.slice(idx + 1)];
+    }
+    case 'products':
+      return [...blocks, { type: 'products', toolCallId: event.toolCallId, query: event.query, products: event.products }];
+    case 'comparison':
+      return [...blocks, { type: 'comparison', toolCallId: event.toolCallId, products: event.products, axes: event.axes }];
+    case 'moodboard':
+      return [...blocks, { type: 'moodboard', toolCallId: event.toolCallId, imageUrl: event.imageUrl, description: event.description, attributes: event.attributes, suggestedQuery: event.suggestedQuery }];
+    case 'outfit':
+      return [
+        ...blocks,
+        {
+          type: 'outfit',
+          toolCallId: event.toolCallId,
+          anchorProductId: event.anchorProductId,
+          items: event.items,
+          rationales: event.rationales,
+          rationale: event.rationale,
+        },
+      ];
+    // text_delta / preference_update / reasoning_chip / error / done are
+    // either non-block side-channels (preference_update) or terminal frames
+    // (error/done) — the agent writes status separately and does not snapshot
+    // them as blocks.
+    default:
+      return blocks;
+  }
+}
 
 /**
  * Appended to the base system prompt at agent-loop start. Cycle-2 directive
@@ -26,6 +104,16 @@ extract \`palette\` or \`ethics\` — only save those when the user explicitly \
 mentions them. You can call \`get_preferences\` if the context is unclear about \
 what's already saved. When a relevant preference exists, fold it into your \
 search filters (e.g. pass \`filters.ships_to\` to \`search_catalog\`).
+
+Ethics is user-initiated (don't proactively save). When a user says \
+"I care about ethical sourcing" or names a value, map it to the closest entry \
+in this closed vocabulary: sustainable, fair-trade, organic, b-corp, \
+women-owned, small-batch, vegan, recycled. If the user names multiple, save \
+them all in a single \`save_preference\` call with \`key: "ethics"\` and \
+\`value\` as the array of mapped values (e.g. \`["fair-trade", "b-corp"]\`). \
+If a user says something vague like "ethical brands only" without naming a \
+specific value, ask one short clarifying question listing the vocabulary \
+before saving.
 
 Coordinated sets: when the user asks "what goes with X", "complete this look", \
 "pair this with", or any similar coordinated-set request, call \
@@ -48,7 +136,13 @@ export interface RunAgentOpts {
   history: ChatCompletionMessageParam[];
   system: string;
   registry: ToolRegistry;
-  emit: (event: ServerEvent) => void;
+  /**
+   * polish-round-2 T2.6: emit is async so the agent loop can apply
+   * backpressure when `SseWriter` is waiting on a `drain`. Tools that emit
+   * via `ctx.emit` (none today) get the same wrapped function — they may
+   * fire-and-forget if they prefer.
+   */
+  emit: (event: ServerEvent) => void | Promise<void>;
   signal: AbortSignal;
   log: FastifyBaseLogger;
   preferences?: PreferencesSnapshot;
@@ -67,11 +161,41 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
     history,
     system,
     registry,
-    emit,
+    emit: rawEmit,
     signal,
     log,
     cache = new Cache(),
   } = opts;
+
+  // polish-round-2 T2.1: every emit goes through this wrapper so the assistant
+  // turn snapshot stays in lockstep with the SSE stream. The block list is
+  // the exact ordered set of things the FE renders for this turn.
+  // polish-round-2 T2.6: `emit` is async — the underlying SseWriter may need
+  // to await `drain`. The agent loop awaits every emit so backpressure
+  // propagates back into the Groq stream (chunk reads naturally slow as the
+  // event loop is held on `drain`).
+  let assistantBlocks: AssistantBlock[] = [];
+  const emit = async (event: ServerEvent): Promise<void> => {
+    assistantBlocks = appendBlock(assistantBlocks, event);
+    await rawEmit(event);
+  };
+
+  const persistAssistant = async (
+    status: 'done' | 'truncated' | 'error',
+  ): Promise<void> => {
+    if (assistantBlocks.length === 0) return;
+    try {
+      await appendMessage(sessionId, {
+        role: 'assistant',
+        blocks: assistantBlocks,
+        status,
+      });
+    } catch (err) {
+      // Persistence must never break the response. FE `appendMessage` round-trip
+      // is the redundancy belt for exactly this case.
+      log.warn({ err, status, sessionId }, 'failed to persist assistant turn');
+    }
+  };
 
   // Snapshot preferences ONCE per request and freeze for the loop. Tools
   // read from ctx.preferences but never re-load — see cycle-2.md hard rule.
@@ -105,7 +229,13 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
   const ctx: ToolContext = {
     sessionId,
     log,
-    emit,
+    // No tool currently invokes ctx.emit — the registry's `toEvents` is the
+    // sanctioned path. If a future tool wants progress events, it can
+    // fire-and-forget (returned promise is ignored) since ToolContext.emit
+    // is typed `void`. The wrapped `emit` here is the canonical async one.
+    emit: (e: ServerEvent) => {
+      void emit(e);
+    },
     preferences,
     cache,
     signal,
@@ -114,7 +244,8 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
   try {
     for (let turn = 1; turn <= MAX_TURNS; turn++) {
       if (signal.aborted) {
-        emit({ type: 'error', code: 'internal', message: 'aborted', retryable: false });
+        await emit({ type: 'error', code: 'internal', message: 'aborted', retryable: false });
+        await persistAssistant('truncated');
         return;
       }
 
@@ -127,6 +258,11 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
         tools,
         tool_choice: isFinalTurn ? 'none' : 'auto',
         signal,
+        // T2.12: symmetric usage tagging — text completion path tags every
+        // call so `usage_log.jsonl` differentiates by tag, not by absence.
+        usageTag: 'text',
+        // T2.14: per-call `groq chat ok` log line with durationMs + token counts.
+        log,
       });
 
       let aggregateContent = '';
@@ -134,13 +270,16 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       let finishReason: 'stop' | 'length' | 'tool_calls' | 'function_call' | null = null;
 
       for await (const chunk of stream) {
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          await persistAssistant('truncated');
+          return;
+        }
         const choice = chunk.choices?.[0];
         if (!choice) continue;
         const delta = choice.delta;
         if (delta?.content) {
           aggregateContent += delta.content;
-          emit({ type: 'text_delta', text: delta.content });
+          await emit({ type: 'text_delta', text: delta.content });
         }
         if (delta?.tool_calls) {
           for (const tc of delta.tool_calls) {
@@ -185,7 +324,8 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       if (finishReason === 'tool_calls' || orderedToolCalls.length > 0) {
         if (isFinalTurn) {
           // Should not happen — tool_choice=none on final turn — but defend.
-          emit({ type: 'done', turnsUsed });
+          await emit({ type: 'done', turnsUsed });
+          await persistAssistant('done');
           return;
         }
 
@@ -197,7 +337,7 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
           } catch {
             parsedArgs = { __raw: tc.argsText };
           }
-          emit({
+          await emit({
             type: 'tool_status',
             toolCallId: tc.id,
             name: tc.name,
@@ -242,9 +382,9 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
           const errored = events.some(
             (e) => e.type === 'tool_status' && e.status === 'error',
           );
-          for (const e of events) emit(e);
+          for (const e of events) await emit(e);
           if (!errored) {
-            emit({
+            await emit({
               type: 'tool_status',
               toolCallId: tc.id,
               name: tc.name,
@@ -266,32 +406,39 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
 
       // No tool calls — model has produced a text answer.
       if (finishReason === 'stop' || finishReason === 'length' || finishReason === null) {
-        emit({ type: 'done', turnsUsed });
+        await emit({ type: 'done', turnsUsed });
+        await persistAssistant('done');
         return;
       }
 
       // Unknown finish reason: end gracefully.
-      emit({ type: 'done', turnsUsed });
+      await emit({ type: 'done', turnsUsed });
+      await persistAssistant('done');
       return;
     }
 
     // Hit max turns without resolution.
-    emit({ type: 'done', turnsUsed });
+    await emit({ type: 'done', turnsUsed });
+    await persistAssistant('done');
   } catch (err) {
     if (signal.aborted) {
-      // FE bailed; don't emit (the stream is closed anyway).
+      // FE bailed; don't emit (the stream is closed anyway). Persist whatever
+      // we'd accumulated as `truncated` so reload-history reflects the real
+      // mid-stream state per ADR-0002.
+      await persistAssistant('truncated');
       return;
     }
     // Full raw error (stack + cause) goes to the log at error level. Only
     // the sanitized one-liner ships over SSE — Cycle 1 D2 security finding.
     log.error({ err }, 'agent loop failed');
     const mapped = classifyError(err);
-    emit({
+    await emit({
       type: 'error',
       code: mapped.code,
       message: mapped.message,
       retryable: mapped.retryable,
     });
+    await persistAssistant('error');
   }
 }
 

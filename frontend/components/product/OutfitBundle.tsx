@@ -30,10 +30,18 @@ import { ProductImage } from './ProductImage';
 interface Props {
   anchorProductId: string;
   items: Product[];
+  // Round 2 polish: parallel to `items` (length matches when present;
+  // `rationales[i]` is the per-item provenance for `items[i]` from the
+  // backend's `recommend_outfit` tool — same merchant, shared tags, similar
+  // price band, shared shipping region). May be `null` per element when no
+  // real signal supports it. `undefined` overall means the BE didn't ship a
+  // rationales array (older events / fallback path) — render nothing per
+  // cell, which preserves the prior visual exactly.
+  rationales?: (string | null)[];
   rationale?: string;
 }
 
-export function OutfitBundle({ anchorProductId, items, rationale }: Props) {
+export function OutfitBundle({ anchorProductId, items, rationales, rationale }: Props) {
   const shortlist = useOptionalShortlist();
   const reduce = useReducedMotion();
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -100,12 +108,22 @@ export function OutfitBundle({ anchorProductId, items, rationale }: Props) {
         {cells.length === 3 ? (
           // 1 + 2: hero spans both columns, then two below.
           <>
-            <BundleCell product={cells[0]} className="col-span-2" />
-            <BundleCell product={cells[1]} />
-            <BundleCell product={cells[2]} />
+            <BundleCell
+              product={cells[0]}
+              rationale={rationales?.[0] ?? null}
+              className="col-span-2"
+            />
+            <BundleCell product={cells[1]} rationale={rationales?.[1] ?? null} />
+            <BundleCell product={cells[2]} rationale={rationales?.[2] ?? null} />
           </>
         ) : (
-          cells.map((p) => <BundleCell key={p.id} product={p} />)
+          cells.map((p, i) => (
+            <BundleCell
+              key={p.id}
+              product={p}
+              rationale={rationales?.[i] ?? null}
+            />
+          ))
         )}
       </div>
 
@@ -150,11 +168,28 @@ export function OutfitBundle({ anchorProductId, items, rationale }: Props) {
 // ProductCard has.
 // ---------------------------------------------------------------------------
 
-function BundleCell({ product, className }: { product: Product; className?: string }) {
-  // The bundle-level rationale lives at the parent; per-cell rationale comes
-  // from the first reasoning chip's `detail` (or `label` as a fallback).
+function BundleCell({
+  product,
+  rationale,
+  className,
+}: {
+  product: Product;
+  // Round 2: explicit per-item rationale from the `outfit` event's parallel
+  // `rationales[i]` array. `null` → no real signal — skip the line cleanly
+  // rather than render a misleading chip-derived placeholder. `undefined` →
+  // backwards-compat path (older event without the parallel array) — fall
+  // back to the first reasoning chip's detail/label as before.
+  rationale: string | null;
+  className?: string;
+}) {
+  // Prefer the explicit per-cell rationale from the outfit event. When it's
+  // explicitly `null` we render nothing (skip cleanly); when it's `undefined`
+  // (legacy event without a parallel array) we keep the prior chip fallback
+  // so the cell visual doesn't regress.
   const firstChip = product.reasoningChips?.[0];
-  const cellRationale = firstChip?.detail || firstChip?.label;
+  const chipFallback = firstChip?.detail || firstChip?.label;
+  const cellRationale =
+    rationale === null ? undefined : (rationale ?? chipFallback);
 
   function open() {
     if (!product.checkoutUrl) return;

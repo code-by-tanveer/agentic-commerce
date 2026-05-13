@@ -52,9 +52,13 @@ export default function Page() {
               {/* PreferencesCard — sticky above the InputBar on desktop
                   (sm+), collapsed one-line trigger on mobile. Both
                   variants live in the same component (DESIGN.md §4
-                  PreferencesCard). 104px = ~InputBar height + breathing
-                  room (Cycle 2 design review). */}
-              <div className="sticky bottom-[104px] z-10 mx-auto w-full max-w-3xl px-4 pb-2">
+                  PreferencesCard).
+                  R2/T2.8 — the sticky offset reads `--input-bar-height`,
+                  which `useInputBarHeight` (attached to the InputBar outer
+                  wrapper) keeps in sync with the real measured height as
+                  the textarea auto-grows. `100px` is the pre-hydrate /
+                  no-JS fallback (~one-row InputBar). */}
+              <div className="sticky bottom-[var(--input-bar-height,100px)] z-10 mx-auto w-full max-w-3xl px-4 pb-2">
                 <PreferencesCard />
               </div>
               <InputBar />

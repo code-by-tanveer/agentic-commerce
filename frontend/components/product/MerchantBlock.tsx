@@ -1,7 +1,8 @@
 'use client';
 
-import { Star, Store, Truck, Leaf, RefreshCcw } from 'lucide-react';
+import { MapPin, Star, Store, Truck, Leaf, RefreshCcw } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { originCountryDisplay } from '@/lib/country';
 import type { MerchantInfo } from '@/types/product';
 
 // ---------------------------------------------------------------------------
@@ -66,7 +67,14 @@ export function MerchantBlock({ info, className }: Props) {
   if (info.rating == null) missing.push('rating');
   if (!info.returnsPolicy) missing.push('return policy');
   if (!info.shippingDays) missing.push('shipping speed');
+  // Round 2 polish (T2.11, persona-sasha): country-of-origin is a load-bearing
+  // signal for values-led shoppers (Sasha: "Made in: IT vs Made in PRC — same
+  // product card today"). When absent, we list it alongside the other missing
+  // fields rather than render a placeholder — same "merchant didn't publish
+  // this" trust pattern (PRODUCT.md acceptance #5) the rest of the block uses.
+  if (!info.originCountry) missing.push('country of origin');
   // carbon is "optional" per spec — absence isn't worth flagging.
+  const originDisplay = originCountryDisplay(info.originCountry);
 
   return (
     <div
@@ -102,6 +110,13 @@ export function MerchantBlock({ info, className }: Props) {
         <p className="inline-flex items-center gap-1 text-xs text-ink-600">
           <Truck className="h-3 w-3 text-ink-400" aria-hidden />
           {info.shippingDays}
+        </p>
+      ) : null}
+
+      {originDisplay ? (
+        <p className="inline-flex items-center gap-1 text-xs text-ink-600">
+          <MapPin className="h-3 w-3 text-ink-400" aria-hidden />
+          Made in {originDisplay}
         </p>
       ) : null}
 

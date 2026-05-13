@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import Groq from 'groq-sdk';
 import type {
   ChatCompletion,
@@ -12,6 +13,16 @@ import { env } from '../config/env.js';
 
 const client = new Groq({ apiKey: env.GROQ_API_KEY });
 
+/**
+ * polish-round-2 T2.14: minimal logger surface so this module doesn't need to
+ * import FastifyBaseLogger (cyclic-friendly). Callers pass through their
+ * route/ctx logger; absence is fine — usage logging stays on stdout-less.
+ */
+export interface GroqLog {
+  info: (obj: Record<string, unknown>, msg?: string) => void;
+  warn: (obj: Record<string, unknown>, msg?: string) => void;
+}
+
 export interface StreamChatOpts {
   model?: string;
   messages: ChatCompletionMessageParam[];
@@ -23,6 +34,8 @@ export interface StreamChatOpts {
   signal?: AbortSignal;
   /** Free-form tag forwarded into usage_log.jsonl so we can break out vision vs chat spend (cycle-4.md open question Q3). */
   usageTag?: string;
+  /** polish-round-2 T2.14: when supplied, emits a `groq chat ok` log line at completion. */
+  log?: GroqLog;
 }
 
 export interface NonStreamChatOpts extends Omit<StreamChatOpts, never> {
@@ -81,6 +94,9 @@ export async function streamChatCompletion(
 ): Promise<AsyncIterable<ChatCompletionChunk> & { model: string }> {
   const primary = opts.model ?? env.GROQ_MODEL;
   const fallback = env.GROQ_FALLBACK_MODEL;
+  const tag = opts.usageTag;
+  const log = opts.log;
+  const startedAt = performance.now();
 
   const tryOnce = async (model: string) =>
     client.chat.completions.create(
@@ -96,22 +112,21 @@ export async function streamChatCompletion(
       { signal: opts.signal },
     );
 
-  const tag = opts.usageTag;
   try {
     const stream = await tryOnce(primary);
-    return wrapStream(stream, primary, tag);
+    return wrapStream(stream, primary, tag, log, startedAt);
   } catch (err) {
     if (!isRetriable(err)) throw err;
     // retry once with jitter
     await new Promise((r) => setTimeout(r, jitter(400)));
     try {
       const stream = await tryOnce(primary);
-      return wrapStream(stream, primary, tag);
+      return wrapStream(stream, primary, tag, log, startedAt);
     } catch (err2) {
       if (!isRetriable(err2) || primary === fallback) throw err2;
       // fallback model — single attempt
       const stream = await tryOnce(fallback);
-      return wrapStream(stream, fallback, tag);
+      return wrapStream(stream, fallback, tag, log, startedAt);
     }
   }
 }
@@ -119,16 +134,37 @@ export async function streamChatCompletion(
 function wrapStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   model: string,
-  tag?: string,
+  tag: string | undefined,
+  log: GroqLog | undefined,
+  startedAt: number,
 ): AsyncIterable<ChatCompletionChunk> & { model: string } {
   // Tap to record usage when the final chunk arrives.
   const tapped = (async function* () {
+    let finalUsage: ChatCompletion['usage'] | undefined;
     for await (const chunk of stream) {
       // The chunk's `usage` field (when present) reflects cumulative usage at
       // stream end on Groq's OpenAI-shape stream.
       const usage = (chunk as ChatCompletionChunk & { usage?: ChatCompletion['usage'] }).usage;
-      if (usage) void recordUsage(model, usage, tag ? { mode: 'stream', tag } : { mode: 'stream' });
+      if (usage) {
+        finalUsage = usage;
+        void recordUsage(model, usage, tag ? { mode: 'stream', tag } : { mode: 'stream' });
+      }
       yield chunk;
+    }
+    // polish-round-2 T2.14: emit a single durations + tokens log line per call
+    // (after the stream is fully consumed).
+    if (log) {
+      const durationMs = Math.round(performance.now() - startedAt);
+      log.info(
+        {
+          model,
+          durationMs,
+          promptTokens: finalUsage?.prompt_tokens,
+          completionTokens: finalUsage?.completion_tokens,
+          usageTag: tag,
+        },
+        'groq chat ok',
+      );
     }
   })();
   return Object.assign(tapped, { model });
@@ -140,6 +176,7 @@ function wrapStream(
 export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompletion> {
   const primary = opts.model ?? env.GROQ_MODEL;
   const fallback = env.GROQ_FALLBACK_MODEL;
+  const startedAt = performance.now();
 
   const tryOnce = (model: string) =>
     client.chat.completions.create(
@@ -171,5 +208,19 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
     }
   }
   void recordUsage(model, resp.usage, opts.usageTag ? { mode: 'sync', tag: opts.usageTag } : { mode: 'sync' });
+  // polish-round-2 T2.14: same shape as the streaming log line, emitted once.
+  if (opts.log) {
+    const durationMs = Math.round(performance.now() - startedAt);
+    opts.log.info(
+      {
+        model,
+        durationMs,
+        promptTokens: resp.usage?.prompt_tokens,
+        completionTokens: resp.usage?.completion_tokens,
+        usageTag: opts.usageTag,
+      },
+      'groq chat ok',
+    );
+  }
   return resp;
 }

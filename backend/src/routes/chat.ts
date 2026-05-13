@@ -159,6 +159,8 @@ export async function chatRoutes(app: FastifyInstance) {
         history,
         system: SYSTEM_PROMPT,
         registry,
+        // T2.6: writer.write is async (awaits drain on backpressure); the
+        // agent loop awaits this so backpressure propagates upstream.
         emit: (e) => writer.write(e),
         signal: controller.signal,
         log: request.log,
@@ -172,7 +174,7 @@ export async function chatRoutes(app: FastifyInstance) {
       // safety net for everything that escapes it.
       request.log.error({ err }, 'chat route failed');
       try {
-        writer.write({
+        await writer.write({
           type: 'error',
           code: 'internal',
           message: 'Something went wrong on our side. Try again?',

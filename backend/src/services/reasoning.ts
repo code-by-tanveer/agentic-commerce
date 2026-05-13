@@ -1,12 +1,18 @@
+import { ETHICS_SYNONYMS, isEthicsValue, type EthicsValue } from '@agentic/events';
 import type { NormalizedProduct, ReasoningChip } from '../types/product.js';
 import type { PreferenceEntrySnapshot, PreferencesSnapshot } from '../types/tool.js';
 
 /**
  * Pure rules-engine for product reasoning chips. NO DB, NO MCP, NO logging.
  * Given a product + a preferences snapshot, return ≤4 chips ranked by signal
- * strength per cycle-2.md, with Cycle 7 polish adding `fast_shipping`:
+ * strength. Round 2 polish (T2.10, persona-sasha) promotes `ethics` above
+ * `shipping`: for a values-led shopper who has explicitly saved one or more
+ * ethics values, ethics belongs in the visible top-4 even when shipping has
+ * a chip to fire. `MAX_CHIPS = 4`, so the prior tail position meant ethics
+ * was the first thing sliced off the chip strip — the exact wrong order for
+ * the persona who set the preference. New rank:
  *
- *   size_match > discount > price > fast_shipping > shipping > ethics
+ *   size_match > discount > price > fast_shipping > ethics > shipping
  *
  * Tests for this file should be trivial — feed in fixtures, assert on the
  * returned array. See cycle-2.md "Backend engineer" hard rules.
@@ -19,8 +25,9 @@ const RANK: Record<string, number> = {
   discount: 1,
   price: 2,
   fast_shipping: 3,
-  shipping: 4,
-  ethics: 5,
+  // Round 2: ethics promoted above shipping. See header comment.
+  ethics: 4,
+  shipping: 5,
 };
 
 // Cycle 7 polish (T1.35): the gift-deadline persona needs a quick visual cue
@@ -152,24 +159,46 @@ function shippingChip(product: NormalizedProduct, prefs: PreferencesSnapshot): R
 }
 
 function ethicsChip(product: NormalizedProduct, prefs: PreferencesSnapshot): ReasoningChip | null {
+  // Round 2 polish (T2.10): `prefs.ethics` is expected to be `EthicsValue[]`
+  // (a closed vocabulary; see `@agentic/events::ETHICS_VALUES`). We accept a
+  // bare string defensively for back-compat with any preference rows written
+  // by Round 1's free-text path. Each preferred value walks
+  // `ETHICS_SYNONYMS[value]` and a case-insensitive substring match against
+  // any of the product's `merchantTags` entries fires the chip. The chip
+  // detail names BOTH the matched tag and the user's preference so the
+  // shopper can verify *why* the chip fired — opaque "matches your values"
+  // copy was the prior persona-sasha complaint.
   const wantedRaw = readValue<unknown>(prefs, 'ethics');
-  if (!wantedRaw) return null;
-  const wanted: string[] = Array.isArray(wantedRaw)
-    ? wantedRaw.filter((s): s is string => typeof s === 'string').map((s) => s.toLowerCase())
+  if (wantedRaw == null) return null;
+
+  const wantedRawArr: unknown[] = Array.isArray(wantedRaw)
+    ? wantedRaw
     : typeof wantedRaw === 'string'
-      ? [wantedRaw.toLowerCase()]
+      ? [wantedRaw]
       : [];
+  const wanted: EthicsValue[] = wantedRawArr.filter(isEthicsValue);
   if (wanted.length === 0) return null;
-  const tags = (product.merchantTags ?? []).map((t) => t.toLowerCase());
+
+  const tags = product.merchantTags ?? [];
   if (tags.length === 0) return null;
-  const hit = wanted.find((w) => tags.includes(w));
-  if (!hit) return null;
-  return {
-    kind: 'ethics',
-    label: hit,
-    detail: `Merchant lists "${hit}" — matches your saved values.`,
-    tone: 'positive',
-  };
+  const tagsLower = tags.map((t) => t.toLowerCase());
+
+  for (const value of wanted) {
+    const synonyms = ETHICS_SYNONYMS[value];
+    for (const syn of synonyms) {
+      const s = syn.toLowerCase();
+      const hitIdx = tagsLower.findIndex((t) => t.includes(s));
+      if (hitIdx === -1) continue;
+      const matchedTag = tags[hitIdx];
+      return {
+        kind: 'ethics',
+        label: `Matches ${value}`,
+        detail: `Tag '${matchedTag}' matches your '${value}' preference`,
+        tone: 'positive',
+      };
+    }
+  }
+  return null;
 }
 
 export function computeChips(

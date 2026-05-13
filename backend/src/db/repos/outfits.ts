@@ -45,6 +45,12 @@ const insertStmt = () =>
      VALUES (@id, @session_id, @anchor_product_id, @items_json, @saved_at)`,
   );
 
+const findByIdStmt = () =>
+  db.prepare<[string, string]>(
+    'SELECT id, session_id, anchor_product_id, items_json, saved_at ' +
+      'FROM saved_outfits WHERE session_id = ? AND id = ?',
+  );
+
 const deleteStmt = () =>
   db.prepare<[string, string]>(
     'DELETE FROM saved_outfits WHERE session_id = ? AND id = ?',
@@ -61,19 +67,33 @@ const countStmt = () =>
     'SELECT COUNT(*) AS n FROM saved_outfits WHERE session_id = ?',
   );
 
+/**
+ * polish-round-2 T2.16: accepts an optional caller-supplied `id` so retries on
+ * a transient 502 don't duplicate the saved outfit. If a row with this id +
+ * session already exists we return its id unchanged. Without `opts.id` the
+ * prior nanoid behaviour is preserved.
+ */
 export async function saveOutfit(
   sessionId: string,
   anchorProductId: string,
   items: unknown,
-  opts: { maxRows?: number } = {},
-): Promise<{ id: string }> {
+  opts: { maxRows?: number; id?: string } = {},
+): Promise<{ id: string; idempotent: boolean }> {
+  if (opts.id) {
+    const existing = findByIdStmt().get(sessionId, opts.id) as RawRow | undefined;
+    if (existing) {
+      // Same id, same session → caller is retrying. Return the existing row
+      // id without re-inserting and without counting toward the row cap.
+      return Promise.resolve({ id: existing.id, idempotent: true });
+    }
+  }
   if (opts.maxRows !== undefined) {
     const row = countStmt().get(sessionId) as { n: number } | undefined;
     if ((row?.n ?? 0) >= opts.maxRows) {
       throw new Error('row_cap_exceeded');
     }
   }
-  const id = nanoid();
+  const id = opts.id ?? nanoid();
   const savedAt = new Date().toISOString();
   insertStmt().run({
     id,
@@ -82,7 +102,7 @@ export async function saveOutfit(
     items_json: JSON.stringify(items ?? []),
     saved_at: savedAt,
   });
-  return Promise.resolve({ id });
+  return Promise.resolve({ id, idempotent: false });
 }
 
 export async function deleteOutfit(

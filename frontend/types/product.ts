@@ -42,6 +42,12 @@ export interface MerchantInfo {
   returnsPolicy?: ReturnsPolicyKind;
   shippingDays?: string;      // free-form, e.g. "Ships in 2-3 days"
   carbon?: string;            // free-form, e.g. "Ships carbon-neutral"
+  // Round 2 polish (T2.11, persona-sasha). Backend `normalize.ts` reads from
+  // `country_of_origin` / `origin_country` / `country` / `made_in`. Uppercase
+  // ISO-3166 alpha-2 when the upstream looks like a code; verbatim string
+  // otherwise. Absent → MerchantBlock surfaces the existing
+  // "merchant didn't publish this" line (PRODUCT.md acceptance #5).
+  originCountry?: string;
 }
 
 export interface Product {

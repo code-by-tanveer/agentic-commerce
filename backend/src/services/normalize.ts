@@ -32,6 +32,14 @@ interface RawMerchant {
   carbon?: string;
   carbon_estimate?: string;
   tags?: string[];
+  // Round 2 polish (T2.11, persona-sasha): merchants publish provenance under
+  // several spellings depending on their Shopify metafield convention. We
+  // accept the common four and let `pickOriginCountry` pick whichever the
+  // upstream MCP actually populated.
+  country_of_origin?: string;
+  origin_country?: string;
+  country?: string;
+  made_in?: string;
 }
 
 interface RawProduct {
@@ -56,6 +64,13 @@ interface RawProduct {
   returns_policy?: string;
   shipping_days?: string;
   carbon?: string;
+  // Round 2 polish (T2.11): some MCPs surface country at product level rather
+  // than merchant level (a single merchant ships goods made in multiple
+  // countries). Accept both placements and prefer product-level if present.
+  country_of_origin?: string;
+  origin_country?: string;
+  country?: string;
+  made_in?: string;
 }
 
 function parseMoney(value: unknown): { amount: number; currency: string } {
@@ -141,6 +156,34 @@ function pickMerchantObject(raw: RawProduct): RawMerchant | undefined {
   return undefined;
 }
 
+// Round 2 polish (T2.11): pull a country-of-origin string from any of the
+// common Shopify metafield spellings, preferring product-level over merchant-
+// level (a merchant may ship goods made in multiple countries). When the raw
+// value looks like an ISO-3166 alpha-2 code (length 2 + letters only), we
+// uppercase it so the FE display-name lookup is deterministic; otherwise the
+// raw string is passed through verbatim — the FE renders "Made in {x}"
+// without enforcing a vocabulary, and the caller can still read free-form
+// strings like "northern Italy" or "EU".
+function pickOriginCountry(raw: RawProduct, m: RawMerchant | undefined): string | undefined {
+  const candidate =
+    raw.country_of_origin ??
+    raw.origin_country ??
+    raw.country ??
+    raw.made_in ??
+    m?.country_of_origin ??
+    m?.origin_country ??
+    m?.country ??
+    m?.made_in ??
+    undefined;
+  if (typeof candidate !== 'string') return undefined;
+  const trimmed = candidate.trim();
+  if (trimmed.length === 0) return undefined;
+  if (trimmed.length === 2 && /^[A-Za-z]{2}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  return trimmed;
+}
+
 function pickMerchantInfo(raw: RawProduct, name: string): MerchantInfo {
   const m = pickMerchantObject(raw);
   const info: MerchantInfo = { name };
@@ -167,6 +210,9 @@ function pickMerchantInfo(raw: RawProduct, name: string): MerchantInfo {
 
   const carbon = m?.carbon ?? m?.carbon_estimate ?? raw.carbon ?? undefined;
   if (carbon) info.carbon = carbon;
+
+  const originCountry = pickOriginCountry(raw, m);
+  if (originCountry) info.originCountry = originCountry;
 
   return info;
 }
