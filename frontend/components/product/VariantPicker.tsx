@@ -34,6 +34,11 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
   if (!groups.length) {
     // Plain variant list when there are no structured options.
     // T1.30 — gap-1.5 → gap-2 (no decimal spacing).
+    // Cycle 7 polish — focus-visible ring per DESIGN.md §7 ("Every
+    // interactive element gets a visible focus ring"); strikethrough on
+    // unavailable variants per DESIGN.md §4 VariantPicker ("option-
+    // unavailable (struck through)"). The previous opacity-only treatment
+    // missed the spec and read as "loading", not "unavailable".
     return (
       <div className="flex flex-wrap gap-2">
         {variants.map((v) => {
@@ -49,12 +54,14 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
                 onSelect(v.id);
               }}
               disabled={!v.available}
+              aria-disabled={!v.available}
               className={cn(
                 'rounded-full border px-3 py-1 text-xs transition',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                 active
                   ? 'border-ink-900 bg-ink-900 text-white'
                   : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
-                !v.available && 'opacity-40',
+                !v.available && 'cursor-not-allowed text-ink-400 line-through opacity-60',
               )}
             >
               {v.title}
@@ -94,6 +101,14 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
           <div className="flex flex-wrap gap-2">
             {group.values.map((value) => {
               const active = selected?.options?.[group.name] === value;
+              // Cycle 7 — surface unavailable value-combos (no matching variant
+              // is available across the current selection). Struck-through per
+              // DESIGN.md §4 VariantPicker. The button still selects so users
+              // can pivot to that value and see other axes update.
+              const matched = variants.find(
+                (v) => v.options?.[group.name] === value,
+              );
+              const isUnavailable = matched ? !matched.available : false;
               return (
                 <button
                   key={value}
@@ -104,11 +119,15 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
                     e.stopPropagation();
                     chooseValue(group.name, value);
                   }}
+                  aria-pressed={active}
                   className={cn(
                     'rounded-full border px-3 py-1 text-xs transition',
+                    // DESIGN.md §7 — visible focus ring on `:focus-visible`.
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                     active
                       ? 'border-ink-900 bg-ink-900 text-white'
                       : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
+                    isUnavailable && 'text-ink-400 line-through',
                   )}
                 >
                   {value}

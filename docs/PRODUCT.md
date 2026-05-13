@@ -36,6 +36,7 @@ Agentic Commerce is a conversational shopping companion built on the Shopify Cat
 
 - **"Jordan, the gift-giver under deadline" (32, parent, 4 gifts/year on hard deadlines).** Wants *one* good answer fast and a confidence signal it'll arrive in time. Incumbents fail by burying shipping-speed estimates two clicks deep.
 - **"Sasha, the values-led shopper" (28, EU, cares about provenance, returns, carbon).** Wants merchant transparency surfaced *before* clicking out. Incumbents fail by treating ethics as a niche filter, not a default chip.
+- **"Priya, the Indian English-speaking early tester" (29, Bengaluru/NCR, code-switches Hinglish, ships-to IN).** Added 2026-05-13: friends-of-the-builder cohort skews here, so they are the actual first-test demographic, not US/EU Mara. Reads English fluently but expects INR-aware budget chips, "ships to India" surfaced as a first-class merchant filter, and tolerates 14-day shipping when the merchant is honest about it. Incumbents fail by defaulting to USD price strings and hiding ships-to until checkout. Treat this persona as a launch-blocker for the validation plan in §4 — not an i18n stretch goal.
 
 ---
 
@@ -61,6 +62,26 @@ The PO considered making this conjunctive ("shortlist ≥2 AND tap ≥1 chip det
 - **Median time-to-first-shortlist** (seconds from session start). Target: < 90s. Reflects whether the agent gets to "good enough to consider" fast.
 - **Reasoning-chip tap rate** (taps per product card shown). **Guard, not north-star.** Target: ≥ 0.3. If users never tap the chips, the transparency move isn't earning its space — kill or redesign.
 - **Session share rate** (`/s/[id]` opens per session). Target: ≥ 5%. Distribution loop health.
+
+### Pre-launch validation plan (added 2026-05-13)
+
+The north-star above is a *post-launch* signal; the gate for *whether to launch* is qualitative. Before public launch we will run the live app past **at least 3 real friends-of-the-builder** (primary cohort: Priya-shaped, see §3) and capture their unmoderated first-five-minutes session.
+
+What to ask each tester (no script beyond these five prompts, in order):
+1. "Open the URL on your phone. Type something you'd actually shop for. Don't ask me anything for 5 minutes."
+2. "What did you think the app was, before you typed?"
+3. "Walk me through what you saw. Anything confusing, broken, or boring?"
+4. "Would you share this session with a friend right now? Why or why not?"
+5. "Would you come back tomorrow if a friend texted you this link?"
+
+What to measure (recorded by the observer, not the tester):
+- **Time-to-first-shortlist** in seconds (manual stopwatch). Target: < 120s on mobile.
+- **Tool-call visibility complaint** (yes/no): did the tester ask "what is it doing?" while it streamed.
+- **Stuck/abandon points**: every moment the tester paused > 10s without typing or tapping.
+- **Share-attempt** (yes/no): did they spontaneously hit Share or screenshot.
+- **Comeback-intent** (yes/no/maybe): verbal answer to prompt 5.
+
+Green-light threshold for launch: **≥ 2 of 3 testers shortlist ≥ 2 products in their first 5 minutes, AND ≥ 2 of 3 answer "yes" to comeback-intent, AND zero testers hit a stream-state error that requires reload.** Anything weaker is iterate-not-launch.
 
 ---
 
@@ -131,6 +152,19 @@ Be ruthless. If a feature isn't on this list and isn't in the seven moves, we do
 - **No persistent accounts before sustained 5k MAU.** The anti-account stance in §6 is correct at our reach. Trigger to revisit (Q7): month-12 MAU > 5k sustained. Until then, anonymous sessions + cookie are the identity; an opt-in Pro tier with cross-device sync waits behind an ADR re-opening this stance.
 - **No silent IP-geo inference.** We never use `request.ip` to set `prefs.ships_to`. The user's shipping country comes from explicit preference, the request's `Accept-Language` header, or the cookie state — in that order. Per ADR-0005 + Aleksey's R4 audit: silent geolocation is the kind of "AI assumes" the trust-led wedge actively distrusts.
 
+### Cycle 7 anti-goals (added 2026-05-13)
+
+Even though the core now runs, the launch-prep cycle still says no to a long list. Spelling out the boundary so a reviewer can reject a PR by pointing at this section:
+
+- **No accounts, no login, no email capture.** Chat history (the Cycle-7 AC) lives in the existing anonymous cookie. We do not add a sign-up flow, magic links, OAuth, or any "save your shortlist to your account" affordance.
+- **No payment, no checkout UI, no card form.** The Buy button is and remains a redirect to the merchant's Shopify-hosted page. Trust copy clarifies currency/country (Cycle-7 AC) but we never collect a payment method or render a price-confirm step.
+- **No per-card client analytics tracking.** No Segment, no Mixpanel events per chip-tap, no third-party pixel on the share page. The north-star is computed server-side from session events we already log; granular product-level click telemetry is out of scope and out of line with the transparency wedge.
+- **No push notifications, no email digests, no "we found new things for you".** One-shot pull-only sessions. Re-engagement is a Stage-2 question.
+- **No multi-device sync.** Cookie is the identity (§6). A user opening the app on a second device sees a fresh session by design.
+- **No new MCP integrations beyond Shopify Catalog.** No Etsy, no eBay, no Faire — even if a friend-of-the-builder asks. The wedge is "Shopify merchants done right", not "every store on the internet".
+- **No new languages, no RTL, no i18n bundles.** Priya (§3) reads English fluently; that is enough to validate. Localised UI strings are Stage-2.
+- **No A/B testing infrastructure.** With <100 testers planned in the validation window, A/B is noise. Decisions are made by reading transcripts, not p-values.
+
 ---
 
 ## 7. Cycle goals — what the user will *experience*
@@ -144,6 +178,13 @@ One line per cycle, framed as user-visible outcomes. Implementation tasks belong
 - **Cycle 4 — Phase C-2:** "The chat sees what I see." User pastes a screenshot from Instagram or Pinterest; within seconds, similar products land in the canvas with the extracted style attributes visible and editable.
 - **Cycle 5 — Phase D:** "I can show this to a friend." User hits "share session"; a polished public lookbook page opens with their shortlist, merchants, and recap, OG-tagged for clean previews on iMessage / Twitter / Slack. Mobile polish + a11y done.
 - **Cycle 6 — Hardening:** No new visible features. Stream latency, error states, Lighthouse ≥90 mobile, security review clean. The app feels *finished*.
+- **Cycle 7 — Pre-launch sharpening (added 2026-05-13):** "The chat remembers our last conversations, tells me where I'm buying from, and never goes blank on me." Five user-visible outcomes, each a PASS/FAIL acceptance criterion:
+
+  1. **Chat history (last 5 chats).** On the same device/cookie, the user can open a left-rail menu listing their **last 5 chat sessions** (title = first user message truncated to 60 chars, plus relative timestamp), pick any one, and see the prior turns restored — messages, shortlist, view-mode, preferences — within 500ms of click; sessions older than 90 days are dropped server-side; switching sessions clears in-flight streams cleanly. (Confirms the gap at `frontend/hooks/useConversation.tsx:144-149` where only sessionId + view-mode + shortlist + preferences round-trip — not messages.)
+  2. **Pair-with feedback signal end-to-end.** When the user accepts or rejects a bundle item from a Pair-with card, the choice is written to the session preference store as `outfit_signal: {product_id, decision, anchor_id, ts}`, surfaces as a "you said no to leather belts here" hint on the next Pair-with for the same anchor category, and is visible/clearable from the About-you panel; the heuristic in `outfitCategories.ts` is not changed in Cycle 7 — only the feedback channel is wired.
+  3. **Empty-state "no results" component.** When the catalog query returns zero products (after filtering by the user's prefs), the chat renders a single dedicated `<NoResults>` component with three actionable affordances ("relax a filter", "broaden the query", "show me anyway without ships-to") rather than letting the model improvise prose; the affordances dispatch real follow-up turns; the component is rendered iff `products.length === 0` in the final tool call, never on partial results.
+  4. **Buy-button trust copy (currency + country).** Every product card's CTA reads `Buy on {merchantName} ({currency}, ships to {country})` where currency is taken from the catalog payload and country is the merchant's primary ships-to (or "ships worldwide" if the array contains 5+ countries); when either field is absent the CTA degrades to `Buy on {merchantName}` with a tooltip "merchant didn't publish this", never a guess; copy is visible on hover *and* on mobile tap.
+  5. **Moodboard image visible to the user.** When a user uploads an image, the input bar and the resulting assistant turn both show a small thumbnail of *their own* image (rendered from a same-origin `/api/uploads/[token]` proxy, not the raw `signed:<token>` URL) so they can confirm which photo drove the search; thumbnail is removable; if the proxy fails the chip-attribute UI still works and the failure is acknowledged inline.
 
 ### Beyond Cycle 6 — observe → defend → monetize → specialise
 

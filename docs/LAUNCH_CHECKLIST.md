@@ -240,6 +240,43 @@ User-visible outcome: "I can show this to a friend". Hit share; a polished publi
 
 ---
 
+## Cycle 7 — Soft-launch substrate (no new features) ◻
+
+Owner: Process Manager. Opened 2026-05-13T19:30Z.
+
+User-visible outcome: **"I can text the URL to 5 friends and watch them use it for an hour."** Today the app boots and serves real Shopify + real Groq on `localhost` only — no public origin, no observability, no abuse cap calibrated for strangers, no support channel. This cycle closes only those gaps. It ships **no new features and no UI changes**.
+
+Reading order before starting:
+- `docs/ARCHITECTURE.md` §7 (failure modes — esp. Groq daily quota row) and §8 (Stage-1 == single Fly machine, do not pre-scale).
+- `docs/DEPLOY.md` §2 (Fly recipe is the documented target; Cloudflare Tunnel from WSL is the **free, no-card** soft-launch substitute the user asked for).
+- The Cycle 6 retrospective (`docs/CYCLES/cycle-6.md`) for the daily-quota runbook context.
+
+### Acceptance criteria
+
+- [ ] **Public origin exists.** A single HTTPS URL routes to both the backend SSE endpoint and the Next.js frontend, with no port number in the path the tester sees. (Cloudflare Tunnel from WSL is the chosen substrate per the user; tunnel must auto-restart on disconnect.) Verify `curl https://<public>/health` returns `{ok:true}` and `curl -N -X POST https://<public>/api/chat ...` streams an SSE frame end-to-end. Pasted into a phone browser, the chat shell loads, no mixed-content warnings.
+- [ ] **SSE survives the tunnel for ≥10 minutes of idle + active traffic.** Concrete check: open the public URL on a phone over cellular (not the same LAN), send three turns spaced ~3 min apart; the third turn streams without reconnect. Capture the run as `docs/CYCLES/cycle-7/qa-evidence/tunnel-sse.log` (curl `--no-buffer` against the tunnel hostname for 10 min, log byte timestamps). If the tunnel drops `event:` framing or eats keep-alives, fall back to a Fly.io free-trial deploy via `docs/DEPLOY.md` §2 and re-run — do not paper over it.
+- [ ] **Tester abuse caps tightened for the soft-launch window.** Lower `/api/chat` rate-limit from 10/min/IP to **5/min/IP**, daily message cap from 200 to **50/session/day**. Set `STATUS_BANNER` env var to a soft-launch notice ("Beta — daily Groq quota is limited; if search stalls, message <support contact>"). Revert both after the window. The 200/day cap was sized for known users, not five strangers fanning out.
+- [ ] **Support contact wired into the UI.** A footer or empty-state line on the chat page shows a real, monitored channel (email, Signal, or Telegram — Process Manager's pick, **not** "open a GitHub issue"). Owner monitors it for the duration of the soft launch. Without this, a stuck tester is silent churn.
+- [ ] **Minimal session-level observability.** A `docs/CYCLES/cycle-7/qa-evidence/soft-launch.log` file is committed at end-of-cycle containing: aggregate counts of sessions started, messages sent, sessions that hit an error frame, sessions that produced ≥1 product card, sessions that hit the share button. Pino `usage_log.jsonl` + a one-shot grep/awk roll-up is sufficient — **do not** install a vendor analytics SDK. Goal: at the end of the hour, we can say "5 testers, 23 turns, 2 errors, 0 shares" without rebooting our memory.
+- [ ] **Groq daily-quota dry-run.** Before sending the URL out, walk the §147 runbook in `docs/DEPLOY.md` against the live tunnel: confirm `STATUS_BANNER` propagates to the FE, confirm `GROQ_MODEL=llama-3.1-8b-instant` swap works end-to-end, confirm the sanitized error frame renders when the key is temporarily wrong (this is the captured `error-path.log` evidence — replay it against the tunnel). If the runbook step fails in any of these three places, fix before launch.
+- [ ] **Tunnel-down playbook in `DEPLOY.md` §5 (new section).** Two-paragraph runbook owned by Process Manager: how to restart `cloudflared`, how to swap to the Fly.io path if the tunnel is unhealthy for >5 min, how to message testers. Architect can amend the section in a follow-up cycle but the Cycle 7 commit must land **a runbook**, not a TODO.
+
+### Verification (QA Evidence Gate per the section below)
+
+- [ ] `cycle-7/qa-evidence/boot.log` — already committed at cycle open.
+- [ ] `cycle-7/qa-evidence/error-path.log` — already committed at cycle open.
+- [ ] `cycle-7/qa-evidence/tunnel-sse.log` — added on completion of the SSE-over-tunnel check.
+- [ ] `cycle-7/qa-evidence/soft-launch.log` — added at end of the soft-launch window.
+
+### Reviewers
+
+- [ ] PO — has a public URL, has a support channel, can text it to 5 friends without embarrassment.
+- [ ] Architect — tunnel substrate is honest about its tradeoffs (single-machine, single-WSL-host, no HA); the §8 scaling triggers are still the right next-step gates and have not been quietly relaxed.
+- [ ] Security — `STATUS_BANNER` cannot inject HTML, the support contact is monitored, lowered rate-limits hold under a deliberate 20-req burst test.
+- [ ] Design — no UI regressions; status banner and support footer respect tokens; reduced-motion still honoured.
+
+---
+
 ## Cycle 6 — Hardening (no new user-visible features) ✓
 
 ### Acceptance criteria
@@ -289,3 +326,19 @@ The product is **directly launchable** when, in a single cycle (Cycle 6 or a pol
 6. The user explicitly says "ship it."
 
 The orchestrator stops the autonomous loop on launch-ready and posts a final readiness summary.
+
+---
+
+## Risk register (opened Cycle 7)
+
+Severity = blast radius if it fires. Likelihood = probability in the **soft-launch window** (5–10 testers, ~1 hour). Mitigations are concrete actions a single operator can take inside that window — not aspirations.
+
+| # | Risk | Sev | Likl | Mitigation |
+|---|------|-----|------|------------|
+| R1 | **Groq daily-quota exhaustion mid-test** — free-tier RPD/TPD ceiling hit while testers are actively typing; every `/api/chat` returns the sanitized error frame. | HIGH | MED | Pre-set `STATUS_BANNER` template; have the §147 runbook (`DEPLOY.md`) in a terminal tab; one-line swap to `GROQ_MODEL=llama-3.1-8b-instant` ready to paste. Watch `data/usage_log.jsonl` token totals in a `tail -f` loop during the window. |
+| R2 | **Shopify Catalog MCP returns `-32603` transients** — MCP backend hiccups; `mcpClient` two-retry path exhausts; tool result is `catalog_unavailable`. Tester sees "I couldn't reach Shopify, try in a minute." | MED | MED | Already mitigated in code (graceful tool error, agent recovers next turn). Pre-launch: hit `searchCatalog` once to warm the connection; if transients exceed 1 per 5 min during the window, message testers proactively rather than letting them hit silent failures. |
+| R3 | **No user accounts → no support contact path** — a tester hits a wall and has no way to tell us; we read about it in a DM days later. | HIGH | HIGH | Acceptance criterion C4 above (support footer with real monitored channel). Process Manager is on-call for the full soft-launch hour; no async handoff. |
+| R4 | **No analytics → we won't know what worked** — even if all 5 testers love it, we can't quantify "what did they actually do?" Counterfactual: maybe 0 of 5 used photo paste; maybe 3 of 5 hit the share button and bounced off `/s/[id]`. | MED | HIGH | Acceptance criterion C5 above (one `soft-launch.log` roll-up from `usage_log.jsonl`). Explicitly **not** installing a vendor SDK — overweight for n=5. Re-evaluate at n≥20. |
+| R5 | **Single-machine deploy (no HA)** — Cloudflare Tunnel from a single WSL host means: WSL crash, machine sleep, ISP blip, or `cloudflared` restart all = total outage for every tester. No failover. | HIGH | MED | Tunnel-down playbook (acceptance criterion C7). Disable WSL/Windows sleep for the launch window. Stage-2 trigger documented in `ARCHITECTURE.md` §8 — if soft-launch repeats more than twice, the next cycle migrates to a real Fly.io machine per `DEPLOY.md` §2. Do **not** treat the tunnel as a destination. |
+
+Owner of the register: Process Manager. Updated at every cycle retrospective.

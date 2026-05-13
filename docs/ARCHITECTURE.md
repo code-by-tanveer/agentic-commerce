@@ -437,6 +437,49 @@ Triggers to move on: SQLite file > 200 MB, or daily Groq requests > 10K, or p95 
 - **Groq**: pay-as-you-go on the same models. The `llama-3.1-8b-instant` fallback path stays.
 - **Compute**: scale Fly to 2 machines, sticky sessions via Fly's `fly-replay` header so an in-flight SSE keeps hitting the machine that started it. **No horizontal scaling of SQLite writes** — libSQL gives us this for free.
 
+**Stage 2 near-term feature: message-history restore on reload.**
+
+Today `useConversation.tsx` (≈ll. 144–149) unconditionally seeds the welcome message on mount; SQLite already persists `messages` rows via `POST /api/session/:id/messages` but nothing pulls them back. The "chat history up to N" feature is blocked on a single missing route. Proposed shape:
+
+```
+GET /api/session/:id/messages?cursor=<ordinal>&limit=<n>
+
+200 OK
+{
+  "messages": [
+    {
+      "id":          "msg_…",
+      "role":        "user" | "assistant" | "tool",
+      "ordinal":      42,
+      "blocks":      [ /* typed sub-blocks, same shape as SSE events */ ],
+      "toolName":    "search_catalog" | null,
+      "toolCallId":  "call_…" | null,
+      "addedAt":     "2026-05-13T14:22:01.000Z"
+    },
+    …
+  ],
+  "nextCursor":   "43" | null,         // null when fully drained
+  "totalCount":   137                  // for FE "showing N of 137" UI
+}
+```
+
+Rules:
+
+- Default `limit = 200`, max `limit = 200`. Bigger pages on a slow mobile network defeat the point.
+- Order: `ordinal ASC` (oldest first within the page) so the FE renders top-to-bottom naturally.
+- Cursor is the next `ordinal` to fetch, not an opaque token — the table already indexes `(session_id, ordinal)` and the cursor is just `WHERE ordinal > :cursor`.
+- `blocks` ships as the deserialized JSON from `messages.blocks_json`; the FE re-validates against the existing event-schema package.
+- 404 on unknown `sessionId`; 403 if the cookie's session doesn't match the path id (prevents enumeration).
+- Cache-Control: `no-store` — history is per-session and a CDN must never see it.
+
+FE integration: `useConversation` mount-effect calls `GET /api/session/:id/messages` once on a non-fresh session (cookie present, no welcome shown). If `nextCursor != null`, a "Load older" affordance at the top of the canvas fetches the prior page. Welcome message is suppressed when history is non-empty.
+
+Why not all-at-once: most sessions are <50 messages; a few will be >200. Capping at 200 makes the median request fast and the tail correct.
+
+Why not WebSocket/SSE for history: it's a one-shot read, not a stream. REST is the right shape.
+
+Stage-2 triggers for this work specifically: any user complaint of "I lost my chat history" within the first week of pilot, **or** the moment we ship the "shareable lookbook" page (Move #7) — that page already serializes a snapshot from `summary_blob`, but the user-facing "scroll back through what I asked yesterday" experience needs the route above.
+
 **Stage 3 — ~100k MAU.**
 - **DB**: libSQL → Postgres (Neon or Supabase). Repos abstract this cleanly; only `db/sqlite.ts` changes module. ADR-0004 prefigures the migration.
 - **Cache**: introduce Redis (Upstash) for cross-process catalog cache; LRU stays as L1.
@@ -484,6 +527,8 @@ Triggers to move on: SQLite file > 200 MB, or daily Groq requests > 10K, or p95 
 
 **Logs.**
 - Pino JSON logs. PII redaction list: image URLs (truncated), raw IPs (replaced by hash), Groq request bodies (truncated). User prompts are logged in full — they are not PII by themselves, and product debugging needs them. [ASSUMPTION — revisit if we add accounts.]
+
+**Stage-2 posture (request signing, rate-limit backstop, observability gap).** Three known gaps stay un-built at Stage 1 and are tracked here so we don't ship them by accident or forget them on a launch checklist. (1) **Request signing on the agent → catalog path.** Our UCP profile URL is public on JSDelivr; anyone who reads `mcpClient.ts` can replay our `tools/call` shape against Shopify and look like our agent. Stage-2 mitigation: HMAC-sign every outbound JSON-RPC request with a key the Catalog MCP enrolls per-tenant when Shopify offers the surface (today it doesn't), or rotate the profile URL behind an auth-gated alias once enrollment exists — neither path is buildable until Shopify lights up the server side. (2) **Rate-limit circuit-breaker on Groq.** `groqClient.ts` now honours `Retry-After` and falls back primary→fallback within a turn, but under sustained 429 — daily-quota exhaust or a Groq incident — we will keep retrying every user message inside `AGENT_MAX_TURNS` budgets forever. Stage-2 mitigation: a process-wide breaker that flips OPEN after N 429s in M seconds, fails fast for a cool-down window with a user-facing "service paused, retry in <seconds>" SSE event, and half-opens on a probe call. The half-open probe is one request, not a flood. (3) **Observability gap.** We have Pino structured logs and a `/health` liveness probe and nothing else externally consumable — no metrics endpoint, no `/ready` probe that checks Groq + MCP reachability, no per-tool latency dashboard. Stage-2 mitigation: a `/metrics` Prometheus-shape endpoint (text-exposition format) with counters for `groq_completion_total{model, outcome}`, `groq_recovery_total{tier}` (see ADR-0009), `mcp_call_total{tool, outcome}`, `tool_dispatch_duration_seconds_bucket{tool}`, and a `/ready` route that runs a 1s-timeout reachability check against Groq and the Catalog MCP with a 10s in-memory cache so the probe is cheap. None of these block Stage 1; all three become incident hazards within the first month of Stage 2 traffic. Document the trigger before building the implementation.
 
 ---
 

@@ -1,12 +1,14 @@
 # Manual launch walkthrough
 
-Internal QA-style walkthrough. Written for someone who has never seen the app. Follow it top-to-bottom on a fresh clone; every step lists the expected on-screen state so you can spot regressions.
+Internal QA-style walkthrough. Written for someone who has never seen the app. Follow it top-to-bottom on a fresh clone; every step lists the exact strings to type, exact buttons to click, and exact things to assert visible. This is the literal sequence a tester runs in a browser — it is not aspirational.
+
+This doc was rewritten end-to-end on 2026-05-13 against the live app after the first-boot post-mortem. Previous wording described surfaces that did not exist (e.g. an inline `PreferencesCard` panel — replaced in Cycle 5 by the `ProfileMenu` avatar) and assumed product chips the system never emits. Where a step is now obsolete, that's called out inline.
 
 ## 0. Prerequisites
 
 - Node 20+, npm 10+.
 - A Groq API key (`gsk_...`).
-- A publicly reachable UCP agent profile URL (or a localhost one if you don't intend to hit live MCP).
+- A reachable UCP agent profile JSON URL (see `docs/ucp-profile.example.json`). The Shopify Catalog MCP requires `ucp_version`; the example file already has it.
 
 ## 1. Clone, install, env, dev
 
@@ -15,107 +17,171 @@ git clone <repo> && cd agentic_commerce
 npm install
 cp backend/.env.example backend/.env       # set GROQ_API_KEY + UCP_PROFILE_URL
 cp frontend/.env.example frontend/.env     # leave BACKEND_URL=http://localhost:4000
-npm run dev:backend     # terminal 1 → http://localhost:4000
-npm run dev:frontend    # terminal 2 → http://localhost:3000
+npm run dev:backend     # terminal 1 → http://localhost:4000 (Fastify)
+npm run dev:frontend    # terminal 2 → http://localhost:3000 (Next.js)
 ```
 
-Open `http://localhost:3000` in a desktop browser. You should see an empty chat shell with a single input bar and the "About you" panel collapsed at the side.
+Open `http://localhost:3000` in a desktop Chrome window. You should see:
+
+- A sticky header reading **Agentic Commerce** (Inter, semibold, no serif).
+- A blank chat canvas (no greeting bubble — the assistant only speaks when spoken to).
+- A sticky input bar pinned to the bottom with placeholder text **What are you looking for?**.
+- Directly below the input bar, two lines of disclosure copy:
+  - `Prices and availability come from Shopify merchants.`
+  - `Ranking is preference-driven, not paid placement.`
+- A 36×36 quiet avatar control in the header's right edge (the `ProfileMenu` trigger).
 
 ## 2. Step-by-step
 
-### Step 1 — first query
+### Step 1 — first query (cold "hi" smoke)
 
-Type: `find me a minimalist desk lamp under $150` and press Enter.
-
-Expected:
-- The text streams character-by-character into a new assistant bubble.
-- A dim inline `ToolStatus` line appears: "Searching catalog for 'minimalist desk lamp'…", then flips to "done".
-- A product grid materializes below the text within the same assistant turn — not a separate message.
-- Every card carries ≥2 reasoning chips (e.g. `under $150`, `−42% vs MSRP`).
-
-### Step 2 — follow-up
-
-Type: `show me cheaper`.
+Click the textarea. Type literally `hi` and press Enter.
 
 Expected:
-- The agent retains context (does not ask "cheaper than what?"). A new tool-status flickers, a new product set lands in a fresh assistant turn at a lower price band.
-- The first turn's grid stays visible above; the conversation reads as a stream of stacked product blocks.
 
-### Step 3 — preferences
+- The user message appears in a right-aligned bubble.
+- An assistant bubble streams in below it within ~10s (real Groq, real network).
+- The streamed reply is conversational English with NO `<function>` / `<tool_call>` / `jsonrpc` / `MCP 4` / `MCP 5` tokens visible anywhere on screen.
+- No tool-status line appears (the system prompt forbids `search_catalog` for greetings).
+- The Send button's spinner clears when streaming finishes; the textarea is empty and re-enabled (you can immediately type the next message).
 
-Type: `I wear size 8 and ship to the EU`.
+Regression to file if any of: spinner stays spinning forever; the reply contains protocol XML; a "Searching catalog…" tool-status line appears for a bare greeting.
+
+### Step 2 — first product query
+
+Type literally `running shoes under $200` and press Enter.
 
 Expected:
-- A short streamed acknowledgement.
-- The `PreferencesCard` ("About you" panel) flips open with two new inline-editable chips: `size: 8` and `ships_to: EU`. Each chip's `source` label reads `you` (not `inferred`).
-- Ask another product query (e.g. `now something for the kitchen`). The next product set's cards carry a `size 8 match` chip where the data supports it; missing data shows no chip rather than a fake one.
+
+- A `ToolStatus` line briefly appears reading **Searching catalog for "running shoes…"** then flips to **done**.
+- A grid of product cards materializes below the assistant text in the same assistant turn. Each card has:
+  - A product image (or a tasteful skeleton if the merchant didn't ship one).
+  - A title and a merchant name (the merchant text is its own tap-target — see Step 4).
+  - 1–4 reasoning chips in a row below the title (e.g. `−42% vs MSRP`, `ships free`, `arrives in 3 days`). Cards with no real signal show no chips rather than fake ones.
+  - A heart button (`Save to Love`) at top-right with `aria-pressed="false"`.
+- The Send button's spinner clears; the textarea is empty and re-enabled.
+
+### Step 3 — preferences via the ProfileMenu (replaces obsolete "inline PreferencesCard" step)
+
+The original walkthrough talked about an "About you" panel that opened inline above the input bar. That surface was removed in Cycle 5 — Mara feedback flagged it as intrusive. The replacement flow:
+
+1. Type literally `I wear size 9 and ship to the EU` and press Enter.
+2. Wait for the assistant to acknowledge (one short streamed line, no tool call needed).
+3. Click the **avatar** control at the top-right of the header (the `Open your profile` button — when at least one preference is saved, its accessible name becomes `Open your profile (preferences saved)` and a small dot appears on the avatar).
+4. The `ProfileMenu` popover (desktop) or bottom sheet (<640px) opens. Inside it the `PreferencesCard` lists two chips: `size 9` and `ships_to EU`, each marked `you` (not `inferred`).
+5. Close the menu with Escape.
+6. Type `something for the kitchen` and press Enter. On the next product set, where the data supports it, the chips include `size 9 match` or `ships to EU` (these are kind-stamped server-side in `backend/src/services/reasoning.ts`). Cards without that signal simply omit the chip — never a fake one.
 
 ### Step 4 — merchant transparency
 
-Click (or tap) a product card to expand it.
+Click anywhere on a product card (not the heart). The card flips `aria-expanded="true"` and an inline detail panel slides in.
 
 Expected:
-- A `MerchantBlock` slides into view showing seller name, returns-policy summary, shipping-days estimate, customer rating, and a carbon-shipping note where the merchant published one.
-- Absent fields render the literal string "merchant didn't publish this" — never blank, never a fake number.
 
-### Step 5 — view toggle
+- The `MerchantBlock` reveals seller name, returns-policy summary, shipping-days estimate, and a rating line where the merchant published one.
+- Absent fields render the literal string **merchant didn't publish this** — never blank, never a fake number.
+- The expanded action row carries two buttons: a **Pair with…** pill (Wand2 icon, white) and a **Buy on {merchant}** pill (orange — the only place §2.2 of the design system allows orange).
+- The merchant name text in the title row is its own tap-target with `data-testid="merchant-tap"`. Tapping it expands ONLY this card; neighbouring cards stay `aria-expanded="false"`.
+- The `Buy on {merchant}` button fits inside its parent card at every viewport — long merchant names like "Commonwealthrunning" truncate within the button rather than overflowing the card frame.
 
-Click the `ViewToggle` in the canvas header (list ↔ collage).
+### Step 5 — view toggle (list ↔ collage)
 
-Expected:
-- The grid reflows into a Pinterest-style masonry. Cards re-flow their aspect ratios; the price renders as a serif overlay on hover.
-- Reasoning chips remain present on every card.
-- Refresh the page — the collage view persists for the session (read from `sessions.view_mode`).
-
-### Step 6 — shortlist
-
-Drag a product into the **Love** lane in the `Shortlist` drawer (right side on desktop, bottom sheet on mobile).
+In the header, click the **Collage view** radio button beside the wordmark.
 
 Expected:
-- The Love count badge updates instantly.
-- Alternative keyboard path: focus the card with Tab, press `L`. Same effect, with a focus ring throughout.
-- Repeat into **Maybe** with a different product. Repeat into **Skip** with a third.
 
-### Step 7 — outfit bundle
+- The current product grid reflows into a Pinterest-style CSS multi-column masonry (`columns-2` on small viewports, `sm:columns-3`, `lg:columns-4`).
+- The heart button (`Save to Love`) is still reachable on every card.
+- Reload the page (Cmd-R). The **Collage view** radio remains checked (`aria-checked="true"`) — view-mode persists per session via `PUT /view-mode`.
+- Click **List view** to restore.
 
-Focus any one product (click it once so the canvas treats it as the anchor) and type: `what would go with this?`.
+Note: prior product turns do NOT rehydrate on reload — only the sessionId, view-mode, shortlist, and saved preferences persist. This is a known gap (see sweep.spec.ts Surface 8); the walkthrough notes it rather than asserting an unimplemented feature.
 
-Expected:
-- An `OutfitBundle` card renders in a new assistant turn with 2–4 coordinated items plus a one-line `"why this with that"` rationale per item.
-- A single "save outfit" action sits on the card. Pressing it stores the bundle and shows a toast.
+### Step 6 — shortlist (keyboard fallback is the canonical path)
 
-### Step 8 — photo → style search
-
-Click the paperclip in the input bar (or paste an image from the clipboard, or drag-drop a JPEG/PNG/WebP onto the chat canvas).
+Focus a product card with Tab. Press the **L** key (uppercase or lowercase). A focus ring is visible throughout.
 
 Expected:
-- An `ImageDropzone` overlay confirms the drop and uploads to `/api/upload`.
-- Within ~5s a `Moodboard` card renders the extracted attributes as editable chips (e.g. `boucle texture`, `sand palette`, `mid-century silhouette`) plus a short description.
-- A search fires automatically with the suggested query; the resulting product grid lands in the same assistant turn.
-- If vision returns low confidence the agent says so and asks a clarifying question — it does not guess silently.
+
+- The card's heart flips to `aria-pressed="true"` and the icon fills.
+- The `Shortlist` trigger button in the header gains a "1" badge and its accessible name reads `Open shortlist (1 loved or maybe)`.
+- The drawer is closed; the badge is the only visual change.
+
+Repeat with **M** on a second card (sends it to Maybe — same badge increments) and **S** on a third (Skip lane, no badge change because the trigger badge only counts Love+Maybe).
+
+Click the trigger to open the drawer. On desktop (≥1024px) it's a 320px right-side rail with id `shortlist-drawer`. On mobile (<1024px) it's a `role="dialog"` bottom sheet with aria-label **Shortlist**. Press Escape to close. Click outside the drawer to close (the listener fires on `pointerdown`, not `click`).
+
+### Step 7 — outfit bundle via "Pair with"
+
+Click a product card to expand it. In the expanded action row, click the **Pair with…** button (its accessible name reads `Pair with — what would go with {product title}?`).
+
+Expected:
+
+- A new user bubble appears with text along the lines of `What would go with the {product title}? [pair_anchor:{id}]`.
+- The assistant turn streams in. After 30–90 seconds (real Groq + 2–4 parallel sub-searches via `recommend_outfit`) an `OutfitBundle` region (`role="region"`, aria-label **Outfit bundle**) renders.
+- The bundle header reads **A coordinated set** with a count and total price.
+- 2–4 product cells render in a grid. Each cell has an open-in-merchant button and (optionally) a one-line "why this with that" rationale.
+- A single orange **Save outfit** button sits at the bottom-right.
+
+Click **Save outfit**.
+
+Expected:
+
+- The button flips to a green **Saved** pill with a checkmark, then back to **Save outfit** after ~2s.
+- Every cell is appended to the Love lane; the header trigger badge increments by `cells.length`.
+
+If the agent declines to invoke `recommend_outfit` (rare; usually because the model's tool-routing slipped) the outfit region does not appear. This is a known model-dependent surface — the spec at `tests/e2e/pair-and-trust.spec.ts` skips with reason rather than flakes.
+
+### Step 8 — photo → moodboard → search
+
+Drag a JPEG/PNG/WebP from your file manager onto anywhere in the chat canvas. (Alternative paths: click the paperclip in the input bar, or paste from clipboard.)
+
+Expected:
+
+- A full-viewport overlay reading **Drop to attach** appears under the dragged cursor (z-50 backdrop, dashed accent border).
+- On drop, the file uploads to `/api/upload` and a new user bubble appears with text `find me something like this`.
+- The assistant turn streams in. A `Moodboard` card renders BEFORE any product grid in the same turn. It contains:
+  - A thumbnail (≤128px on the longest edge).
+  - A row of editable attribute chips extracted by vision (e.g. `boucle texture`, `sand palette`, `mid-century silhouette`). Each chip has an X to remove and a trailing **+ Add** affordance to append.
+  - A short description line.
+- A product grid follows in the same assistant turn, populated by an auto-fired `search_catalog` against the suggested query.
+- If vision returns low confidence, the assistant says so and asks a clarifying question rather than guessing silently.
+
+This step is not yet covered by an E2E spec — synthesised drag-and-drop with a real File payload under Chromium DevTools Protocol is fragile. Test manually until the dedicated spec lands.
 
 ### Step 9 — share
 
-Click the `ShareButton` in the header (visible only once you have ≥1 shortlisted item).
+The `ShareButton` only appears once the shortlist has ≥1 Love or Maybe item (the action row is chrome-quiet on a fresh session). Save at least one item first if you haven't.
+
+Click the share button (label includes the count).
 
 Expected:
-- The URL `https://<host>/s/<id>` copies to the clipboard and a toast confirms.
-- Open the URL in an **incognito** window: the page renders fully without JavaScript (disable JS in DevTools to verify), with a hero serif headline, the shortlist sections, merchant names + totals, and a sentence-or-two recap.
-- View page source: the `og:image`, `og:title`, and `og:description` tags are populated.
 
-### Step 10 — mobile
+- A POST to `/api/session/{id}/summary` runs; on success a toast confirms and the URL `https://<host>/s/<id>` is on the clipboard.
+- Open the URL in an **incognito** window with JavaScript disabled in DevTools.
+- The page renders fully without JS:
+  - An `<h1>` headline (server-rendered via Next metadata).
+  - The shortlist sections, merchant names, and totals.
+  - A sentence-or-two recap.
+- View page source — `og:title`, `og:image`, and `og:description` tags are populated.
+- An unknown share id (`/s/this-does-not-exist`) returns HTTP 200 (not 404) and renders an "no longer available" `ExpiredSummary` page.
 
-Open the same `http://localhost:3000` from a phone on the same LAN (or use DevTools device emulation).
+### Step 10 — mobile (360×800 emulation or real device)
+
+Open DevTools, switch to a 360×800 device emulation (or open the URL on your phone over the LAN).
 
 Expected:
-- The Shortlist is a bottom sheet, not a side drawer; tapping the badge slides it up.
-- The `PreferencesCard` collapses to a single summary line; tapping it expands inline.
-- Tap targets on action buttons (share, lane handles, summary links) are ≥44px.
-- Repeat steps 1–4 on mobile. Streaming, reasoning chips, merchant expand, and view toggle all behave identically.
+
+- No horizontal page scroll on the chat surface (the action row in the header clips the New-chat button below 380px to avoid overflow).
+- Product cards fit within the 360px viewport width.
+- The input bar carries `padding-bottom: max(env(safe-area-inset-bottom), 0px)` so iOS home-indicator clipping is avoided.
+- Tapping the **Shortlist** trigger opens a bottom sheet (`role="dialog"`, aria-label **Shortlist**), not the desktop rail. The sheet panel's bottom edge sits within ~16px of the viewport bottom.
+- Tapping the profile avatar opens the `ProfileMenu` as a bottom-anchored sheet too — `fixed inset-x-2 bottom-2` so it spans the viewport minus an 8px gutter.
+- Reasoning chips remain present on every card and remain ≥44px hit targets via the `before:` pseudo-element extension.
 
 ## 3. What "pass" looks like
 
-If every step rendered the expected state above, the build is launch-ready against the seven UX moves in PRODUCT.md §5. File any deviation as a defect in the current cycle doc under `## Defects` with a short repro.
+If every step rendered the expected state above, the build is launch-ready against the seven UX moves in PRODUCT.md §5. File any deviation as a defect in the current cycle doc under `## Defects` with a short repro. The QA Evidence Gate in `docs/LAUNCH_CHECKLIST.md` requires `boot.log` + `first-chat.log` + `error-path.log` per cycle — the PM owns those.
 
 ## 4. Day 1–30 launch sequence
 
@@ -161,3 +227,32 @@ If any one fires: narrow to a single vertical (Segment 4 in the market analysis 
 ### What "30 days done" looks like
 
 By Day 30, the team has a defensible read on whether to scale the horizontal proposition or retrench into a single vertical. The output is a Day-30 readout (a short memo, not a meeting) that updates `docs/STATE.md`, opens or closes the relevant PRODUCT.md §8 questions, and authors `docs/POST_LAUNCH.md` with the next 60-day plan against the chosen direction.
+
+## 5. Per-cycle test deltas
+
+The backend unit-test count over time. Numbers measured by running `npm --workspace backend run test` at each commit listed — the figures account for `describe.each` / dynamic `it()` loops that a naive grep undercounts. The visible jump in Cycle 7 was discovery-driven: once the app booted live against real Shopify, surfaces nobody had probed (content sanitisation, vision parsing, upload signing, retry-after handling, session smokes) emerged in a single triage pass.
+
+| Cycle / commit                                                         | Δ tests | Cumulative |
+| ---------------------------------------------------------------------- | ------- | ---------- |
+| Cycle 1–2 (scaffold + first agent loop)                                | +0      | 0          |
+| Cycle 3 (collage, shortlist, outfits)                                  | +0      | 0          |
+| Cycle 4 (photo → moodboard search)                                     | +0      | 0          |
+| Cycle 5 (share page, mobile/a11y polish)                               | +0      | 0          |
+| Cycle 6 (hardening — single events source, env guards, CSP)            | +0      | 0          |
+| Polish R1 (30+ launch-blocker fixes, 14-reviewer pass)                 | +0      | 0          |
+| Polish R2 (ops hardening, ethics taxonomy, first test push)            | +33     | 33         |
+| Polish R3 (cleanup, test expansion, Skeptic re-walk)                   | +16     | 49         |
+| Round 4 (visual review, persona walks — no test work)                  | +0      | 49         |
+| Polish R5 (Tier-1+2 fixes from 13-agent review)                        | +6      | 55         |
+| Round 6 (sub-medium polish + PO/PM readiness)                          | +0      | 55         |
+| First-boot fixes (model swap, UX dismissals, scroll, ProfileMenu)      | +14     | 69         |
+| Post-mortem fixes (boot/resilience contract, e2e gate landed)          | +4      | 73         |
+| Cycle 7 today (live-system audit pass — backend hardening + e2e sweep) | +54     | 127        |
+
+Per-cycle Playwright deltas:
+
+| Cycle                              | Δ E2E specs | Cumulative |
+| ---------------------------------- | ----------- | ---------- |
+| Through Polish R6                  | 0           | 0          |
+| Post-mortem fixes (first e2e gate) | +1 (`firstchat.spec.ts`)                                                                                                                                                                                                                                                            | 1          |
+| Cycle 7 today                      | +3 (`productcard.spec.ts`, `sweep.spec.ts`, `pair-and-trust.spec.ts`)                                                                                                                                                                                                               | 4          |

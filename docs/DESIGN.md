@@ -154,6 +154,81 @@ Added 2026-05-13 after a misaligned cursor in the InputBar survived six polish c
 
 **Verification.** The cursor alignment is the cheapest test. For any new input primitive, focus the field, type one character, screenshot the caret, and confirm its vertical center matches the sibling icon's vertical center. Caret alignment is invisible in static empty-state screenshots (placeholder glyphs sit lower than carets do), so review processes that only screenshot the empty state will miss this — make the caret check part of any InputBar / search-field / inline-edit review.
 
+### 2.10 Loading & stream states (one shape per phase)
+
+Added 2026-05-13 after a Cycle 7 walkthrough surfaced four parallel loading vocabularies (`ToolStatus` rotating dot, `Loader2` in `InputBar` Send, `Loader2` in Pair-with, `animate-pulse` lane skeletons in `Shortlist`) competing across surfaces a user sees in the same second of a turn. The user reads three of them as the same intent and reads the fourth as a bug. Canonicalise.
+
+**Three shapes, three phases.** Every loading surface in the app maps to exactly one of:
+
+| Phase | Shape | Where | Motion |
+|---|---|---|---|
+| `request-inflight` | **Inline pill spinner.** `Loader2` from `lucide-react` at `h-3.5 w-3.5`, `animate-spin`, color matches the parent button text. | Send button, Pair-with, Share, any button that has begun a round-trip and is waiting for a response. The button stays clickable-shaped (no shrink) — only the leading icon swaps. | `animate-spin` (Tailwind default, 1s linear infinite). Under `prefers-reduced-motion`: replace with a static `Loader2` icon at `opacity-60`. |
+| `stream-chunking` | **Single rotating dot** (the Granola dim spinner). 8px `bg-ink-400` circle inside a 12px wrapper, framer-motion `rotate: 360`, 600ms linear infinite. | `ToolStatus` only. This is the "the model is doing something in our chat" signal. Never used on a button. | 600ms linear infinite. Reduced-motion: static `Loader2` at `text-ink-400`. |
+| `card-placeholder` | **Skeleton block.** `rounded-2xl bg-ink-100` with optional `animate-pulse`. Sized to the eventual content's box; never narrower. | `Shortlist` lane (hydrating), `ProductCardGroup` (during `tool_status: running` for `search_catalog` / `recommend_outfit`), `ComparisonTable` (during `compare_products`). | `animate-pulse` (Tailwind default). Reduced-motion: drop `animate-pulse`, leave the flat fill. |
+
+**Hard rules.**
+
+1. A surface chooses exactly one shape. A "Send" button never shows a skeleton; a product grid never shows a `Loader2`; a `ToolStatus` line never gains a card-placeholder.
+2. The card-placeholder shape **must mount the moment** the matching `tool_status: running` arrives in the stream, not when the products land. The current `ProductCardGroup` pops in suddenly — that's the bug. A skeleton group with `cell-count = max(2, last_search_count)` and the same `grid grid-cols-1 sm:grid-cols-2` shell renders in the assistant message under the `ToolStatus` line; when `products` arrive, swap in place with a 200ms opacity crossfade.
+3. The skeleton's cell shape is a `rounded-2xl bg-white shadow-soft` outer (matching `ProductCard`), a `h-24 w-24 rounded-xl bg-ink-100` image block, two `h-3 bg-ink-100` lines (title / meta), and a `h-7 w-20 rounded-full bg-ink-100` chip (price + buy proxy). No icons. `animate-pulse` honors reduced-motion via the Tailwind default (it drops to a static fill).
+4. The `ComparisonTable` skeleton is a 3-column-wide row of 2 placeholder columns (one label column + 2 product columns), each a 96px image block + 4 short bars. Renders inside the same `shadow-soft` shell so the swap doesn't reflow neighboring blocks.
+5. Latency budget: the card-placeholder must NOT animate for less than 200ms. If the real content arrives faster than that, suppress the placeholder entirely (use a state machine: enter `placeholder` only if `tool_status: running` has been visible for ≥200ms). Avoids the flash-of-skeleton on cached results.
+
+**Anti-pattern catalog.** Forbidden:
+
+- A spinner on a card-shaped surface (use a skeleton).
+- A skeleton on a button (use the inline pill spinner).
+- Three dots animating on a non-text affordance — the three-dot `TypingIndicator` is exclusively the assistant bubble's "thinking before the first token" surface; nothing else uses it.
+- An infinite spinner on a fire-and-forget mutation (e.g. heart-tap). Mutations either return inside 200ms (no spinner) or surface an optimistic UI flip + a `role="alert"` rollback on error.
+
+### 2.11 Empty states (the `ZeroResultsBlock` spec)
+
+When `search_catalog` returns zero, the agent today improvises prose ("Hmm, I couldn't find anything…"). That's the worst-case shape: a prose paragraph with no escape hatch. The `MessageRenderer` already short-circuits `products.length === 0` to a recovery card — but that card has no iconography, no suggested next action button, and no introspection of the failing filter. Cycle 7 promotes it to a real component.
+
+**Component:** `<ZeroResultsBlock>` (file: `frontend/components/chat/ZeroResultsBlock.tsx`).
+
+**Inputs:**
+
+```ts
+interface ZeroResultsBlockProps {
+  query?: string;              // the verbatim search string
+  filters?: Array<{            // structured filters the agent had on
+    label: string;             // "≤ $80", "ships from EU", "size 8"
+    key: string;               // "budget", "shipping_region", "size"
+  }>;
+  suggestion?: {               // single, ranked next action
+    label: string;             // "Remove the $80 ceiling"
+    onAction: () => void;      // dispatches the retry through useConversation
+  };
+}
+```
+
+**Visual spec.**
+
+| Element | Treatment |
+|---|---|
+| Container | `rounded-2xl bg-ink-50 px-4 py-6 shadow-soft` — matches the canvas's quiet recovery surfaces, not the white card chrome (the result IS the empty state; we don't want a card-shaped "this is data"). |
+| Icon | `lucide-react` `SearchX` at `h-5 w-5 text-ink-400`, centered above the headline. NOT in `text-rose-700` — zero results is not an error, it's an absence. |
+| Headline | `text-sm font-semibold text-ink-900`, centered. Copy template: `Nothing matched ${query ? "for "${query}"" : "those constraints"}.` |
+| Filter chips | If `filters.length > 0`, render below the headline as a wrap-flowing row of `bg-ink-100 text-ink-900 text-xs px-2 py-1 rounded-full` chips with a leading `X` icon. Each chip is a button — tap removes that filter and re-runs the search. This is the "loosen" verb. |
+| Suggestion CTA | Single `bg-ink-900 text-white rounded-full h-9 px-4 text-sm` button at the bottom, centered. Label is the verbatim `suggestion.label` from props. If no suggestion is provided, no button. Never two CTAs. |
+| Tertiary copy | A `text-xs text-ink-400` line: "or paste an image of what you have in mind." (Always present; the photo-to-style affordance is the universal fallback.) |
+
+**Behaviour.**
+
+- The agent is responsible for deciding `suggestion` — `search_catalog` returns the filter set it queried with, and the agent's system prompt ranks which filter most likely caused the zero result (the cheapest to relax). The component does NOT improvise.
+- `filters` come from the same source. Tapping a filter chip dispatches `useConversation.send` with an unbinder message of the form ``run that again without ${filter.label}``. The agent picks up the natural-language nudge and re-issues `search_catalog` with the filter dropped.
+- Motion: the block enters with the standard 250ms `easeOut` opacity + `y: 8 → 0` (matches `MessageBubble`). No skeleton ever upgrades into a zero-result block — they are mutually exclusive (zero results means the request succeeded with empty payload, which is a different state from "still waiting").
+- A11y: `role="status"`, `aria-live="polite"`. The headline is the `aria-label`. Tab order: filter chips → suggestion CTA. Each filter chip's `aria-label` is `Remove "${filter.label}" filter and search again`.
+
+**Adjacent applications.** The `ZeroResultsBlock` shape also covers:
+
+- `recommend_outfit` returning zero pairings for an anchor → headline becomes `Couldn't pair the ${anchorTitle}.`, suggestion is `Try the {next category} category`.
+- An empty Shortlist Love lane on the `/s/[id]` summary page → headline becomes `Nothing saved to Love yet.`, the suggestion CTA links back to `/?session=<id>`.
+- Filtered Shortlist tab (mobile) where the selected lane is empty but other lanes have items — the existing per-lane `emptyHint` text is the degenerate version of this block; in Cycle 7 promote it to use the same iconography (`SearchX` icon and `text-xs text-ink-400` copy at minimum).
+
+The single rule that ties §2.10 and §2.11: **never let a surface fall through to "nothing".** Loading shows a skeleton; missing shows a `ZeroResultsBlock`; the only state where the canvas is blank is the welcome screen, and that has its own composition (`SuggestionChips` starters).
+
 ---
 
 ## 3. Principles
@@ -293,6 +368,40 @@ The orchestrator's `cycle-N-design.md` will expand each of these into a checklis
   - Visual QA: scan every screen for §2.7 (shadow + border violations), §2.5 (forbidden spacing), §2.4 (serif misuse). Fix.
   - Lighthouse a11y ≥95 on chat page and summary page.
   - Reduced-motion smoke test.
+
+- **Cycle 7 — Loading, empty, and edge polish.**
+
+  Theme: stop letting surfaces flash, pop, or fall to blank. Every load is announced, every absence is named, every keyboard tab can be seen. The Cycle-6 walkthrough on 2026-05-13 surfaced ten gaps no one had flagged; this directive is the burn-down.
+
+  **2.10 wiring (loading canon).**
+  - Build `<ProductGridSkeleton cellCount={n} />` and mount it inside `MessageBubble`'s card-block area when a `tool_status: running` for `search_catalog` or `recommend_outfit` has been on screen for ≥200ms. Swap to the real `ProductCardGroup` with a 200ms opacity crossfade. Reuses the cell shape spec in §2.10 rule 3.
+  - Build `<ComparisonSkeleton />` per §2.10 rule 4 and wire to `compare_products` running state.
+  - Audit every `Loader2` in the app: it must sit inside a button-shaped pill. Today it's correct in `InputBar` Send, `ProductCard` Pair-with, and `ShareButton`. Leave them. Forbid future `Loader2` on card-shaped surfaces.
+  - `ToolStatus` rotating dot is the canonical stream-chunking shape — do not generalise it to other surfaces.
+
+  **2.11 wiring (empty canon).**
+  - Build `<ZeroResultsBlock>` per §2.11. Replace the inline `SearchX` recovery card in `MessageRenderer` `case 'products'` with it. Wire the suggestion CTA through `useConversationActions.send`.
+  - Agent prompt update (cross-team handoff): `search_catalog` must return `appliedFilters` (the structured filter set it queried with) and `relaxableFilter` (the single filter the agent thinks is the loosest cause of the zero result) when `products.length === 0`. Without this, `ZeroResultsBlock` falls back to the catch-all photo-paste tertiary copy and no suggestion CTA.
+  - Shortlist mobile sheet: when the selected lane is empty but another lane has items, surface a `text-xs text-ink-400` hint ("3 in Love, 0 in Maybe — tap Love to see them") instead of only the per-lane `emptyHint`. Pure copy change, no structural component.
+
+  **Concrete component bugs (from the 2026-05-13 walkthrough).**
+
+  | Severity | Component | Bug | Fix |
+  |---|---|---|---|
+  | HIGH | `VariantPicker` | No `:focus-visible` ring. Disabled variants use `opacity-40` instead of strikethrough (DESIGN.md §4 spec drift). | **Landed in Cycle 7 walkthrough.** Added `focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white` to both `<button>` paths and `line-through text-ink-400` on unavailable. |
+  | HIGH | `ComparisonTable` | When `products.length === 1`, renders a one-column "comparison" — no value, takes up a card-shaped block. | Render nothing (or the bare `ProductCard`) below 2. Cycle 7 work: add a `products.length < 2 ? null : <table>` early return, and have the agent prompt route single-product compare requests back to a normal `ProductCard`. |
+  | HIGH | `ProductCardGroup` | Pops in at end of stream; no skeleton during `tool_status: running`. Jarring on slow connections. | §2.10 rule 2 / Cycle 7 build of `ProductGridSkeleton`. |
+  | MED | `SuggestionChips` | No `:focus-visible` ring; only hover state. Keyboard users invisible. | Add the canonical ink-900 ring. One line. |
+  | MED | `Moodboard` chip X | `focus-visible:ring-offset-1` (decimal-adjacent) without an explicit offset color. | Snap to `focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white`. |
+  | MED | `InputBar` trust-promise | Forced `<br>` on the two-sentence disclosure creates a short orphan on mobile at 360px. | Drop the `<br>`. Let the two sentences wrap as one paragraph. The visual line break is decorative, not load-bearing. |
+  | LOW | `ReasoningChips` | No-detail chips render as `cursor-default` `<span>` with no visible hint that they're presentational (vs. an interactive chip that just lost its detail). Some have hover, some don't, and visually they're identical. | Add a single rule: presentational chips (no `detail`) get `cursor-default` (already) AND a `select-text` affordance — and the chip ring color on detail chips gains a subtle hover hint (`hover:brightness-95`) so the affordance asymmetry is visible. |
+  | LOW | `OutfitBundle` | Same pop-in problem as `ProductCardGroup`. | Wire the same `ProductGridSkeleton` shape in 2x2 layout when `tool_status: running` is for `recommend_outfit`. |
+  | LOW | Header New-chat hidden < 380px | Recoverable via reload, but no menu item in ProfileMenu for it. | Add a `Start a new chat` item to `ProfileMenu` empty-state and populated states. Reuses the existing `useConversationActions.reset`. |
+  | LOW | `ShortlistDrawer` empty (zero items across all lanes) | No big-picture explainer — just three per-lane hints. | Add a single-shot `<EmptyShortlistHero>` above the lanes (rail) / replacing the tabs (sheet) when total across lanes is zero. Copy: "Tap the heart on any product — Love saves it here." One illustration: a `Heart` icon at `h-8 w-8 text-ink-300`. |
+
+  **What this cycle is NOT.**
+  - Not a refactor of `ProductCard` or `InputBar` — both shipped clean in Cycle 6's polish round-6. The Cycle 7 work is additive (new components, new tokens) or scoped to non-audited files (`VariantPicker`, `SuggestionChips`, `Moodboard`, `MessageRenderer`).
+  - Not a motion overhaul. The motion budget is already correct; we're filling in two missing shapes (skeleton, zero-results entry) within it.
 
 ---
 
