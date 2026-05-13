@@ -16,11 +16,14 @@ import type { Product, SummaryBlob, SummaryProduct } from '@/types/product';
 // response itself is cached for an hour (`Cache-Control` below), so the
 // real cost is amortized.
 //
-// [DEFERRED] CJK fallback (Noto Sans). Korean / Hindi gist text still
-// falls back through to Satori's default. Adding Noto Sans CJK would
-// pull a ~1.5MB font buffer into the edge runtime cold path — the
-// bundle math doesn't justify it until the share-link analytics show
-// meaningful non-Latin traffic.
+// Round 6 — Min-Jun's audit: ship Noto Sans JP alongside Instrument
+// Serif so Japanese gists (hiragana / katakana / kanji) render as actual
+// glyphs instead of Satori's tofu fallback. JP also covers most Latin,
+// so we keep it second in the font list — Satori uses the first font
+// that has the requested glyph. Hangul still falls back to system —
+// adding Noto Sans KR doubles the cold-path payload and analytics
+// don't yet justify it. [DEFERRED] Korean / Hindi if non-Latin share
+// traffic grows.
 
 export const runtime = 'edge';
 
@@ -35,25 +38,65 @@ const HEIGHT = 630;
 const INSTRUMENT_SERIF_ITALIC_URL =
   'https://fonts.gstatic.com/s/instrumentserif/v6/jizDREVItHgc8qDIbSTKq4XIRfevQT08nlTLrSk.ttf';
 
-let fontCache: ArrayBuffer | null = null;
+// Noto Sans JP Regular (TTF). Google Fonts ships a static TTF at this
+// path — the variable-font URL Satori can't read. JP covers Latin +
+// hiragana + katakana + kanji; Hangul / Devanagari still fall back to
+// Satori's default.
+const NOTO_SANS_JP_URL =
+  'https://fonts.gstatic.com/s/notosansjp/v52/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75s.ttf';
 
-async function loadInstrumentSerif(): Promise<ArrayBuffer | null> {
-  // Module-level cache survives across requests on a warm edge worker.
-  if (fontCache) return fontCache;
+let serifFontCache: ArrayBuffer | null = null;
+let cjkFontCache: ArrayBuffer | null = null;
+
+async function loadFont(
+  url: string,
+  cacheRef: { get: () => ArrayBuffer | null; set: (buf: ArrayBuffer) => void },
+  useDataCache: boolean,
+): Promise<ArrayBuffer | null> {
+  const hit = cacheRef.get();
+  if (hit) return hit;
   try {
-    const res = await fetch(INSTRUMENT_SERIF_ITALIC_URL, {
-      // Cache the upstream response in the edge fetch cache too — the
-      // module-level `fontCache` covers same-instance warm hits; this covers
-      // cold spins on the same POP.
-      cache: 'force-cache',
+    // Next's data cache rejects items >2MB. Noto Sans JP is ~7.6MB so we
+    // skip the data-cache layer for the CJK font and rely on the
+    // module-level cache (warm worker) for amortization. Instrument
+    // Serif is ~50KB and benefits from the data-cache layer for cold
+    // spins on the same POP.
+    const res = await fetch(url, {
+      cache: useDataCache ? 'force-cache' : 'no-store',
     });
     if (!res.ok) return null;
     const buf = await res.arrayBuffer();
-    fontCache = buf;
+    cacheRef.set(buf);
     return buf;
   } catch {
     return null;
   }
+}
+
+function loadInstrumentSerif(): Promise<ArrayBuffer | null> {
+  return loadFont(
+    INSTRUMENT_SERIF_ITALIC_URL,
+    {
+      get: () => serifFontCache,
+      set: (buf) => {
+        serifFontCache = buf;
+      },
+    },
+    true,
+  );
+}
+
+function loadNotoSansJP(): Promise<ArrayBuffer | null> {
+  return loadFont(
+    NOTO_SANS_JP_URL,
+    {
+      get: () => cjkFontCache,
+      set: (buf) => {
+        cjkFontCache = buf;
+      },
+    },
+    false,
+  );
 }
 
 async function loadBlob(id: string | null): Promise<SummaryBlob | null> {
@@ -99,24 +142,69 @@ function pickThumbs(blob: SummaryBlob, n: number): string[] {
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
-  // Fetch the blob and the font in parallel — the font fetch is amortized
-  // across requests via `fontCache`, but the first call on a cold worker
-  // pays this latency once.
-  const [blob, fontData] = await Promise.all([
+  // Fetch the blob and both fonts in parallel — the font fetches are
+  // amortized across requests via the module-level caches, but the first
+  // call on a cold worker pays this latency once.
+  const [blob, serifData, cjkData] = await Promise.all([
     loadBlob(id),
     loadInstrumentSerif(),
+    loadNotoSansJP(),
   ]);
 
-  const gist = blob?.gist ?? 'A collection from Agentic Commerce';
+  // Round-6 T4.Z: distinguish "no id at all" (generic brand card) from
+  // "id given but BE 404s" (expired card). The latter is what a recipient
+  // sees after a 7d-old share link — the message has to read "this is
+  // gone" rather than "broken link".
+  const expired = Boolean(id) && !blob;
+
+  const gist = expired
+    ? 'This collection is no longer available.'
+    : (blob?.gist ?? 'A collection from Agentic Commerce');
   const thumbs = blob ? pickThumbs(blob, 3) : [];
-  const meta = blob
-    ? `${blob.love.length + blob.maybe.length} items · ${blob.merchantCount} merchant${blob.merchantCount === 1 ? '' : 's'}`
-    : 'Conversational product discovery';
+  const meta = expired
+    ? 'Shared lookbooks expire after 7 days · agentic.commerce'
+    : blob
+      ? `${blob.love.length + blob.maybe.length} items · ${blob.merchantCount} merchant${blob.merchantCount === 1 ? '' : 's'}`
+      : 'Conversational product discovery';
 
   // Only quote Instrument Serif when we actually loaded a buffer; otherwise
   // fall back to the prior `Georgia, serif` stack so we still render
-  // something the user recognises.
-  const serifStack = fontData ? 'Instrument Serif, Georgia, serif' : 'Georgia, serif';
+  // something the user recognises. Noto Sans JP follows in the stack so
+  // Satori reaches for it when a glyph isn't in Instrument Serif's set.
+  const serifStack = serifData
+    ? cjkData
+      ? 'Instrument Serif, Noto Sans JP, Georgia, serif'
+      : 'Instrument Serif, Georgia, serif'
+    : cjkData
+      ? 'Noto Sans JP, Georgia, serif'
+      : 'Georgia, serif';
+
+  const sansStack = cjkData
+    ? 'Noto Sans JP, system-ui, sans-serif'
+    : 'system-ui, sans-serif';
+
+  const fonts: Array<{
+    name: string;
+    data: ArrayBuffer;
+    style?: 'italic' | 'normal';
+    weight?: 400;
+  }> = [];
+  if (serifData) {
+    fonts.push({
+      name: 'Instrument Serif',
+      data: serifData,
+      style: 'italic',
+      weight: 400,
+    });
+  }
+  if (cjkData) {
+    fonts.push({
+      name: 'Noto Sans JP',
+      data: cjkData,
+      style: 'normal',
+      weight: 400,
+    });
+  }
 
   const img = new ImageResponse(
     (
@@ -139,14 +227,14 @@ export async function GET(req: NextRequest) {
               color: '#8a8a85',
               letterSpacing: 4,
               textTransform: 'uppercase',
-              fontFamily: 'system-ui, sans-serif',
+              fontFamily: sansStack,
             }}
           >
             Agentic Commerce
           </div>
           <div
             style={{
-              fontSize: 72,
+              fontSize: expired ? 60 : 72,
               fontStyle: 'italic',
               color: '#101010',
               marginTop: 24,
@@ -168,7 +256,7 @@ export async function GET(req: NextRequest) {
             style={{
               fontSize: 22,
               color: '#3a3a37',
-              fontFamily: 'system-ui, sans-serif',
+              fontFamily: sansStack,
             }}
           >
             {meta}
@@ -202,16 +290,7 @@ export async function GET(req: NextRequest) {
     {
       width: WIDTH,
       height: HEIGHT,
-      fonts: fontData
-        ? [
-            {
-              name: 'Instrument Serif',
-              data: fontData,
-              style: 'italic',
-              weight: 400,
-            },
-          ]
-        : undefined,
+      fonts: fonts.length > 0 ? fonts : undefined,
     },
   );
 

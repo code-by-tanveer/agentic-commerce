@@ -23,6 +23,7 @@ Schema:
 }
 
 Rules:
+- If the image has clear foreground vs background (a product centered against a backdrop, an outfit photo with environmental context), describe only the foreground subject. Ignore background clutter, signage, watermarks, and adjacent unrelated items.
 - If the image is too dark, blurry, or ambiguous to confidently extract attributes, return "attributes": [] and a "description" that names the difficulty plainly (e.g. "image is too dim to read color or fabric").
 - Never guess the brand unless a logo is plainly legible.
 - Never include people's names, faces, or PII in any field.
