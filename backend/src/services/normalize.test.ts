@@ -70,6 +70,45 @@ describe('normalizeProduct', () => {
     expect(multi.variants?.[0]?.shipsTo).toEqual(['GB', 'FR']);
   });
 
+  // Round 5 polish (T4.A): `shipsTo` reads from `ships_to` / `shipsTo` on
+  // BOTH the raw product and the merchant blob; entries get upper-cased.
+  it("reads merchantInfo.shipsTo from `ships_to` and `shipsTo`, upper-casing entries", () => {
+    const snake = normalizeProduct({
+      merchant: { name: 'M', ships_to: ['us', 'ca'] },
+    });
+    expect(snake.merchantInfo?.shipsTo).toEqual(['US', 'CA']);
+
+    const camel = normalizeProduct({
+      merchant: { name: 'M', shipsTo: ['gb', 'de'] },
+    });
+    expect(camel.merchantInfo?.shipsTo).toEqual(['GB', 'DE']);
+
+    // Single string at product level → wrapped + upper-cased.
+    const single = normalizeProduct({ merchant: { name: 'M' }, ships_to: 'fr' });
+    expect(single.merchantInfo?.shipsTo).toEqual(['FR']);
+
+    // Absence → undefined (graceful-degrade, no empty array).
+    const none = normalizeProduct({ merchant: { name: 'M' } });
+    expect(none.merchantInfo?.shipsTo).toBeUndefined();
+  });
+
+  // Round 5 polish (T4.W): `reviewCount` reads from `review_count` /
+  // `reviewCount` / `n_reviews`; coerces to a non-negative integer.
+  it('reads merchantInfo.reviewCount from review_count / reviewCount / n_reviews', () => {
+    const snake = normalizeProduct({ merchant: { name: 'M', review_count: 42 } });
+    expect(snake.merchantInfo?.reviewCount).toBe(42);
+
+    const camel = normalizeProduct({ merchant: { name: 'M', reviewCount: '1280' } });
+    expect(camel.merchantInfo?.reviewCount).toBe(1280);
+
+    const n = normalizeProduct({ merchant: { name: 'M', n_reviews: 7 } });
+    expect(n.merchantInfo?.reviewCount).toBe(7);
+
+    // Negative / NaN drop.
+    const bad = normalizeProduct({ merchant: { name: 'M', review_count: -3 } });
+    expect(bad.merchantInfo?.reviewCount).toBeUndefined();
+  });
+
   it('does not throw on a deliberately ragged raw payload', () => {
     // Mixed bag — should never throw, only fall back.
     expect(() =>

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Check, ExternalLink, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { formatMoney } from '@/lib/format';
+import { clientLocale, formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
 import { useOptionalShortlist } from '@/hooks/useShortlist';
 import { ProductImage } from './ProductImage';
@@ -52,6 +52,8 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
   const cells = items.slice(0, 4);
   const total = cells.reduce((acc, p) => acc + (p.price || 0), 0);
   const currency = cells[0]?.currency || 'USD';
+  // T4.K (Priya) — locale-aware currency formatting.
+  const locale = clientLocale();
 
   async function onSave() {
     if (!shortlist || saving || savedAt) return;
@@ -92,11 +94,16 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
     >
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-accent-600" aria-hidden />
+          {/* T4.R (Yuki, Round 5) — Sparkles was `text-accent-600`, a soft
+              commitment-rule violation (orange is reserved for commerce-intent
+              CTAs per DESIGN.md §2.2). Dropped to `text-ink-400`; the
+              `accent-50` frame around the bundle already carries the
+              "coordinated set" signal so the icon doesn't need colour. */}
+          <Sparkles className="h-4 w-4 text-ink-400" aria-hidden />
           <p className="text-sm font-semibold text-ink-900">A coordinated set</p>
         </div>
-        <p className="text-[11px] text-ink-400">
-          {cells.length} item{cells.length === 1 ? '' : 's'} · {formatMoney(total, currency)}
+        <p className="text-xs text-ink-400">
+          {cells.length} item{cells.length === 1 ? '' : 's'} · {formatMoney(total, currency, locale)}
         </p>
       </header>
 
@@ -111,10 +118,19 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
             <BundleCell
               product={cells[0]}
               rationale={rationales?.[0] ?? null}
+              locale={locale}
               className="col-span-2"
             />
-            <BundleCell product={cells[1]} rationale={rationales?.[1] ?? null} />
-            <BundleCell product={cells[2]} rationale={rationales?.[2] ?? null} />
+            <BundleCell
+              product={cells[1]}
+              rationale={rationales?.[1] ?? null}
+              locale={locale}
+            />
+            <BundleCell
+              product={cells[2]}
+              rationale={rationales?.[2] ?? null}
+              locale={locale}
+            />
           </>
         ) : (
           cells.map((p, i) => (
@@ -122,13 +138,14 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
               key={p.id}
               product={p}
               rationale={rationales?.[i] ?? null}
+              locale={locale}
             />
           ))
         )}
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-[11px] text-ink-400">
+        <p className="text-xs text-ink-400">
           Saves all {cells.length} to your Love lane.
         </p>
         <button
@@ -171,6 +188,7 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
 function BundleCell({
   product,
   rationale,
+  locale,
   className,
 }: {
   product: Product;
@@ -180,6 +198,9 @@ function BundleCell({
   // backwards-compat path (older event without the parallel array) — fall
   // back to the first reasoning chip's detail/label as before.
   rationale: string | null;
+  // T4.K — pass the locale through so per-cell prices honour the browser
+  // locale (consistent with the outer total).
+  locale?: string;
   className?: string;
 }) {
   // Prefer the explicit per-cell rationale from the outfit event. When it's
@@ -212,15 +233,19 @@ function BundleCell({
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
         )}
       >
-        <div className="aspect-square w-full overflow-hidden">
-          <ProductImage src={product.images?.[0]} alt={product.title} />
+        <div className="relative aspect-square w-full overflow-hidden">
+          <ProductImage
+            src={product.images?.[0]}
+            alt={product.title}
+            sizes="(max-width: 640px) 33vw, 200px"
+          />
         </div>
       </button>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-xs font-medium text-ink-900">{product.title}</p>
-          <p className="text-[11px] text-ink-400">
-            {formatMoney(product.price, product.currency)}
+          <p className="text-xs text-ink-400">
+            {formatMoney(product.price, product.currency, locale)}
           </p>
         </div>
         <button
@@ -233,7 +258,7 @@ function BundleCell({
         </button>
       </div>
       {cellRationale ? (
-        <p className="line-clamp-1 text-[11px] text-ink-400">{cellRationale}</p>
+        <p className="line-clamp-1 text-xs text-ink-400">{cellRationale}</p>
       ) : null}
     </div>
   );

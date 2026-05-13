@@ -121,14 +121,14 @@ export function MerchantBlock({ info, className }: Props) {
       ) : null}
 
       {info.carbon ? (
-        <p className="inline-flex items-center gap-1 text-[11px] text-ink-400">
+        <p className="inline-flex items-center gap-1 text-xs text-ink-400">
           <Leaf className="h-3 w-3" aria-hidden />
           {info.carbon}
         </p>
       ) : null}
 
       {missing.length > 0 ? (
-        <p className="text-[11px] italic text-ink-400">
+        <p className="text-xs italic text-ink-400">
           Merchant didn’t publish {formatList(missing)}.
         </p>
       ) : null}
@@ -179,7 +179,7 @@ function StarRating({ value }: { value: number }) {
           aria-hidden
         />
       ))}
-      <span className="ml-1 text-[11px] text-ink-400">
+      <span className="ml-1 text-xs text-ink-400">
         {clamped.toFixed(1)}
       </span>
     </span>

@@ -2,7 +2,7 @@
 
 Owner: Product Owner (sub-agent). This is the canonical product brief. Other agents (architect, design lead, engineers, QA, reviewers) read this before every cycle. Do not edit without an ADR.
 
-Last updated: 2026-05-12.
+Last updated: 2026-05-13.
 
 ---
 
@@ -28,7 +28,7 @@ Agentic Commerce is a conversational shopping companion built on the Shopify Cat
 - **Behaviour:** Shops across categories (apparel, home, gifts, occasional electronics). Starts most sessions with a vibe, not a SKU ("something for a beach wedding", "a desk lamp that won't look like an Ikea cliché"). Cross-references Pinterest, Reddit, TikTok before committing. Will abandon a cart to check returns policy. Buys ~2–4×/month online for self, plus gifts.
 - **Why incumbents fail her:**
   - **Amazon (incl. Rufus):** sponsored-first ranking she actively distrusts; Rufus answers questions but doesn't help her *decide*; catalog is dominated by Chinese white-label SKUs she can't differentiate. (Evidence: persistent Reddit complaint thread r/Amazon "Rufus is useless for actually picking" + Marketplace Pulse coverage of 70%+ sponsored real-estate on results pages.) [ASSUMPTION — exact thread URLs not re-verified; trend is well-documented]
-  - **ChatGPT Shopping:** returns a flat link list with thumbnails, no comparison structure, no memory of her sizing/budget across the session, and as of early 2026 they walked back Instant Checkout — confirming the product is in flux. (Evidence: OpenAI's own Feb 2026 changelog removing Instant Checkout default; Stratechery commentary.) [ASSUMPTION — paraphrased from public reporting]
+  - **ChatGPT Shopping:** returns a flat link list with thumbnails, no comparison structure, no memory of her sizing/budget across the session, and in Q1 2026 they walked back Instant Checkout — confirming the product is in flux. (Evidence: CNBC Mar 24 2026 reporting that OpenAI revamped the shopping experience, deprioritising native checkout after only ~30 Shopify merchants ever went live; Forrester framed it as "the leader in agentic commerce just pulled back".)
   - **Klarna AI:** assistant tone is transactional/coupon-led ("save $4 with BNPL"), assumes she already knows what she wants; no visual layout. (Evidence: their public demo videos focus on payment and BNPL prompts, not discovery.)
   - **Daydream (iOS, late 2025):** beautiful visual feed but iOS-only, fashion-only, single-merchant feel, and no transparent reasoning — it picks for you and you don't know why. (Evidence: TechCrunch launch coverage Nov 2025; App Store reviews flag "why this?" as the top question.) [ASSUMPTION — review aggregation paraphrased]
 
@@ -87,7 +87,7 @@ These are the moat. Every cycle review checks the relevant subset against PASS/F
 
 Be ruthless. If a feature isn't on this list and isn't in the seven moves, we don't build it this cycle.
 
-- **No embedded in-chat checkout.** Redirect to the merchant's Shopify-hosted checkout. ChatGPT Shopping's 2026 pivot away from Instant Checkout validates this. We don't want PCI scope, refund disputes, or merchant integration overhead.
+- **No embedded in-chat checkout.** Redirect to the merchant's Shopify-hosted checkout. **Strongly validated by ChatGPT's Instant Checkout pivot (CNBC Mar 24 2026):** the best-funded incumbent in the space onboarded only ~30 Shopify merchants in six months before pulling back to a discovery-first posture. Embedded checkout cost them sales-tax remittance complexity, no multi-item carts, no loyalty integration, and merchant onboarding friction — all on top of the PCI scope, refund disputes, and integration overhead we already wanted to avoid.
 - **No multi-user accounts / auth.** Sessions are anonymous, identified by cookie. Auth doubles the surface area and isn't needed to prove the discovery moat. Revisit only if shareable sessions need owner-only edit.
 - **No live inventory beyond what the MCP returns at query time.** We're a discovery layer, not a stock-management layer. If a product sold out between query and click-through, that's on the merchant page.
 - **No native mobile app.** Mobile web (PWA-grade) is in scope; native is a year of work for marginal lift over a polished responsive site. Daydream went iOS-first and is now stuck rebuilding for Android — we don't repeat that.
@@ -110,6 +110,21 @@ One line per cycle, framed as user-visible outcomes. Implementation tasks belong
 - **Cycle 5 — Phase D:** "I can show this to a friend." User hits "share session"; a polished public lookbook page opens with their shortlist, merchants, and recap, OG-tagged for clean previews on iMessage / Twitter / Slack. Mobile polish + a11y done.
 - **Cycle 6 — Hardening:** No new visible features. Stream latency, error states, Lighthouse ≥90 mobile, security review clean. The app feels *finished*.
 
+### Beyond Cycle 6 (Stage 2, post-launch)
+
+The seven UX moves are committed through Cycle 6; cycle-by-cycle planning for post-launch lives in a future `docs/POST_LAUNCH.md` to be authored after the Day-30 readout. Two strategic frames inform what we'll prioritise then:
+
+**What we'll commoditize on (don't defend these as moats — ship them well, then stop spending on them):**
+- **Move #6, photo → style search.** Perplexity shipped Snap to Shop in 2026; Daydream shipped iOS-26 screenshot-anywhere. The capability is now table stakes. We differentiate on the *visible, editable extraction chips* (you can see and correct what the agent extracted), not on having a vision feature.
+- **Move #3, persistent memory.** Perplexity closed this gap in 2026. We differentiate on the *visible, editable PreferencesCard* (transparency-of-memory), not on memory itself.
+
+**What we'll defend (the uncontested surfaces — invest deeper here in Stage 2):**
+- **Move #4, outfit / bundle completion.** Zero of the top-6 competitors ship this as a first-class action.
+- **Move #5, merchant transparency cards.** Zero of the top-6 ship returns/shipping/origin/carbon as default chips.
+- **Move #7, shareable session summary / lookbook.** Zero of the top-6 ship a server-rendered, OG-tagged share page.
+
+Stage-2 fodder lives in `docs/polish-round-4/competitive-analysis-2026-05.md` § "Opportunity windows" — six concrete cycles' worth of work all defended by the matrix above.
+
 ---
 
 ## 8. Open product questions
@@ -118,23 +133,53 @@ Things a real PM would take to 5 user interviews. Future cycles or a post-launch
 
 - **Q1 (resolve before Cycle 3):** Do users actually want a *three-lane* shortlist (Love/Maybe/Skip), or is the binary "Save / Pass" simpler? Daydream uses binary. We should test with 3 users whether the third lane reduces decision fatigue or adds it. [ASSUMPTION — Daydream pattern paraphrased from public screenshots]
 - **Q2 (resolve before Cycle 2):** Which preferences should the agent *proactively* extract vs. wait to be told? Aggressive extraction reads as creepy ("I noticed you said size 8 last week"); passive extraction means the chips never light up. Hypothesis: extract sizing + budget proactively, keep ethics/palette user-initiated. Validate with 3 users in week 2.
-- **Q3 (resolve before Cycle 4):** Does the photo→style flow drive more sessions than it costs in Groq vision tokens? If <5% of sessions use it, we're paying for a demo feature. Track from Cycle 4 launch; kill switch if usage is below floor at 2 weeks.
-- **Q4 (resolve before Cycle 5):** What's the right share-link experience — a snapshot (immutable) or live (updates as the original session continues)? Snapshot is safer (no leaking later edits to a stranger); live is more useful for collaborative shopping. Lean snapshot; revisit if users ask.
-- **Q5 (resolve before Cycle 6):** What's the floor on Groq free-tier reliability during a demo? Need a 100-query stress test against `llama-3.3-70b-versatile` to know how often we'll hit 429. If failure rate >2%, the fallback to 3.1-8B must be wired *before* launch, not after.
+- **Q3 (partially commoditizing — reframe before Cycle 4):** The photo→style capability itself is no longer a differentiator: Perplexity shipped Snap to Shop and Daydream shipped iOS-26 screenshot-anywhere, both in 2026. The kill-switch threshold still holds operationally (if <5% of sessions use it at week 2 post-Cycle-4, we're paying Groq vision tokens for a demo). But the strategic frame has shifted: **we differentiate on transparency-of-attribute-extraction (visible, editable chips) — not on the vision capability itself.** Cycle 4 acceptance must verify the chips are user-editable; that's the moat, not the model call.
+- **Q4 (RESOLVED 2026-05-13):** Snapshot-vs-live share semantics. Snapshot shipped in Cycle 5 (immutable, server-rendered, no JS required). Round 4 surfaced zero user demand for live collaboration. Stage-2 may revisit as an opt-in mode (see competitive-analysis-2026-05.md § "Opportunity windows" #3), but it is not an open question.
+- **Q5 (resolve before Cycle 6):** What's the floor on Groq free-tier reliability during a demo? Need a 100-query stress test against `llama-3.3-70b-versatile` to know how often we'll hit 429. If failure rate >2%, the fallback to 3.1-8B must be wired *before* launch, not after. **Note (Round 4 update):** the daily quota (14.4k RPD) is the actual abuse risk, not RPM bursts — the cheapest insurance is a Developer-tier credit-card-on-file on Day 0, which raises the limit 10× for ~$0 baseline cost.
+- **Q6 (revisit at month 3 post-launch):** Should we relax the "no walled-garden catalog" anti-goal (§6) to allow a uniform Shopify-affiliate-pool revenue model (Wirecutter-style, fully disclosed)? ADR-0006 pre-decides that a uniform per-merchant rate with algorithmic ranking unchanged does *not* violate the anti-goal — rankings remain preference-driven, not paid. Decision driver at month 3: revenue need vs. trust-cost from the disclosure. Don't ship without month-3 usage data.
+- **Q7 (revisit when month-12 MAU > 5k):** When do we open accounts (Pro tier with cross-device memory + shareable shortlist sync)? The current "no multi-user accounts" anti-goal (§6) is correct at our reach today: account systems double the surface area and the discovery moat is provable without them. But at sustained MAU above ~5k, persistent identity becomes valuable for the cohort that *wants* sync — and the market analysis flags this as the obvious Pro-tier wedge at $4–6/mo. Trigger: month-12 MAU sustained above 5k; resolution: an ADR re-opening the anti-account stance.
+
+---
+
+## 9. Strategic landscape (May 2026)
+
+A 1-page addendum capturing the shifts since Cycle-0 positioning was set in Nov 2025. Detail in `docs/polish-round-4/competitive-analysis-2026-05.md` and `docs/polish-round-4/market-analysis-2026-05.md`; this section is the load-bearing summary.
+
+**The 6-month shift.** Shopify opened the Catalog MCP to *all* developers in the Winter '26 Edition (Dec 2025). The structural data moat we relied on at Cycle 0 narrowed sharply: anyone can now get the same catalog access we have. Differentiation now lives entirely in UX — what we *do* with the data, not what data we can see. The competitive analysis (§ "Commoditizing moves") makes this concrete: MCP catalog access, persistent memory, and photo→style search have all commoditized. Reasoning chips, merchant transparency, outfit bundles, and the shareable lookbook have not. Protocols have proliferated in parallel — ACP (OpenAI + Stripe), UCP (Google + Shopify + 20+ retailers, Jan 2026), AP2, A2A, Visa TAP, plus Klarna's Agentic Product Protocol — but no protocol decision sits on our critical path: we are a consumer-side trust brand sitting *on top* of whichever pipes win.
+
+**Threat landscape.**
+- **Highest probability (6 months):** Perplexity Shopping. They closed the memory gap, shipped Snap to Shop visual search, added in-app PayPal Instant Buy, and run a free Merchant Program competing with Shopify MCP for catalog mindshare. The $400M Snapchat distribution deal collapsed in May 2026 and Amazon is suing them over crawling — both small wins for us — but they remain the most aggressive product team in the space. If they ship a collage layout or a shareable lookbook, two of our moves are gone. Watch their roadmap monthly.
+- **Second-highest probability (6 months):** Amazon Rufus. Q1 2026 earnings: 115% MAU growth YoY, ~$12B incremental annualized sales. April 2026: Scheduled Actions (auto-buy on a cron) rolled out to all US shoppers; price history expanded from 90 → 365 days. Amazon is staffing a 40-engineer "Agentic Commerce Experiences" group and simultaneously blocking/suing crawlers (Perplexity). Rufus does not threaten Mara's trust positioning — she actively distrusts Amazon ranking — but it raises the ambient expectation for "an AI agent helps me shop", which lifts our category awareness for free.
+- **Highest impact, lower probability (6 months):** Meta agentic shopping. Their Manus acquisition was blocked by China (Apr 2026), so the timeline slipped — but Instagram visual graph + WhatsApp distribution + FB Shops catalog is a structural visual-first wedge if they ever assemble it. 6-month probability: low. 18-month probability: high. We don't architect against them today; we monitor.
+- **Validated anti-goal:** ChatGPT Instant Checkout pivot (CNBC Mar 24 2026) is the proof point. Only ~30 Shopify merchants ever went live; OpenAI moved checkout into Apps mode and refocused on discovery. Forrester called it "the leader in agentic commerce just pulled back". The redirect-to-merchant stance in §6 is now publicly defended by the largest player in the space pulling back from the alternative.
+- **Wedge against the funded incumbents:** Phia's Nov 2025 data-overreach scandal (Safari extension capturing full HTML of visited pages, undisclosed) sharpens our transparency-first positioning. A "what we won't do" page linked from the About-you card is a marketing-shaped product surface (Stage-2 fodder, ~0.25 cycle of work).
+- **Net-new entrants since Nov 2025** (Lemrock, Wildcard, Swap Commerce, OneOff, Sitefire) are all merchant-side enablement plays, not Mara-facing UX competitors. Swap Commerce (brand-owned-agent embeds) is the structural watch-item: if every brand ships a competent first-party agent, the case for a horizontal agent like us weakens at the margin. Their existence accelerates the case for our own B2B widget play (ADR-0006).
+
+**Defensible moves (where we should invest deeper).** Per the competitive matrix in `competitive-analysis-2026-05.md` § "Benchmark matrix":
+- **Move #4 (outfit / bundle completion):** uncontested across all 6 top competitors. **Highest white-space on the board.**
+- **Move #5 (merchant transparency cards):** uncontested across all 6. Highest leverage per unit of work — and the load-bearing fact (ships-to) is now an explicit ADR (ADR-0005).
+- **Move #7 (shareable lookbook):** uncontested across all 6. Viral-loop relevant; distribution moat compounds.
+
+**Market-size honest read.** Per the May 2026 market analysis: realistic Y1 floor is **3k–8k cumulative sessions** in months 1–3 (closed beta + Product Hunt + creator seeding), **15k–40k cumulative / 2k–6k MAU** at month 12 if the north-star holds. Daydream raised $50M, launched in June 2025, has no public DAU figure — useful upper bound on what a well-funded peer can do in 18 months. We are explicitly *not* aiming for Rufus-scale; the wedge is the 26–38yo taste-led shopper who already has Pinterest, Substack, and a Reddit habit.
+
+**What this means for cycle planning.** Cycles 1–6 remain as committed. Stage-2 prioritisation, when authored, should weight investment toward Moves #4, #5, #7 and away from deeper builds on #3 and #6 (where competitors have caught up and any further investment is parity-spend, not moat-spend). See § 7 "Beyond Cycle 6" for the framing.
 
 ---
 
 ## Appendix — evidence & sources
 
-Quick-reference list of public signals informing the positioning above. Full detail in `docs/research/2026-05-12-competitor-scan.md`.
+Quick-reference list of public signals informing the positioning above. Full detail in `docs/research/2026-05-12-competitor-scan.md` and the May 2026 refresh in `docs/polish-round-4/competitive-analysis-2026-05.md`.
 
-- ChatGPT Shopping rolled back default Instant Checkout, early 2026 — validates "redirect-to-merchant" anti-goal. [ASSUMPTION — paraphrased from public reporting]
-- Shopify opened the Catalog MCP for public agent access, Nov 2025.
-- Daydream launched iOS, late 2025 — fashion-first, beautiful, opaque reasoning.
-- Phia (Sara Foster / Phoebe Gates) browser-extension launched 2024 — comparison-shopping plugin; UX pattern of inline overlay is worth studying.
-- Mercari Merchat AI — Japanese marketplace's conversational agent; strong on intent capture, weak on visual layout.
-- Amazon Rufus rolled out to all US shoppers 2024; Reddit + Marketplace Pulse coverage shows persistent "not useful for deciding" complaints.
-- Klarna AI assistant — covered in their 2024–2025 investor decks as a savings/BNPL prompt surface, not a discovery surface.
-- Shop app's AI features (Shopify's own) — first-party offering; important to monitor since they have catalog-side advantages we don't.
+- ChatGPT Shopping rolled back default Instant Checkout, Q1 2026 — validates "redirect-to-merchant" anti-goal. (CNBC Mar 24 2026; Forrester commentary; TechCrunch noting only ~30 merchants ever went live.)
+- Shopify opened the Catalog MCP from gated-partner pilot to all developers in the Winter '26 Edition (Dec 2025) — the structural data moat narrowed; differentiation now lives in UX.
+- Shopify Agentic Storefronts (Winter '26): merchants syndicate catalogs to ChatGPT, Microsoft Copilot, Perplexity natively. Universal Commerce Protocol coalition (Walmart, Target, Etsy, Wayfair).
+- Daydream launched iOS Nov 2025; Q1 2026 doubled down with iOS-26 Liquid Glass + Apple Visual Intelligence integration (screenshot-anywhere → shop). Still iOS-only, still fashion-only. The Cycle-0 assumption that they were *temporarily* iOS was wrong; iOS is the strategic stance.
+- Perplexity Shopping (2026): shipped persistent memory, Snap to Shop, virtual try-on, PayPal Instant Buy, free Merchant Program. $400M Snap distribution deal collapsed May 2026; Amazon suing them over crawling.
+- Amazon Rufus (Apr 2026): Scheduled Actions (auto-buy on a cron) rolled out to all US shoppers; 365-day price history; 40-engineer agentic-commerce team staffing up. Walled garden hardening.
+- Phia raised $35M (Notable, Khosla, Kleiner Perkins) Jan 2026 — but Nov 2025 data-overreach incident (Safari extension capturing full HTML of every visited page, undisclosed) is their open trust wound. Transparency-first positioning is the wedge.
+- Klarna Agentic Product Protocol (live: 100M+ products / 400M+ prices across 12 markets) and Klarna-in-Gemini BNPL embed — they want to be infrastructure as much as a consumer app. Identity is muddy.
+- Rye repositioned as the universal checkout API for AI agents (15k+ merchants, sub-10s Amazon/Shopify checkout). Direct beneficiary of OpenAI's Instant Checkout retreat. Potential partner if we ever ship purchase (we won't, per §6).
+- Net-new entrants since Nov 2025: Lemrock (€6M, Paris), Wildcard (YC), Swap Commerce, OneOff, Sitefire. All merchant-side enablement, not Mara-facing UX competitors.
+- Meta agentic shopping: Manus acquisition blocked by China Apr 2026 — slowed but not stopped. 18-month watch item.
 
 Anything marked `[ASSUMPTION]` should be re-verified before Cycle 5 (launch prep). If a fact in this doc turns out wrong, file an ADR in `docs/adr/` documenting the correction and the downstream impact.

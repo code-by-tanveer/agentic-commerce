@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { ExternalLink, Store } from 'lucide-react';
 import { formatMoney } from '@/lib/format';
 import type {
@@ -38,14 +39,14 @@ function ProductCell({ product }: { product: Product }) {
   const img = product.images?.[0];
   return (
     <li className="flex gap-4 rounded-2xl bg-white p-4 shadow-soft">
-      <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
+      <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={img}
             alt={product.title}
-            loading="lazy"
-            className="h-full w-full object-cover"
+            fill
+            sizes="96px"
+            className="object-cover"
           />
         ) : (
           <div className="h-full w-full bg-ink-100" aria-hidden />
@@ -132,14 +133,14 @@ function OutfitCell({ outfit }: { outfit: SummaryOutfit }) {
               rel={p.checkoutUrl ? 'noopener noreferrer' : undefined}
               className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-accent-50"
             >
-              <div className="aspect-square w-full overflow-hidden bg-ink-100">
+              <div className="relative aspect-square w-full overflow-hidden bg-ink-100">
                 {p.images?.[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={p.images[0]}
                     alt={p.title}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(max-width: 640px) 50vw, 25vw"
+                    className="object-cover"
                   />
                 ) : null}
               </div>

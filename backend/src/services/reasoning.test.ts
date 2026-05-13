@@ -136,6 +136,44 @@ describe('computeChips', () => {
     });
   });
 
+  describe('ships_to_match (Round-5 merchantInfo.shipsTo)', () => {
+    // Round 5 polish (T4.A): the new chip reads merchant-level destination
+    // lists (the surface where Shopify metafields actually publish ships-to)
+    // and sits between fast_shipping and ethics in the rank.
+    it('emits ships_to_match when merchantInfo.shipsTo includes prefs.ships_to', () => {
+      const p = product({
+        merchantInfo: { name: 'Acme', shipsTo: ['US', 'CA', 'GB'] },
+      });
+      const chips = computeChips(p, prefs({ ships_to: 'GB' }));
+      const match = chips.find((c) => c.kind === 'ships_to_match');
+      expect(match).toBeDefined();
+      expect(match?.label).toBe('Ships to GB');
+      expect(match?.tone).toBe('positive');
+    });
+
+    it('matches case-insensitively (lower-case pref against upper-case list)', () => {
+      const p = product({
+        merchantInfo: { name: 'Acme', shipsTo: ['US', 'DE'] },
+      });
+      const chips = computeChips(p, prefs({ ships_to: 'de' }));
+      expect(chips.some((c) => c.kind === 'ships_to_match')).toBe(true);
+    });
+
+    it('does NOT emit when merchantInfo.shipsTo is absent (graceful-degrade)', () => {
+      const p = product({ merchantInfo: { name: 'Acme' } });
+      const chips = computeChips(p, prefs({ ships_to: 'GB' }));
+      expect(chips.some((c) => c.kind === 'ships_to_match')).toBe(false);
+    });
+
+    it('does NOT emit on explicit mismatch', () => {
+      const p = product({
+        merchantInfo: { name: 'Acme', shipsTo: ['US', 'CA'] },
+      });
+      const chips = computeChips(p, prefs({ ships_to: 'GB' }));
+      expect(chips.some((c) => c.kind === 'ships_to_match')).toBe(false);
+    });
+  });
+
   describe('fast_shipping', () => {
     it("emits fast_shipping when merchantInfo.shippingDays parses to <=3 days ('2-3 days')", () => {
       const p = product({
@@ -231,9 +269,11 @@ describe('computeChips', () => {
       // MAX_CHIPS = 4
       expect(chips.length).toBe(4);
 
-      // RANK order: size_match=0, discount=1, price=2, fast_shipping=3,
-      // shipping=4, ethics=5. Top-4 by rank: size_match, discount, price,
-      // fast_shipping (shipping + ethics are dropped).
+      // RANK order (Round-5): size_match=0, discount=1, price=2,
+      // fast_shipping=3, ships_to_match=4, ethics=5, shipping=6. The fixture
+      // doesn't set merchantInfo.shipsTo so ships_to_match doesn't fire;
+      // top-4 by rank: size_match, discount, price, fast_shipping (shipping
+      // + ethics are sliced off the tail).
       expect(chips.map((c) => c.kind)).toEqual([
         'size_match',
         'discount',

@@ -1,5 +1,13 @@
 'use client';
 
+// Round-5 coordination note (FE-polish engineer): the only edits here are the
+// `error` block — T4.M (Retry button bumped to h-11; scroll the block into
+// view on mount under a `useEffect`) and T4.Q (`mt-0.5` → `mt-1`). If the
+// FE-structural engineer's edits to this file collide, defer to their
+// structure pass and re-apply the polish on a 2nd pass.
+
+import { useEffect, useRef } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { AlertCircle, RotateCcw, SearchX } from 'lucide-react';
 import { useConversationActions, type Block } from '@/hooks/useConversation';
 import { ProductCardGroup } from '../product/ProductCardGroup';
@@ -134,27 +142,63 @@ function BlockView({
 
     case 'error':
       return (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-soft"
-        >
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="flex-1">
-            <p>{block.message}</p>
-            {block.retryable && onRetry ? (
-              <button
-                onClick={onRetry}
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Retry
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <ErrorBlock
+          message={block.message}
+          retryable={!!block.retryable}
+          onRetry={onRetry}
+        />
       );
 
     default:
       return null;
   }
+}
+
+// T4.M + T4.Q (Round 5) — error block:
+//   - Retry button bumped from `h-auto px-3 py-1 text-xs` to
+//     `h-11 px-4 text-sm` (44px tap target / Apple HIG). The visual remains
+//     subdued (white pill on rose-50) so it doesn't read as a primary CTA.
+//   - On mount the block scrolls itself into view (`block: 'nearest'`) so
+//     mobile users on flaky connections see the failure rather than thinking
+//     the app froze. Honours `prefers-reduced-motion` via `useReducedMotion`.
+//   - AlertCircle icon spacing bumped from `mt-0.5` to `mt-1` per the §2.5
+//     canonical palette (decimal spacing slipped past the sweep — T4.Q).
+function ErrorBlock({
+  message,
+  retryable,
+  onRetry,
+}: {
+  message: string;
+  retryable: boolean;
+  onRetry?: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    ref.current?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      block: 'nearest',
+    });
+  }, [reduce]);
+  return (
+    <div
+      ref={ref}
+      role="alert"
+      className="flex items-start gap-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-soft"
+    >
+      <AlertCircle className="mt-1 h-4 w-4 shrink-0" />
+      <div className="flex-1">
+        <p>{message}</p>
+        {retryable && onRetry ? (
+          <button
+            onClick={onRetry}
+            className="mt-2 inline-flex h-11 items-center gap-1 rounded-full bg-white px-4 text-sm font-medium text-rose-700 transition hover:bg-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-700 focus-visible:ring-offset-2 focus-visible:ring-offset-rose-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Retry
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
 }

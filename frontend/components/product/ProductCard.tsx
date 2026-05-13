@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ExternalLink, Heart, Store, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { formatMoney } from '@/lib/format';
+import { clientLocale, formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
 import {
   DRAG_MIME,
@@ -42,6 +42,10 @@ export function ProductCard({ product, index = 0 }: Props) {
   const price = selectedVariant?.price ?? product.price;
   const currency = selectedVariant?.currency ?? product.currency;
   const canBuy = !!checkoutUrl;
+  // T4.K (Priya) — pull the browser's locale on client so INR / EUR / etc.
+  // get correct grouping (lakh comma for en-IN, etc.). Falls back to en-US
+  // under SSR via `clientLocale()` returning undefined.
+  const locale = clientLocale();
   // T1.1 — track whether this product is already in the Love lane so the heart
   // reflects state. Hides duplicate-tap noise; tapping again moves the lane
   // back to `love` (idempotent server-side) and the heart fills regardless.
@@ -161,9 +165,13 @@ export function ProductCard({ product, index = 0 }: Props) {
       </span>
 
       {/* T1.1 — heart-icon tap-to-save. Visible at rest on touch
-          (`[@media(hover:none)]`), fade-in on hover for fine pointers.
-          Positioned absolute so it sits over the image without disturbing
-          the row layout. */}
+          (`[@media(hover:none)]`); on fine pointers it now rests at
+          `opacity-60` so the affordance survives keyboard tab-nav and
+          slow-eye users (T4.C / Diane, Round 5). Hover / focus / saved
+          state confirm at full opacity.
+          T4.S — saved heart uses `ink-900` (filled) instead of `rose-500`;
+          rose is reserved for danger per the Design Lead's note. The fill
+          alone carries the "saved" signal — no colour required. */}
       <button
         type="button"
         onClick={saveLove}
@@ -172,15 +180,17 @@ export function ProductCard({ product, index = 0 }: Props) {
         className={cn(
           'absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
           'hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
-          // Touch (no-hover) devices always see it.
+          // Touch (no-hover) devices always see it at full opacity.
           '[@media(hover:none)]:opacity-100',
-          // Fine-pointer / hover-capable devices: fade in on group-hover/focus.
-          '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100',
-          isLoved && 'text-rose-500 [@media(hover:hover)]:opacity-100',
+          // Fine-pointer / hover-capable devices: subtle resting state, full
+          // opacity on hover/focus. T4.C — was opacity-0 (invisible to
+          // tab-nav users) until Round 5.
+          '[@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
+          isLoved && 'text-ink-900 [@media(hover:hover)]:opacity-100',
         )}
       >
         <Heart
-          className={cn('h-4 w-4', isLoved && 'fill-rose-500')}
+          className={cn('h-4 w-4', isLoved && 'fill-ink-900')}
           aria-hidden
         />
       </button>
@@ -192,14 +202,18 @@ export function ProductCard({ product, index = 0 }: Props) {
         className="flex w-full cursor-pointer items-stretch gap-3 p-3 text-left"
       >
         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
-          <ProductImage src={product.images[0]} alt={product.title} />
+          <ProductImage
+            src={product.images[0]}
+            alt={product.title}
+            sizes="96px"
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="truncate text-sm font-semibold text-ink-900">{product.title}</h3>
               {/* T1.30 — mt-0.5 → mt-1 (no decimal spacing). */}
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-ink-400">
+              <p className="mt-1 flex items-center gap-1 text-xs text-ink-400">
                 <Store className="h-3 w-3" aria-hidden />
                 <span className="truncate">{product.merchant}</span>
               </p>
@@ -221,7 +235,7 @@ export function ProductCard({ product, index = 0 }: Props) {
           ) : null}
           <div className="mt-auto flex items-end justify-between pt-2">
             <p className="text-base font-semibold text-ink-900">
-              {formatMoney(price, currency)}
+              {formatMoney(price, currency, locale)}
             </p>
             {/* T1.6 — "Buy now" → "Buy on {merchant}" everywhere. T1.14 —
                 now a sibling <button>, no longer a nested role="button"
@@ -267,9 +281,9 @@ export function ProductCard({ product, index = 0 }: Props) {
                   {product.images.slice(0, 6).map((src, i) => (
                     <div
                       key={src + i}
-                      className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ink-100"
+                      className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-ink-100"
                     >
-                      <ProductImage src={src} alt={`${product.title} ${i + 1}`} />
+                      <ProductImage src={src} alt={`${product.title} ${i + 1}`} sizes="80px" />
                     </div>
                   ))}
                 </div>
@@ -305,7 +319,7 @@ export function ProductCard({ product, index = 0 }: Props) {
                   {/* T1.28 — `font-display` on the expanded Total price. One of
                       the four allowed serif homes per DESIGN.md §2.4 #1. */}
                   <p className="font-display text-lg leading-tight text-ink-900">
-                    {formatMoney(price, currency)}
+                    {formatMoney(price, currency, locale)}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">

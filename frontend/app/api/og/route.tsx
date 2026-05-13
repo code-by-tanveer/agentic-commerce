@@ -8,11 +8,53 @@ import type { Product, SummaryBlob, SummaryProduct } from '@/types/product';
 // gist + a 3-up product image strip. Falls back to a generic card when the
 // id is missing or the summary doesn't exist — link previews on iMessage /
 // Twitter / Slack should never render a broken image.
+//
+// Round 5 — T4.J: fetch Instrument Serif so the gist matches the in-app
+// SummaryHero italic moment instead of the Georgia fallback. `@vercel/og`
+// won't bundle our `next/font` (Satori needs raw font buffers), so we
+// fetch a WOFF from Google Fonts on each cold edge invocation. The
+// response itself is cached for an hour (`Cache-Control` below), so the
+// real cost is amortized.
+//
+// [DEFERRED] CJK fallback (Noto Sans). Korean / Hindi gist text still
+// falls back through to Satori's default. Adding Noto Sans CJK would
+// pull a ~1.5MB font buffer into the edge runtime cold path — the
+// bundle math doesn't justify it until the share-link analytics show
+// meaningful non-Latin traffic.
 
 export const runtime = 'edge';
 
 const WIDTH = 1200;
 const HEIGHT = 630;
+
+// Google Fonts ships a clean Instrument Serif Regular Italic at this URL
+// (resolved from their CSS API). Pinning the direct WOFF2-or-TTF avoids the
+// extra CSS-fetch roundtrip on every cold invocation. Satori accepts WOFF
+// and TTF; we use TTF here because @vercel/og's Satori build doesn't
+// decode WOFF2 reliably across runtimes.
+const INSTRUMENT_SERIF_ITALIC_URL =
+  'https://fonts.gstatic.com/s/instrumentserif/v6/jizDREVItHgc8qDIbSTKq4XIRfevQT08nlTLrSk.ttf';
+
+let fontCache: ArrayBuffer | null = null;
+
+async function loadInstrumentSerif(): Promise<ArrayBuffer | null> {
+  // Module-level cache survives across requests on a warm edge worker.
+  if (fontCache) return fontCache;
+  try {
+    const res = await fetch(INSTRUMENT_SERIF_ITALIC_URL, {
+      // Cache the upstream response in the edge fetch cache too — the
+      // module-level `fontCache` covers same-instance warm hits; this covers
+      // cold spins on the same POP.
+      cache: 'force-cache',
+    });
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    fontCache = buf;
+    return buf;
+  } catch {
+    return null;
+  }
+}
 
 async function loadBlob(id: string | null): Promise<SummaryBlob | null> {
   if (!id) return null;
@@ -57,13 +99,24 @@ function pickThumbs(blob: SummaryBlob, n: number): string[] {
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
-  const blob = await loadBlob(id);
+  // Fetch the blob and the font in parallel — the font fetch is amortized
+  // across requests via `fontCache`, but the first call on a cold worker
+  // pays this latency once.
+  const [blob, fontData] = await Promise.all([
+    loadBlob(id),
+    loadInstrumentSerif(),
+  ]);
 
   const gist = blob?.gist ?? 'A collection from Agentic Commerce';
   const thumbs = blob ? pickThumbs(blob, 3) : [];
   const meta = blob
     ? `${blob.love.length + blob.maybe.length} items · ${blob.merchantCount} merchant${blob.merchantCount === 1 ? '' : 's'}`
     : 'Conversational product discovery';
+
+  // Only quote Instrument Serif when we actually loaded a buffer; otherwise
+  // fall back to the prior `Georgia, serif` stack so we still render
+  // something the user recognises.
+  const serifStack = fontData ? 'Instrument Serif, Georgia, serif' : 'Georgia, serif';
 
   const img = new ImageResponse(
     (
@@ -76,7 +129,7 @@ export async function GET(req: NextRequest) {
           justifyContent: 'space-between',
           backgroundColor: '#f7f7f5',
           padding: 64,
-          fontFamily: 'Georgia, serif',
+          fontFamily: serifStack,
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -149,6 +202,16 @@ export async function GET(req: NextRequest) {
     {
       width: WIDTH,
       height: HEIGHT,
+      fonts: fontData
+        ? [
+            {
+              name: 'Instrument Serif',
+              data: fontData,
+              style: 'italic',
+              weight: 400,
+            },
+          ]
+        : undefined,
     },
   );
 

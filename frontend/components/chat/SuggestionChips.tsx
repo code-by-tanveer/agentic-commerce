@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface Props {
   suggestions: string[];
@@ -8,12 +8,18 @@ interface Props {
 }
 
 export function SuggestionChips({ suggestions, onPick }: Props) {
+  // T4.E (Lila) — Round-5 polish. The 100ms initial delay wasn't gated, so
+  // under `prefers-reduced-motion` users still got a one-shot delayed fade.
+  // The motion is opacity-only and one-shot (not infinite), so it can stay,
+  // but the delay drops to 0 under reduced motion per Lila's "completes the
+  // brief" note.
+  const reduce = useReducedMotion();
   if (!suggestions.length) return null;
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: 0.1 }}
+      transition={{ delay: reduce ? 0 : 0.1 }}
       className="flex flex-wrap gap-2"
     >
       {suggestions.map((s) => (

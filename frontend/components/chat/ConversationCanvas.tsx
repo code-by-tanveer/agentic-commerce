@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   useConversationActions,
   useConversationState,
@@ -23,10 +23,18 @@ export function ConversationCanvas() {
   const { messages } = useConversationState();
   const { send } = useConversationActions();
   const endRef = useRef<HTMLDivElement>(null);
+  // T4.Y (Lila, Round 5) — auto-scroll was hardcoded to `behavior: 'smooth'`.
+  // Browsers honour `prefers-reduced-motion` and substitute `auto` in
+  // practice, but explicit is better than implicit (Lila's note). Gate via
+  // `useReducedMotion()`.
+  const reduce = useReducedMotion();
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages]);
+    endRef.current?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      block: 'end',
+    });
+  }, [messages, reduce]);
 
   const onlyWelcome = messages.length === 1 && messages[0].role === 'assistant';
 

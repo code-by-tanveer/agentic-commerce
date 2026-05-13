@@ -41,7 +41,28 @@ export async function searchCatalog(
     },
     { signal: opts.signal, log: opts.log },
   );
-  return extractProducts(result).map(normalizeProduct);
+  const products = extractProducts(result).map(normalizeProduct);
+
+  // Round 5 polish (T4.L, persona-marcus): the MCP receives `filters.ships_to`
+  // but we don't trust it to honour the filter — if it ignores the field a
+  // user gets results they can't actually receive. Belt-and-braces post-filter
+  // here. Critically, we ONLY drop products where `merchantInfo.shipsTo` is
+  // present AND explicitly excludes the requested country. Products where
+  // the merchant didn't publish a destination list are kept (the
+  // graceful-degrade path — strict-filtering would slice too much). Case-
+  // insensitive match against the upper-cased ISO code we normalise to.
+  const wanted = opts.filters?.ships_to;
+  if (wanted) {
+    const target = wanted.trim().toUpperCase();
+    if (target.length > 0) {
+      return products.filter((p) => {
+        const list = p.merchantInfo?.shipsTo;
+        if (!Array.isArray(list) || list.length === 0) return true;
+        return list.map((s) => s.toUpperCase()).includes(target);
+      });
+    }
+  }
+  return products;
 }
 
 export async function getProduct(

@@ -100,10 +100,11 @@ const PREFERENCE_SYSTEM_ADDENDUM = `
 Preference memory: this session has a persistent preferences store. If the \
 user states a preference (size, budget, ships-to, shipping speed), call \
 \`save_preference\` BEFORE responding so the chat remembers. Do NOT proactively \
-extract \`palette\` or \`ethics\` — only save those when the user explicitly \
-mentions them. You can call \`get_preferences\` if the context is unclear about \
-what's already saved. When a relevant preference exists, fold it into your \
-search filters (e.g. pass \`filters.ships_to\` to \`search_catalog\`).
+extract \`palette\`, \`ethics\`, or \`shopping_for\` — only save those when the \
+user explicitly mentions them. You can call \`get_preferences\` if the context \
+is unclear about what's already saved. When a relevant preference exists, fold \
+it into your search filters (e.g. pass \`filters.ships_to\` to \
+\`search_catalog\`).
 
 Ethics is user-initiated (don't proactively save). When a user says \
 "I care about ethical sourcing" or names a value, map it to the closest entry \
@@ -114,6 +115,15 @@ them all in a single \`save_preference\` call with \`key: "ethics"\` and \
 If a user says something vague like "ethical brands only" without naming a \
 specific value, ask one short clarifying question listing the vocabulary \
 before saving.
+
+Shopping-for (gift use case) is user-initiated — don't proactively save. When \
+a user explicitly states the recipient ("a gift for my niece", "buying for my \
+dad", "shopping for myself"), map to one of: self, partner, kid_4_to_12, \
+kid_13_to_17, adult_friend, parent. If the recipient doesn't cleanly map to \
+one of those values, save the user's own phrase as the value (free-text is \
+accepted). Save in a single \`save_preference\` call with \`key: \
+"shopping_for"\`. Don't ask for the recipient unprompted — the persona who'd \
+benefit from this lead will surface it themselves.
 
 Coordinated sets: when the user asks "what goes with X", "complete this look", \
 "pair this with", or any similar coordinated-set request, call \

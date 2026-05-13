@@ -3,12 +3,29 @@ import { join, resolve } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { fileTypeFromBuffer } from 'file-type';
 import { nanoid } from 'nanoid';
+import sharp from 'sharp';
 import { env, RATE_LIMITS } from '../config/env.js';
 import { signUploadUrl } from '../services/uploads.js';
 import { purgeStaleUploads } from '../services/uploadsPurge.js';
 
 const DISK_FULL_CODES = new Set(['ENOSPC', 'EDQUOT']);
 const EMERGENCY_PURGE_MAX_AGE_MS = 60 * 60 * 1000;
+
+// Round 5 polish (T4.H, persona-cleo): iPhone Photos paste defaults to HEIC.
+// The prior allowlist of jpeg/png/webp meant every iOS Safari user got a
+// generic "unsupported_media_type" on paste. We now accept HEIC/HEIF on the
+// *input* side, then transcode to JPEG (via `sharp`) before persisting — so
+// the *output* allowlist is unchanged (vision tool + downstream rendering
+// keep their existing jpeg/png/webp contract). Magic-byte sniff still
+// gates input; the multipart-header MIME is ignored.
+const ALLOWED_INPUT_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+const HEIC_INPUT_MIMES = new Set(['image/heic', 'image/heif']);
 
 /**
  * POST /api/upload — multimodal entry point (cycle-4.md / ARCH §7, §9).
@@ -26,8 +43,7 @@ const EMERGENCY_PURGE_MAX_AGE_MS = 60 * 60 * 1000;
  * Rate-limited at 5/min/IP (ARCH §9, cycle-4.md acceptance criterion #6).
  */
 
-const ALLOWED_EXT = new Set(['jpg', 'jpeg', 'png', 'webp']);
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']);
 
 export async function uploadRoutes(app: FastifyInstance) {
   app.post(
@@ -80,20 +96,49 @@ export async function uploadRoutes(app: FastifyInstance) {
       // Magic-byte sniff. The multipart header `mimetype` is attacker-controlled
       // and never used for the allowlist decision.
       const sniff = await fileTypeFromBuffer(buf);
-      if (!sniff || !ALLOWED_EXT.has(sniff.ext) || !ALLOWED_MIME.has(sniff.mime)) {
+      if (!sniff || !ALLOWED_EXT.has(sniff.ext) || !ALLOWED_INPUT_MIME.has(sniff.mime)) {
         request.log.info(
           { claimedMime: part.mimetype, detected: sniff?.mime ?? 'unknown' },
           'upload: rejected by magic-byte sniff',
         );
         return reply.code(415).send({
           error: 'unsupported_media_type',
-          detail: 'Only image/jpeg, image/png, image/webp are accepted (magic-byte sniff).',
+          detail:
+            'Only image/jpeg, image/png, image/webp, image/heic, image/heif are accepted (magic-byte sniff).',
         });
       }
 
+      // Round 5 polish (T4.H): iOS HEIC/HEIF → transcode to JPEG before
+      // persisting. `sharp(...).rotate()` honours the EXIF orientation flag
+      // BEFORE the encode (HEIC images from iPhones routinely have non-zero
+      // rotation that downstream renderers don't normalise). Quality 85 is
+      // the standard "indistinguishable from source" floor. On transcode
+      // failure (corrupted HEIC, libvips without HEIF support) we fall back
+      // to a 415 rather than persisting the unreadable bytes.
+      let outBuf = buf;
+      let outExt: string = sniff.ext === 'jpg' ? 'jpeg' : sniff.ext;
+      let outMime: string = sniff.mime;
+      if (HEIC_INPUT_MIMES.has(sniff.mime)) {
+        try {
+          outBuf = await sharp(buf).rotate().jpeg({ quality: 85 }).toBuffer();
+          outExt = 'jpeg';
+          outMime = 'image/jpeg';
+        } catch (err) {
+          request.log.warn(
+            { err, claimedMime: part.mimetype, detected: sniff.mime },
+            'upload: HEIC transcode failed',
+          );
+          return reply.code(415).send({
+            error: 'unsupported_media_type',
+            detail: 'HEIC/HEIF transcode failed; please save the photo as JPEG and retry.',
+          });
+        }
+      }
+
       // Persist. `nanoid` gives us a non-guessable filename; ext is the
-      // sniffed extension (NOT whatever was in the upload filename).
-      const ext = sniff.ext === 'jpg' ? 'jpeg' : sniff.ext;
+      // sniffed (or post-transcode) extension — NEVER trusted from the
+      // upload filename.
+      const ext = outExt;
       const filename = `${nanoid()}.${ext}`;
       const root = resolve(env.UPLOAD_DIR);
       try {
@@ -105,7 +150,7 @@ export async function uploadRoutes(app: FastifyInstance) {
 
       const target = join(root, filename);
       try {
-        await writeFile(target, buf, { flag: 'wx' });
+        await writeFile(target, outBuf, { flag: 'wx' });
       } catch (err) {
         const e = err as NodeJS.ErrnoException;
         // polish-round-2 T2.4: disk-full fail-safe. On ENOSPC/EDQUOT, run an
@@ -130,7 +175,7 @@ export async function uploadRoutes(app: FastifyInstance) {
             request.log.warn({ err: purgeErr }, 'upload: emergency purge failed');
           }
           try {
-            await writeFile(target, buf, { flag: 'wx' });
+            await writeFile(target, outBuf, { flag: 'wx' });
           } catch (retryErr) {
             request.log.error(
               { err: retryErr, target },
@@ -161,7 +206,13 @@ export async function uploadRoutes(app: FastifyInstance) {
       const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
       request.log.info(
-        { filename, bytes: buf.length, mime: sniff.mime },
+        {
+          filename,
+          bytes: outBuf.length,
+          inMime: sniff.mime,
+          outMime,
+          transcoded: outMime !== sniff.mime,
+        },
         'upload: accepted',
       );
       return reply.code(200).send({ url, expiresAt });

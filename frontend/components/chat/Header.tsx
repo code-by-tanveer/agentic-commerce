@@ -12,10 +12,14 @@ import { useShortlist } from '@/hooks/useShortlist';
 import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
-// T1.9 — replaced the round Sparkles emblem with the wordmark in `font-display`
-// (Instrument Serif). DESIGN.md §2.4 #2 designates the page-header wordmark as
-// one of the four allowed serif homes; a "magazine masthead" feel keeps the
-// Skeptic anti-mascot rule honoured while still signalling brand voice.
+// Wordmark renders in Inter `font-sans font-semibold`, not the serif.
+// DESIGN.md §2.4 enumerates exactly four serif homes (ProductCard total,
+// SummaryHero gist, SummaryProductList section headers, CollageView hover
+// caption) and explicitly forbids a fifth — "Nowhere else." Yuki's round-4
+// audit caught the masthead as the fifth site: a persistent serif above
+// every conversation turn pre-spent the serif scarcity before the user
+// reached the SummaryHero italic moment. Inter at the existing weight keeps
+// brand presence without flattening the gift downstream.
 export function Header() {
   const { messages } = useConversationState();
   const { reset } = useConversationActions();
@@ -38,10 +42,12 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
-          {/* Wordmark — serif, magazine-masthead. DESIGN.md §2.4 #2.
-              R3 polish: tagline dropped per Skeptic re-walk (defensive
-              marketing copy was the strongest remaining bot-tell). */}
-          <p className="font-display text-xl leading-none text-ink-900">
+          {/* Wordmark — Inter `font-sans font-semibold`. The four serif
+              homes per DESIGN.md §2.4 do NOT include the persistent app
+              chrome (Yuki R4 audit). R3 polish: tagline dropped per Skeptic
+              re-walk (defensive marketing copy was the strongest remaining
+              bot-tell). */}
+          <p className="font-sans text-xl font-semibold leading-none text-ink-900">
             Agentic Commerce
           </p>
         </div>

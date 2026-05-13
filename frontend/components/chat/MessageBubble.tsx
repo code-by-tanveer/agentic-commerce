@@ -1,14 +1,33 @@
 'use client';
 
+import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '@/lib/cn';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageRenderer } from './MessageRenderer';
 import {
   useConversationActions,
+  type Block,
   type Message,
   type TextBlock,
 } from '@/hooks/useConversation';
+
+// T4.G — block types that should break out of the bubble. Shadowed cards
+// inside a shadowed bubble (the canonical ChatGPT-Shopping silhouette) read
+// as ours-by-accident; the structural fix is to render the rich blocks as
+// siblings of the text bubble inside the same message wrapper. The chat
+// bubble holds prose; the cards live at full canvas width below it. They
+// share entry animation but not chrome.
+const CARD_BLOCK_TYPES = new Set<Block['type']>([
+  'products',
+  'comparison',
+  'outfit',
+  'moodboard',
+]);
+
+function isCardBlock(b: Block): boolean {
+  return CARD_BLOCK_TYPES.has(b.type);
+}
 
 interface Props {
   message: Message;
@@ -45,12 +64,19 @@ export function MessageBubble({ message }: Props) {
       >
         <div className="flex max-w-[80%] flex-col items-end gap-2">
           {imageUrl ? (
-            <div className="overflow-hidden rounded-2xl bg-ink-100 shadow-soft">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            // T4.N — user-attached reference image. The intrinsic dimensions
+            // come from the upload endpoint; we don't know aspect ratio
+            // ahead of render, but the visual constraint is `max-h-40`. We
+            // use a sized 160x160 box with `next/image` `fill` + object-cover
+            // — slight crop on tall images is acceptable for a chat-bubble
+            // thumbnail, and avoids the `<img>` no-CLS / no-srcset issues.
+            <div className="relative h-40 w-40 overflow-hidden rounded-2xl bg-ink-100 shadow-soft">
+              <Image
                 src={imageUrl}
                 alt="Attached reference image"
-                className="block max-h-40 w-auto object-cover"
+                fill
+                sizes="160px"
+                className="object-cover"
               />
             </div>
           ) : null}
@@ -84,24 +110,44 @@ export function MessageBubble({ message }: Props) {
   // empty bubble.
   if (!message.blocks.length) return null;
 
+  // T4.G — split the block stream. Text / tool_status / error blocks stay
+  // inside the assistant's `max-w-[80%]` bubble; card-shaped blocks
+  // (products / comparison / outfit / moodboard) render as siblings of the
+  // bubble at full canvas width. Order within each group is preserved.
+  const bubbleBlocks = message.blocks.filter((b) => !isCardBlock(b));
+  const cardBlocks = message.blocks.filter(isCardBlock);
+  const onRetry =
+    message.status === 'error' ? () => void retry(message.id) : undefined;
+
   return (
     <motion.div
       initial={initial}
       animate={animate}
       transition={transition}
-      className={cn('flex w-full justify-start')}
+      className="flex w-full flex-col items-start gap-3"
     >
-      <div
-        className={cn(
-          'w-full max-w-[80%] rounded-2xl rounded-bl-md bg-white px-4 py-3 text-sm leading-relaxed text-ink-900 shadow-soft',
-        )}
-      >
-        <MessageRenderer
-          blocks={message.blocks}
-          messageId={message.id}
-          onRetry={message.status === 'error' ? () => void retry(message.id) : undefined}
-        />
-      </div>
+      {bubbleBlocks.length > 0 ? (
+        <div
+          className={cn(
+            'max-w-[80%] rounded-2xl rounded-bl-md bg-white px-4 py-3 text-sm leading-relaxed text-ink-900 shadow-soft',
+          )}
+        >
+          <MessageRenderer
+            blocks={bubbleBlocks}
+            messageId={message.id}
+            onRetry={onRetry}
+          />
+        </div>
+      ) : null}
+      {cardBlocks.length > 0 ? (
+        <div className="w-full max-w-3xl">
+          <MessageRenderer
+            blocks={cardBlocks}
+            messageId={message.id}
+            onRetry={onRetry}
+          />
+        </div>
+      ) : null}
     </motion.div>
   );
 }

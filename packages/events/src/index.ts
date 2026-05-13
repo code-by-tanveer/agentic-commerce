@@ -36,6 +36,12 @@ export const PREFERENCE_KEYS = [
   'palette',
   'ethics',
   'shipping_speed',
+  // Round 5 polish (T4.O, persona-diane): "who are you shopping for" — gift
+  // use case. User-initiated (don't proactively save). Free-text for now;
+  // the FE will wrap a select around it later. Common values:
+  // 'self' | 'partner' | 'kid_4_to_12' | 'kid_13_to_17' | 'adult_friend' |
+  // 'parent' | … (free-text).
+  'shopping_for',
 ] as const;
 
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
@@ -130,10 +136,23 @@ export const reasoningChipSchema = z.object({
 export const merchantInfoSchema = z.object({
   name: z.string(),
   rating: z.number().optional(),
+  // Round 5 polish (T4.W, persona-oscar): number of reviews backing the
+  // rating. Power users want it on cards + ComparisonTable as a separate
+  // column. Optional so omission gracefully degrades — MerchantBlock falls
+  // back to the prior rating-only row when the merchant hasn't published it.
+  reviewCount: z.number().int().nonnegative().optional(),
   returnsPolicy: z.string().optional(),
   shippingDays: z.string().optional(),
   carbon: z.string().optional(),
   originCountry: z.string().optional(),
+  // Round 5 polish (T4.A, personas Priya/Marcus/Aleksey/Ronan): ISO-3166
+  // alpha-2 country codes the merchant publishes as supported destinations.
+  // Normalized to uppercase by `services/normalize.ts::pickMerchantInfo`.
+  // Drives the `ships_to_match` reasoning chip + the post-fetch filter in
+  // `services/catalog.ts::searchCatalog` (drop on explicit mismatch only —
+  // products without a `shipsTo` array are kept, per the graceful-degrade
+  // rule: "the merchant didn't publish this").
+  shipsTo: z.array(z.string()).optional(),
 });
 
 export const normalizedProductSchema = z.object({

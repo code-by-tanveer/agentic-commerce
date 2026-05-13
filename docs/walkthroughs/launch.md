@@ -116,3 +116,48 @@ Expected:
 ## 3. What "pass" looks like
 
 If every step rendered the expected state above, the build is launch-ready against the seven UX moves in PRODUCT.md §5. File any deviation as a defect in the current cycle doc under `## Defects` with a short repro.
+
+## 4. Day 1–30 launch sequence
+
+Once the walkthrough passes end-to-end, the launch plays out over a 30-day window. The full reasoning lives in `docs/polish-round-4/market-analysis-2026-05.md` § "30-day launch sequence"; this is the operational summary.
+
+### Day 0 (the day "pass" above is reached)
+
+Tell exactly five people who can keep a secret and will give brutal feedback in 48h: 2 design-savvy Mara-personas, 1 Shopify merchant, 1 fashion-newsletter writer, 1 ex-Stitch-Fix-or-similar operator. Get explicit permission for screenshots. Wire the Developer-tier Groq credit card *now* (PRODUCT.md §8 Q5 — the daily 14.4k RPD quota is the real abuse risk, not RPM bursts).
+
+### Day 1–7 — Closed beta (~25–40 invited testers)
+
+- **Recruit list:** 10 from Twitter/IG DM (taste-led shoppers we follow); 10 from a single Substack writer's reply thread (offer exclusive walk-through in exchange for amplification); 5 Shopify merchants for the embedded-widget conversation (ADR-0006 path 2); 5–10 HN/PH friends primed to upvote.
+- **Instrumentation:** PostHog or Plausible event stream wired Day 1; daily Slack/Linear digest of the north-star (≥2 products shortlisted per session) plus the three supporting metrics (median time-to-first-shortlist, chip-tap-rate, share-rate). Daily 15-min triage on Groq 429 rate and MCP timeouts.
+- **Success criterion (window):** north-star ≥ 25% — at least one in four sessions shortlists two distinct products. Below 15%, pause launch and triage the agent loop before broadening the recruit list.
+
+### Day 8–21 — Soft launch
+
+- **Day 10 (Tuesday or Wednesday for max upvote density):** Product Hunt launch + HN Show post simultaneously.
+- **Day 12–14:** Substack writer's dedicated section goes live.
+- **Day 14–21:** First 3 creator partnerships (gifted access, no cash, week-long content windows).
+- **Signal-vs-noise threshold for "this is working":** north-star ≥ 35% sustained over 7 days, plus the supporting metrics at or above PRODUCT.md §4 targets (time-to-first-shortlist < 90s, chip-tap-rate ≥ 0.3, share-rate ≥ 5%). Below 25% on the north-star, treat the launch buzz as decorative and revisit positioning before opening any new channels.
+- **Latency floor:** if Groq 429 rate > 2% of turns or MCP timeout > 1% of calls during peak, freeze marketing pushes and harden the fallback before resuming.
+
+### Day 22–30 — Decide: pivot or scale
+
+**Scale triggers (any two):**
+
+- North-star ≥ 40% sustained over 7 days.
+- ≥ 3k cumulative sessions.
+- ≥ 10% of sessions sharing a `/s/[id]` page externally.
+- ≥ 3 unsolicited inbound from Shopify merchants asking for the widget (ADR-0006 path 2).
+
+If two or more fire: open paid B2B widget pilots (5 merchants, $0–299/mo concierge), kick off the creator paid push, scope month-2 SEO build, and write a cycle-7 backlog organised around growth rather than features. Affiliate-pool revenue (ADR-0006 path 1) becomes a candidate for month-3 enable.
+
+**Pivot triggers (any one):**
+
+- North-star < 20% sustained over 7 days.
+- > 40% of sessions ending at 0 shortlisted.
+- > 2 public reviewer complaints about hallucinated products (T4-pattern: model invents a SKU not in the MCP).
+
+If any one fires: narrow to a single vertical (Segment 4 in the market analysis — home reno or wedding planning), kill the multi-category framing in copy and on the share page, re-validate the north-star inside the narrowed scope before re-broadening.
+
+### What "30 days done" looks like
+
+By Day 30, the team has a defensible read on whether to scale the horizontal proposition or retrench into a single vertical. The output is a Day-30 readout (a short memo, not a meeting) that updates `docs/STATE.md`, opens or closes the relevant PRODUCT.md §8 questions, and authors `docs/POST_LAUNCH.md` with the next 60-day plan against the chosen direction.

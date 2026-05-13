@@ -7,13 +7,19 @@ import type { PreferenceEntrySnapshot, PreferencesSnapshot } from '../types/tool
  * Pure rules-engine for product reasoning chips. NO DB, NO MCP, NO logging.
  * Given a product + a preferences snapshot, return ≤4 chips ranked by signal
  * strength. Round 2 polish (T2.10, persona-sasha) promotes `ethics` above
- * `shipping`: for a values-led shopper who has explicitly saved one or more
- * ethics values, ethics belongs in the visible top-4 even when shipping has
- * a chip to fire. `MAX_CHIPS = 4`, so the prior tail position meant ethics
- * was the first thing sliced off the chip strip — the exact wrong order for
- * the persona who set the preference. New rank:
+ * `shipping`. Round 5 polish (T4.A, personas Priya/Marcus/Aleksey/Ronan)
+ * inserts the merchant-published `ships_to_match` chip between
+ * `fast_shipping` and `ethics`: trans-border shoppers want the visual
+ * confirmation that the merchant has named their country *before* the
+ * values-led ethics signal kicks in (you can't honour your values if the
+ * thing won't reach you). New rank:
  *
- *   size_match > discount > price > fast_shipping > ethics > shipping
+ *   size_match > discount > price > fast_shipping > ships_to_match > ethics > shipping
+ *
+ * The legacy `shipping` chip (variant-level `shipsTo` match) is still emitted
+ * at the tail for back-compat; in practice when `ships_to_match` fires the
+ * legacy `shipping` chip will too — the slice cap drops the latter, which is
+ * the intended behaviour (one redundant chip would burn a top-4 slot).
  *
  * Tests for this file should be trivial — feed in fixtures, assert on the
  * returned array. See cycle-2.md "Backend engineer" hard rules.
@@ -29,9 +35,11 @@ const RANK: Record<string, number> = {
   discount: 1,
   price: 2,
   fast_shipping: 3,
+  // Round 5: ships_to_match slots above ethics (see header comment).
+  ships_to_match: 4,
   // Round 2: ethics promoted above shipping. See header comment.
-  ethics: 4,
-  shipping: 5,
+  ethics: 5,
+  shipping: 6,
 };
 
 // Cycle 7 polish (T1.35): the gift-deadline persona needs a quick visual cue
@@ -140,6 +148,34 @@ function fastShippingChip(product: NormalizedProduct): ReasoningChip | null {
   };
 }
 
+// Round 5 polish (T4.A): when the user has saved `ships_to` AND the
+// merchant has explicitly published a `shipsTo` list AND that list includes
+// the requested country, emit a positive chip. Case-insensitive match.
+// Distinct from the legacy `shippingChip` below — which reads the per-variant
+// `shipsTo` — because in practice merchants publish destinations at the
+// merchant level via Shopify metafields, and we want the chip to fire on
+// that surface even when individual variants don't carry the field. The
+// label uses the user's preferred country code verbatim so the chip can be
+// matched against the saved preference at a glance.
+function shipsToMatchChip(
+  product: NormalizedProduct,
+  prefs: PreferencesSnapshot,
+): ReasoningChip | null {
+  const wanted = readValue<unknown>(prefs, 'ships_to');
+  const target = typeof wanted === 'string' ? wanted.trim().toUpperCase() : undefined;
+  if (!target) return null;
+  const list = product.merchantInfo?.shipsTo;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const upper = list.map((s) => s.toUpperCase());
+  if (!upper.includes(target)) return null;
+  return {
+    kind: 'ships_to_match',
+    label: `Ships to ${target}`,
+    detail: `Merchant ships to ${target}`,
+    tone: 'positive',
+  };
+}
+
 function shippingChip(product: NormalizedProduct, prefs: PreferencesSnapshot): ReasoningChip | null {
   const wanted = readValue<unknown>(prefs, 'ships_to');
   const target =
@@ -218,6 +254,8 @@ export function computeChips(
   if (p) candidates.push(p);
   const fs = fastShippingChip(product);
   if (fs) candidates.push(fs);
+  const stm = shipsToMatchChip(product, prefs);
+  if (stm) candidates.push(stm);
   const sh = shippingChip(product, prefs);
   if (sh) candidates.push(sh);
   const e = ethicsChip(product, prefs);

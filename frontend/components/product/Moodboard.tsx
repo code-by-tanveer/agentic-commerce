@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import Image from 'next/image';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Plus, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -125,15 +126,17 @@ export function Moodboard({
       aria-label="Image attributes"
     >
       <div className="flex items-start gap-3">
-        <div className="shrink-0 overflow-hidden rounded-xl bg-ink-100">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100 sm:h-32 sm:w-32">
           {/* Sized to DESIGN.md §4 Moodboard spec: max 128px. We keep aspect
               by clamping both axes; vision tool's source image may be any
-              ratio so object-cover trims sensibly. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+              ratio so object-cover trims sensibly. T4.N — next/image with
+              fill; parent is the sized box. */}
+          <Image
             src={imageUrl}
             alt={description || 'Uploaded reference image'}
-            className="h-24 w-24 object-cover sm:h-32 sm:w-32"
+            fill
+            sizes="(max-width: 640px) 96px, 128px"
+            className="object-cover"
           />
         </div>
 

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Heart, HelpCircle, Layers, X, XCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { formatMoney } from '@/lib/format';
+import { clientLocale, formatMoney } from '@/lib/format';
 import type { ShortlistItem, ShortlistLane } from '@/types/product';
 import {
   DRAG_MIME,
@@ -58,13 +58,17 @@ const LANE_META: Array<{
     lane: 'maybe',
     label: 'Maybe',
     Icon: HelpCircle,
-    emptyHint: 'Drag a card here, or press M on a focused card.',
+    // T4.U (Lila, Round 5) — lead with the non-drag affordance so the hint
+    // is useful on touch. The lucide Heart icon is referenced upstream in
+    // the lane meta; the copy here points to it without an emoji.
+    emptyHint: 'Tap the heart to save, or press M when a card is focused.',
   },
   {
     lane: 'skip',
     label: 'Skip',
     Icon: XCircle,
-    emptyHint: 'Drag a card here, or press S on a focused card.',
+    // T4.U — same shape as Maybe; S key for Skip.
+    emptyHint: 'Tap the heart to save, or press S when a card is focused.',
   },
 ];
 
@@ -140,7 +144,7 @@ function RailHeader({ onClose }: { onClose: () => void }) {
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-ink-400" aria-hidden />
         <p className="text-sm font-semibold text-ink-900">Shortlist</p>
-        <p className="text-[11px] text-ink-400">
+        <p className="text-xs text-ink-400">
           {counts.love} loved · {counts.maybe} maybe
           {savedOutfits.length > 0 ? ` · ${savedOutfits.length} outfit${savedOutfits.length === 1 ? '' : 's'}` : ''}
         </p>
@@ -206,7 +210,7 @@ function RailLane({ lane, label, Icon, emptyHint }: RailLaneProps) {
         <div className="flex items-center gap-2">
           <Icon className="h-3.5 w-3.5 text-ink-400" aria-hidden />
           <p className="text-xs font-medium text-ink-900">{label}</p>
-          <span className="text-[11px] text-ink-400">{items.length}</span>
+          <span className="text-xs text-ink-400">{items.length}</span>
         </div>
       </header>
       {isLoading && items.length === 0 ? (
@@ -214,7 +218,7 @@ function RailLane({ lane, label, Icon, emptyHint }: RailLaneProps) {
         // post-hydrate empty hint below. Single placeholder lane-item.
         <LaneSkeleton reduced={!!reduced} />
       ) : items.length === 0 ? (
-        <p className="text-[11px] text-ink-400">{emptyHint}</p>
+        <p className="text-xs text-ink-400">{emptyHint}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((it) => (
@@ -248,14 +252,16 @@ function LaneItem({
   onRemove: () => void;
 }) {
   const p = item.snapshot;
+  // T4.K (Priya) — locale-aware currency formatting.
+  const locale = clientLocale();
   return (
     <li className="flex items-center gap-2 rounded-xl bg-white p-2 shadow-soft">
-      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-ink-100">
-        <ProductImage src={p.images?.[0]} alt={p.title} />
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-ink-100">
+        <ProductImage src={p.images?.[0]} alt={p.title} sizes="40px" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-ink-900">{p.title}</p>
-        <p className="text-[11px] text-ink-400">{formatMoney(p.price, p.currency)}</p>
+        <p className="text-xs text-ink-400">{formatMoney(p.price, p.currency, locale)}</p>
       </div>
       <button
         type="button"
@@ -299,6 +305,10 @@ function MobileSheet({
       className="fixed inset-0 z-40 lg:hidden"
       role="dialog"
       aria-modal
+      // T4.P (Aleksey, Round 5) — labelledby points to the sheet header's
+      // title id below; SR users hear "Shortlist, dialog" on focus. Keep
+      // aria-label as a backstop in case the header re-renders later.
+      aria-labelledby="shortlist-sheet-title"
       aria-label="Shortlist"
     >
       <motion.div
@@ -348,8 +358,11 @@ function MobileHeader({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
       <div>
-        <p className="text-sm font-semibold text-ink-900">Shortlist</p>
-        <p className="text-[11px] text-ink-400">
+        {/* T4.P — id resolves the dialog's aria-labelledby. */}
+        <p id="shortlist-sheet-title" className="text-sm font-semibold text-ink-900">
+          Shortlist
+        </p>
+        <p className="text-xs text-ink-400">
           {counts.love} loved · {counts.maybe} maybe
           {savedOutfits.length > 0
             ? ` · ${savedOutfits.length} outfit${savedOutfits.length === 1 ? '' : 's'}`
@@ -430,7 +443,7 @@ function MobileLanes() {
           // hydrating, distinguished from the post-hydrate empty hint below.
           <LaneSkeleton reduced={!!reduced} />
         ) : items.length === 0 ? (
-          <p className="text-[11px] text-ink-400">{meta.emptyHint}</p>
+          <p className="text-xs text-ink-400">{meta.emptyHint}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {items.map((it) => (

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, ExternalLink, Heart, Store } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { formatMoney } from '@/lib/format';
+import { clientLocale, formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
 import {
   DRAG_MIME,
@@ -92,6 +92,8 @@ function CollageCard({ product, index }: CardProps) {
   const price = selectedVariant?.price ?? product.price;
   const currency = selectedVariant?.currency ?? product.currency;
   const canBuy = !!checkoutUrl;
+  // T4.K (Priya) — locale-aware currency formatting.
+  const locale = clientLocale();
   // T1.1 — heart fill state.
   const isLoved = shortlist?.shortlist.some(
     (i) => i.productId === product.id && i.lane === 'love',
@@ -169,7 +171,7 @@ function CollageCard({ product, index }: CardProps) {
       {...dndProps}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      aria-label={`${product.title}, ${formatMoney(price, currency)} from ${product.merchant}`}
+      aria-label={`${product.title}, ${formatMoney(price, currency, locale)} from ${product.merchant}`}
       className={cn(
         // §2.7: shadow XOR border. Shadow alone here.
         'group relative overflow-hidden rounded-2xl bg-white shadow-soft transition hover:shadow-lift',
@@ -182,23 +184,27 @@ function CollageCard({ product, index }: CardProps) {
         {ariaMsg}
       </span>
 
-      {/* T1.1 — heart-icon tap-to-save (touch always visible, fade-in on
-          hover for fine pointers). */}
+      {/* T1.1 — heart-icon tap-to-save. Round-5 polish:
+          T4.C — bumped to h-11 w-11 (44px / Apple HIG) for the tap target,
+            and rest state is `opacity-60` on fine pointers so tab-nav and
+            slow-eye users can see the affordance without hovering.
+          T4.S — saved heart uses `ink-900` filled; `rose-500` is danger-only
+            per the Design Lead's note. */}
       <button
         type="button"
         onClick={saveLove}
         aria-label={isLoved ? 'Saved to Love' : 'Save to Love'}
         aria-pressed={isLoved}
         className={cn(
-          'absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
+          'absolute right-2 top-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
           'hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           '[@media(hover:none)]:opacity-100',
-          '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100',
-          isLoved && 'text-rose-500 [@media(hover:hover)]:opacity-100',
+          '[@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
+          isLoved && 'text-ink-900 [@media(hover:hover)]:opacity-100',
         )}
       >
         <Heart
-          className={cn('h-4 w-4', isLoved && 'fill-rose-500')}
+          className={cn('h-4 w-4', isLoved && 'fill-ink-900')}
           aria-hidden
         />
       </button>
@@ -212,8 +218,12 @@ function CollageCard({ product, index }: CardProps) {
         draggable={false}
       >
         <div className="relative">
-          <div className="aspect-[4/5] w-full overflow-hidden bg-ink-100">
-            <ProductImage src={product.images[0]} alt={product.title} />
+          <div className="relative aspect-[4/5] w-full overflow-hidden bg-ink-100">
+            <ProductImage
+              src={product.images[0]}
+              alt={product.title}
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            />
           </div>
 
           {/* Hover/focus overlay — title + serif price, lower-left. CSS
@@ -234,7 +244,7 @@ function CollageCard({ product, index }: CardProps) {
             <p className="truncate text-xs font-medium text-white">{product.title}</p>
             {/* THE serif moment this cycle (DESIGN.md §2.4 #4). */}
             <p className="font-display text-lg leading-none text-white">
-              {formatMoney(price, currency)}
+              {formatMoney(price, currency, locale)}
             </p>
           </div>
 
@@ -264,7 +274,7 @@ function CollageCard({ product, index }: CardProps) {
             <div className="space-y-3 p-3">
               <div>
                 <h3 className="text-sm font-semibold text-ink-900">{product.title}</h3>
-                <p className="mt-1 flex items-center gap-1 text-[11px] text-ink-400">
+                <p className="mt-1 flex items-center gap-1 text-xs text-ink-400">
                   <Store className="h-3 w-3" aria-hidden />
                   <span className="truncate">{product.merchant}</span>
                 </p>
@@ -294,7 +304,7 @@ function CollageCard({ product, index }: CardProps) {
 
               <div className="flex items-center justify-between gap-2 pt-1">
                 <p className="text-base font-semibold text-ink-900">
-                  {formatMoney(price, currency)}
+                  {formatMoney(price, currency, locale)}
                 </p>
                 {/* T1.6 — Collage variant uses "Open at {merchant}" wording
                     (the card is image-first; "Buy" felt transactional).

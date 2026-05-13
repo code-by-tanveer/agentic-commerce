@@ -1,17 +1,32 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { ImageOff } from 'lucide-react';
 import { cn } from '@/lib/cn';
+
+// T4.N — next/image migration. We use the `fill` variant because the
+// callers size the surrounding container (`h-24 w-24`, `aspect-[4/5]`,
+// CollageView masonry tiles, etc.) and the image just needs to fill it.
+// The parent containers are already `overflow-hidden` with explicit
+// dimensions/aspect ratios, so `fill` doesn't cause CLS — `next/image`
+// reserves the parent's box for us.
+//
+// `sizes` is a reasonable default for product cards on the 640px-wide
+// conversation canvas. CollageView tiles are smaller (2/3/4 columns) so
+// we widen the breakpoints to let next-image pick the right srcset entry.
 
 interface Props {
   src?: string;
   alt: string;
   className?: string;
   priority?: boolean;
+  sizes?: string;
 }
 
-export function ProductImage({ src, alt, className }: Props) {
+const DEFAULT_SIZES = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px';
+
+export function ProductImage({ src, alt, className, priority, sizes }: Props) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
     return (
@@ -23,7 +38,7 @@ export function ProductImage({ src, alt, className }: Props) {
         role="img"
         aria-label={alt}
         className={cn(
-          'grid place-items-center bg-ink-100 text-ink-400',
+          'grid h-full w-full place-items-center bg-ink-100 text-ink-400',
           className,
         )}
       >
@@ -33,13 +48,14 @@ export function ProductImage({ src, alt, className }: Props) {
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       src={src}
       alt={alt}
+      fill
+      sizes={sizes ?? DEFAULT_SIZES}
+      priority={priority}
       onError={() => setFailed(true)}
-      loading="lazy"
-      className={cn('h-full w-full object-cover', className)}
+      className={cn('object-cover', className)}
     />
   );
 }

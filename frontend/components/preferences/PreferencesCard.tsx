@@ -115,7 +115,7 @@ export function PreferencesCard() {
                 : `${count} preference${count === 1 ? '' : 's'}`}
             </span>
           </span>
-          <span className="text-[11px] text-ink-400">
+          <span className="text-xs text-ink-400">
             {count === 0 ? 'Tap to add' : 'Edit'}
           </span>
         </button>
@@ -125,7 +125,10 @@ export function PreferencesCard() {
       <AnimatePresence>
         {sheetOpen ? (
           <BottomSheet onClose={() => setSheetOpen(false)} reduced={!!reduced}>
-            <Header count={count} />
+            {/* T4.P (Aleksey, Round 5) — give the sheet title a stable id so
+                the dialog's `aria-labelledby` resolves; SR users hear "About
+                you" as the dialog name on focus. */}
+            <Header count={count} titleId="prefs-sheet-title" />
             <ChipRow className="mt-3" />
           </BottomSheet>
         ) : null}
@@ -138,13 +141,19 @@ export function PreferencesCard() {
 // Header
 // ---------------------------------------------------------------------------
 
-function Header({ count }: { count: number }) {
+function Header({ count, titleId }: { count: number; titleId?: string }) {
   return (
     <div className="flex items-center justify-between">
-      <p className="text-[11px] uppercase tracking-wider text-ink-400">
+      {/* T4.P (Aleksey, Round 5) — optional `id` so the parent dialog can
+          `aria-labelledby` this eyebrow as its title. Default null id keeps
+          the desktop variant unchanged. */}
+      <p
+        id={titleId}
+        className="text-[11px] uppercase tracking-wider text-ink-400"
+      >
         About you
       </p>
-      <p className="text-[11px] text-ink-400">
+      <p className="text-xs text-ink-400">
         {count === 0
           ? 'Tell me your size, budget, where you ship to'
           : 'Tap to edit · ✕ to clear'}
@@ -679,7 +688,7 @@ function EthicsChip({
         <p className="text-[11px] uppercase tracking-wider text-ink-400">
           {PREFERENCE_LABEL.ethics}
         </p>
-        <p className="text-[11px] text-ink-400">
+        <p className="text-xs text-ink-400">
           Tap to toggle · Save to commit
         </p>
       </div>
@@ -756,7 +765,15 @@ function BottomSheet({
   const sheetT = reduced ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const };
 
   return (
-    <div ref={sheetRef} className="fixed inset-0 z-40 sm:hidden" role="dialog" aria-modal>
+    <div
+      ref={sheetRef}
+      className="fixed inset-0 z-40 sm:hidden"
+      role="dialog"
+      aria-modal
+      // T4.P (Aleksey, Round 5) — name the dialog via the header's id. SR
+      // users hear "About you, dialog" on focus rather than just "dialog".
+      aria-labelledby="prefs-sheet-title"
+    >
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

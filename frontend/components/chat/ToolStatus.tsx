@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
-import { Check, AlertCircle } from 'lucide-react';
+import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 // Invisible-AI per DESIGN.md §3 principle 1: a tiny verb + object, dim, never
@@ -133,17 +133,22 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       </span>
     );
   }
-  // Running — single rotating dot (Granola-style), or opacity pulse when
-  // prefers-reduced-motion is set.
-  // T1.32 — both durations brought under DESIGN.md §6's 600ms loop budget.
+  // Running — single rotating dot (Granola-style). Under reduced motion we
+  // drop ALL loops: T4.E (Lila) — Round-5 polish. The previous reduced-motion
+  // path swapped infinite rotation for an infinite opacity pulse, which
+  // missed the spirit of the preference (one infinite loop replacing
+  // another). The aria-live "Searching desk lamps" announcement already
+  // carries the "alive" signal, so the dot can be static. Static dim
+  // Loader2 icon, no rotation.
+  // T1.32 — non-reduced duration brought under DESIGN.md §6's 600ms loop.
   if (reduced) {
     return (
-      <motion.span
-        className="inline-block h-2 w-2 rounded-full bg-ink-400"
-        animate={{ opacity: [0.35, 1, 0.35] }}
-        transition={{ duration: 0.6, repeat: Infinity, ease: 'easeInOut' }}
+      <span
+        className="inline-flex h-3 w-3 items-center justify-center text-ink-400"
         aria-hidden
-      />
+      >
+        <Loader2 className="h-3 w-3" strokeWidth={2} />
+      </span>
     );
   }
   return (

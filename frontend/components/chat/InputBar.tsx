@@ -172,10 +172,10 @@ export function InputBar() {
       {/* Trust-promise disclosure — Round 2 polish (Mara). Source-of-truth +
           ranking policy stated where the user composes, so the commitment is
           visible at point-of-action rather than inferred from anti-goal #5 in
-          the PM doc. Both lines share the existing `text-[11px] text-ink-400`
-          treatment so the line break reads as one paragraph, not a bolted-on
-          notice. */}
-      <p className="pb-3 text-center text-[11px] text-ink-400">
+          the PM doc. T4.D (Round 5) — bumped from text-[11px] to text-xs (12px)
+          so trust-critical copy clears the §7 legibility floor; both lines
+          share the treatment so the line break reads as one paragraph. */}
+      <p className="pb-3 text-center text-xs text-ink-400">
         Prices and availability come from Shopify merchants.
         <br />
         Ranking is preference-driven, not paid placement.

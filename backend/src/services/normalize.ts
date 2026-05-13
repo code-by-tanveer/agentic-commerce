@@ -25,6 +25,12 @@ interface RawMerchant {
   name?: string;
   shop?: string;
   rating?: number | string;
+  // Round 5 polish (T4.W, persona-oscar): review count surfaces under
+  // several Shopify-metafield spellings depending on the merchant — accept
+  // all three and let `pickMerchantInfo` coerce to a non-negative integer.
+  review_count?: number | string;
+  reviewCount?: number | string;
+  n_reviews?: number | string;
   returns_policy?: string;
   returnsPolicy?: string;
   shipping_days?: string;
@@ -40,6 +46,12 @@ interface RawMerchant {
   origin_country?: string;
   country?: string;
   made_in?: string;
+  // Round 5 polish (T4.A): merchants publish destination country lists under
+  // both snake- and camel-case in real Shopify metafields. Accept either; if
+  // a merchant surfaces a single string ("US"), wrap it in `[string]` in
+  // `pickShipsTo` before normalising case.
+  ships_to?: string | string[];
+  shipsTo?: string | string[];
 }
 
 interface RawProduct {
@@ -61,6 +73,10 @@ interface RawProduct {
   shop?: RawMerchant;
   tags?: string[];
   rating?: number | string;
+  // Round 5 polish (T4.W): some MCPs surface review_count at product level.
+  review_count?: number | string;
+  reviewCount?: number | string;
+  n_reviews?: number | string;
   returns_policy?: string;
   shipping_days?: string;
   carbon?: string;
@@ -71,6 +87,11 @@ interface RawProduct {
   origin_country?: string;
   country?: string;
   made_in?: string;
+  // Round 5 polish (T4.A): merchant-info `shipsTo` can be surfaced at
+  // product level too — the MCP normalizes the merchant's destination list
+  // onto each product. Accept both placements; product-level wins.
+  ships_to?: string | string[];
+  shipsTo?: string | string[];
 }
 
 function parseMoney(value: unknown): { amount: number; currency: string } {
@@ -184,6 +205,44 @@ function pickOriginCountry(raw: RawProduct, m: RawMerchant | undefined): string 
   return trimmed;
 }
 
+// Round 5 polish (T4.A): canonicalise the `ships_to` / `shipsTo` raw value
+// into an uppercase ISO-3166-style array. Single strings get wrapped. Empty
+// strings drop. Non-strings drop. Duplicates after upper-casing collapse —
+// the FE renders a country list and would dedupe on render anyway, but doing
+// it here keeps the schema-validated payload tight.
+function normaliseShipsTo(raw: string | string[] | undefined): string[] | undefined {
+  if (raw == null) return undefined;
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const out: string[] = [];
+  for (const entry of arr) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) continue;
+    const upper = trimmed.toUpperCase();
+    if (!out.includes(upper)) out.push(upper);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+// Round 5 polish (T4.W): coerce `review_count` / `reviewCount` / `n_reviews`
+// to a non-negative integer. Strings are parsed with `Number`; anything that
+// parses to NaN or negative is dropped (we'd rather omit the field than
+// surface a misleading "0 reviews" or "-3" on the FE).
+function pickReviewCount(raw: RawProduct, m: RawMerchant | undefined): number | undefined {
+  const candidate =
+    m?.review_count ??
+    m?.reviewCount ??
+    m?.n_reviews ??
+    raw.review_count ??
+    raw.reviewCount ??
+    raw.n_reviews ??
+    undefined;
+  if (candidate == null) return undefined;
+  const n = typeof candidate === 'number' ? candidate : Number(candidate);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.floor(n);
+}
+
 function pickMerchantInfo(raw: RawProduct, name: string): MerchantInfo {
   const m = pickMerchantObject(raw);
   const info: MerchantInfo = { name };
@@ -200,6 +259,9 @@ function pickMerchantInfo(raw: RawProduct, name: string): MerchantInfo {
             : undefined;
   if (rating !== undefined && Number.isFinite(rating)) info.rating = rating;
 
+  const reviewCount = pickReviewCount(raw, m);
+  if (reviewCount !== undefined) info.reviewCount = reviewCount;
+
   const returnsPolicy =
     m?.returns_policy ?? m?.returnsPolicy ?? raw.returns_policy ?? undefined;
   if (returnsPolicy) info.returnsPolicy = returnsPolicy;
@@ -213,6 +275,17 @@ function pickMerchantInfo(raw: RawProduct, name: string): MerchantInfo {
 
   const originCountry = pickOriginCountry(raw, m);
   if (originCountry) info.originCountry = originCountry;
+
+  // Round 5 polish (T4.A): read `ships_to` / `shipsTo` from BOTH the raw
+  // product and the merchant blob (product-level wins — same convention as
+  // `pickOriginCountry`). Single strings are wrapped to `[string]`; every
+  // entry is upper-cased.
+  const shipsTo =
+    normaliseShipsTo(raw.ships_to) ??
+    normaliseShipsTo(raw.shipsTo) ??
+    normaliseShipsTo(m?.ships_to) ??
+    normaliseShipsTo(m?.shipsTo);
+  if (shipsTo) info.shipsTo = shipsTo;
 
   return info;
 }
