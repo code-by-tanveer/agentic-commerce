@@ -6,6 +6,10 @@ export interface Variant {
   available: boolean;
   checkoutUrl: string;
   options?: Record<string, string>;
+  // Per-variant images. Shopify ships `variant.media[]`; we use the first
+  // entry as the card hero when the variant is selected. Falls back to the
+  // product-level image set when absent.
+  images?: string[];
 }
 
 // Reasoning chip — mirrors backend `ReasoningChip` and the wire schema in

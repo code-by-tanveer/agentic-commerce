@@ -36,34 +36,53 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
     // T1.30 — gap-1.5 → gap-2 (no decimal spacing).
     return (
       <div className="flex flex-wrap gap-2">
-        {variants.map((v) => (
-          <button
-            key={v.id}
-            onClick={() => onSelect(v.id)}
-            disabled={!v.available}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs transition',
-              v.id === selected?.id
-                ? 'border-ink-900 bg-ink-900 text-white'
-                : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
-              !v.available && 'opacity-40',
-            )}
-          >
-            {v.title}
-          </button>
-        ))}
+        {variants.map((v) => {
+          const active = v.id === selected?.id;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              data-testid="variant-chip"
+              data-active={active}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(v.id);
+              }}
+              disabled={!v.available}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition',
+                active
+                  ? 'border-ink-900 bg-ink-900 text-white'
+                  : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
+                !v.available && 'opacity-40',
+              )}
+            >
+              {v.title}
+            </button>
+          );
+        })}
       </div>
     );
   }
 
   function chooseValue(name: string, value: string) {
+    // Prefer an exact match across all current option dimensions; fall back to
+    // a partial match on just the changed axis so the picker still switches
+    // for products whose variants don't enumerate every option combination
+    // (real Shopify catalogs sometimes have sparse option matrices — this
+    // was the silent-no-op the user hit).
     const target = { ...(selected?.options ?? {}), [name]: value };
-    const match = variants.find(
+    const exact = variants.find(
       (v) =>
         v.options &&
         Object.entries(target).every(([k, val]) => v.options?.[k] === val),
     );
-    if (match) onSelect(match.id);
+    if (exact) {
+      onSelect(exact.id);
+      return;
+    }
+    const partial = variants.find((v) => v.options?.[name] === value);
+    if (partial) onSelect(partial.id);
   }
 
   return (
@@ -78,7 +97,13 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
               return (
                 <button
                   key={value}
-                  onClick={() => chooseValue(group.name, value)}
+                  type="button"
+                  data-testid="variant-chip"
+                  data-active={active}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    chooseValue(group.name, value);
+                  }}
                   className={cn(
                     'rounded-full border px-3 py-1 text-xs transition',
                     active

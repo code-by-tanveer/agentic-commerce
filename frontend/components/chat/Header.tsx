@@ -53,7 +53,15 @@ export function Header() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Action row — `gap-1` at narrow widths so 4–5 trailing controls
+            (ViewToggle, ShareButton, Shortlist trigger, optional New chat,
+            ProfileMenu) fit within a 360px viewport without horizontal
+            overflow. The QA sweep (2026-05-13) caught the actions row
+            extending 19px past the viewport once `hasHistory` flipped on
+            and added the New-chat button; tightening the gap and clipping
+            New-chat below 380px (where the label was already hidden)
+            keeps the row inside the page. */}
+        <div className="flex items-center gap-1 min-[380px]:gap-2">
           <ViewToggle />
           {canShare && sessionId && <ShareButton sessionId={sessionId} />}
           <button
@@ -92,14 +100,20 @@ export function Header() {
             </span>
           </button>
           {hasHistory && (
+            // QA sweep (2026-05-13) — the WHOLE button is now `hidden
+            // min-[380px]:inline-flex`. Previously only the label collapsed
+            // at <380px; the icon-only button still consumed ~38px and
+            // pushed the action row past the viewport at 360px (the canonical
+            // narrow phone width). The action is recoverable via the
+            // ProfileMenu / page reload, so dropping it from the chrome at
+            // narrow widths is the lower-cost option than further squeezing.
             <button
               onClick={reset}
               aria-label="Start a new chat"
-              className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
+              className="hidden min-[380px]:inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              {/* T1.2 — under 380px the label collapses; aria-label carries it. */}
-              <span className="hidden min-[380px]:inline">New chat</span>
+              <span>New chat</span>
             </button>
           )}
           {/* ProfileMenu — Cycle 5. Replaces the always-on PreferencesCard

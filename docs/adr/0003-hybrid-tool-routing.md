@@ -73,3 +73,39 @@ returns NormalizedProduct[] + emits 'products' event to the SSE stream
 2. Tool review heuristic ("what does this add over a raw MCP call?") codified in the engineer agent brief.
 3. Remote MCP hook left intact — the tool interface admits remote variants without rework. Revisit when we want to add web search or page scraping ancillary tools.
 4. Per-tool p95 latency dashboards from Pino logs (Cycle 6).
+
+## Addendum — 2026-05-13: Shopify Catalog MCP tool inventory
+
+Audit of `tools/list` against `https://catalog.shopify.com/api/ucp/mcp` (UCP 2026-04-08). Shopify advertises **three** tools:
+
+| Tool | Capability | Shape | Our usage |
+| --- | --- | --- | --- |
+| `search_catalog` | `dev.ucp.shopping.catalog.search` | `{catalog:{query, filters, pagination:{cursor?, limit}}}` → `structuredContent.products[]` | `searchCatalog` (✓) |
+| `get_product` | `dev.ucp.shopping.catalog.lookup` | `{catalog:{id}}` → `structuredContent.product` | `getProductDetails`, `recommendOutfit` anchor (✓) |
+| `lookup_catalog` | `dev.ucp.shopping.catalog.lookup` | `{catalog:{ids[≤10]}}` → `structuredContent.products[]` + `messages[]` for not-found | `compareProducts` (✓, switched 2026-05-13 from N×`get_product`) |
+
+Verified shape quirks:
+
+- Product IDs MUST be in `gid://shopify/p/{id}` form. Bare IDs error with `{code:'not_found'}`. Search results already use this form, so our extractor passes them through verbatim.
+- `lookup_catalog` returns partial success on bad IDs — `ucp.status:'success'`, missing IDs appear in `structuredContent.messages[{type:'info', code:'not_found'}]`. Our `compare_products` logs these via `ctx.log.warn` and still ships whatever resolved.
+- `search_catalog` does NOT currently surface a `next_cursor` / pagination cursor in responses, despite the input schema accepting one. We do not propagate cursors to the LLM/FE today. Track for re-check if the spec moves past `2026-04-08`.
+- `filters.ships_to` errors with `-32603` on any value — we belt-and-braces filter in JS (see `catalog.ts` head comment).
+
+Tools we are NOT integrating (deliberate-no list):
+
+- **`recommend_products` / `complementary_products`** — *does not exist server-side.* Our `recommend_outfit` fan-out is the only path; documented inline in `recommendOutfit.ts` so the question doesn't get re-asked.
+- **Server-side cart / checkout tools** — the catalog MCP doesn't expose them; checkout still flows through per-variant `checkoutUrl` strings on the normalized product. Out of scope for this app.
+
+If a future `tools/list` adds a `recommend_products` (or similar composition tool), revisit ADR-0003 — but only if it accepts our preferences-vector input. Without that, our composition layer is still the differentiation surface and the new server tool is a candidate primitive, not a replacement.
+
+## Addendum — 2026-05-13: UCP 2026-04-08 wire-shape audit
+
+Spec-conformance audit of `mcpClient.ts` against the [UCP catalog/mcp binding](https://ucp.dev/2026-04-08/specification/catalog/mcp/) and live Shopify deployment. Three material findings, all fixed in `mcpClient.ts` / `agent.ts`:
+
+1. **`search_catalog.limit` was being silently ignored.** Spec puts `limit` inside `catalog.pagination.limit`; we were sending it at `catalog.limit`. Shopify accepts both shapes without error but only honours the nested one — top-level `limit` falls back to the default page size of 10. Empirically: `catalog.limit=3` → 10 products; `catalog.pagination.limit=3` → 3. Every `searchCatalog(query, 8)` call was over-fetching by ~25% and the post-filter slice + LLM-side ranking masked it. `mcpClient.callTool` now rewrites `catalog.limit` / `catalog.cursor` into `catalog.pagination.{limit,cursor}` transparently for `search_catalog` — `catalog.ts` keeps its ergonomic `{limit}` surface, the wire shape is corrected centrally. Complements the tool inventory note above (`search_catalog` shape column) which already documents the spec-correct nesting.
+
+2. **UCP-specific JSON-RPC error codes were collapsed to one retryable bucket.** UCP defines `-32001` (discovery / negotiation: bad profile URL, profile unreachable, profile malformed, version unsupported — see `error.data.code`), `-32000` (transport: auth/rate-limit/unavailable, with optional `error.data.retry_after`), `-32602` (invalid params), `-32603` (server error). Our `classifyError` mapped every `McpError` to `mcp_error` / `retryable: true`. A bad `UCP_PROFILE_URL` would burn `AGENT_MAX_TURNS=4` of retries before surfacing as a user-visible failure. `McpError` now carries `ucpCode` (from `error.data.code`) and `retryAfter`; `classifyError` distinguishes `-32001` (operator-fix, `retryable: false`) and `-32602` (client-shape bug, `retryable: false`) from the retryable transport class.
+
+3. **`meta.ucp-agent` placement applies to every JSON-RPC method.** Spec wording is `params.arguments.meta.ucp-agent`. Probed: `params.meta` and `params._meta` both error with `-32001 invalid_profile_url`; only `params.arguments.meta` works. Even `tools/list` and `initialize` require the profile — Shopify's MCP discovery is profile-gated end-to-end. We were already correct for `tools/call` (where every call goes today); the comment in `mcpClient.callTool` now documents the rule so future `tools/list` / `resources/list` / `prompts/list` callers don't drop the meta.
+
+Non-findings (confirmed compliant): `initialize` handshake is optional — Shopify treats every request as standalone; `Mcp-Protocol-Version` header is unused; auth is anonymous (the `tokenCache.ts` JWT path is dead code under current `.env`, harmless and ready for the day Shopify gates the endpoint); profile capability declarations are sufficient — `dev.ucp.shopping.catalog.search` + `.lookup` plus the Shopify-namespaced extension are echoed unchanged in responses.

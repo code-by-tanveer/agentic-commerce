@@ -39,6 +39,11 @@ interface Props {
   axes?: string[];
 }
 
+// Known axes get bespoke renderers; any other agent-provided axis is treated
+// as a `freeform:<label>` row that pulls from the product description/specs.
+// This lets the agent ask for "battery", "weight", "material", etc. without us
+// needing to add a hard-coded row for each.
+type FreeformRowKey = `freeform:${string}`;
 type RowKey =
   | 'image'
   | 'price'
@@ -47,7 +52,12 @@ type RowKey =
   | 'returns'
   | 'rating'
   | 'origin'
-  | 'why';
+  | 'why'
+  | FreeformRowKey;
+
+function isFreeformKey(k: RowKey): k is FreeformRowKey {
+  return typeof k === 'string' && k.startsWith('freeform:');
+}
 
 // `extract` returns a value used for sorting; `render` returns the visible
 // cell. Some rows (image, why) sort on a stable proxy or simply pass through
@@ -79,14 +89,17 @@ interface ProductLike extends Omit<NormalizedProduct, 'merchantInfo'> {
   merchantInfo?: MerchantInfoLenient;
 }
 
+// When the agent doesn't pass `axes`, fall back to the BE's default trio
+// (`price`, `rating`, `shipping`). We seed `image` first so the visual
+// anchor is always there, and append `why` so a context line trails the
+// table. When the agent DOES pass `axes`, we honour their list verbatim
+// (still seeded with `image` for visual continuity) and SKIP the trailing
+// `why` row — a focused comparison should stay focused.
 const DEFAULT_AXES: RowKey[] = [
   'image',
   'price',
-  'merchant',
-  'shipping',
-  'returns',
   'rating',
-  'origin',
+  'shipping',
   'why',
 ];
 
@@ -127,17 +140,34 @@ function resolveAxes(axes: string[] | undefined): RowKey[] {
   seen.add('image');
   out.push('image');
   for (const raw of axes) {
-    const k = AXIS_ALIASES[raw.toLowerCase()];
-    if (k && !seen.has(k)) {
-      seen.add(k);
-      out.push(k);
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    const k = AXIS_ALIASES[lower];
+    if (k) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(k);
+      }
+      continue;
+    }
+    // Unknown axis (e.g. "battery", "weight", "material", "features"). Render
+    // as a free-form row labelled by the agent's verbatim string and looked
+    // up against the product description / specs. We dedupe by lower-case
+    // label so "Battery" and "battery" collapse into one row.
+    const free: FreeformRowKey = `freeform:${lower}`;
+    if (!seen.has(free)) {
+      seen.add(free);
+      out.push(free);
     }
   }
-  // If nothing mapped (besides the seeded image row), fall back fully.
+  // If only the seeded `image` row survived (caller passed e.g. a list of
+  // whitespace-only strings), fall back to the full default set so the table
+  // is never empty.
   if (out.length <= 1) return DEFAULT_AXES;
-  // Always include the "why" row at the bottom — short descriptive blurb
-  // is load-bearing even when the agent didn't ask for it.
-  if (!seen.has('why')) out.push('why');
+  // NOTE: prior version always appended `why` to focused axis lists. That
+  // turned a "compare on battery" request into a battery+description dump.
+  // When the agent passes specific axes, trust their selection and stop.
   return out;
 }
 
@@ -145,7 +175,46 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n).trim()}…`;
 }
 
+// For a freeform axis (e.g. "battery"), search the product description for
+// a sentence/clause that mentions the axis term — case-insensitive, first
+// match wins. Falls back to the first 140 chars of the description so a row
+// is never empty when the description has content.
+function extractAxisSnippet(description: string | undefined, axis: string): string | null {
+  if (!description) return null;
+  const text = description.trim();
+  if (!text) return null;
+  const term = axis.trim().toLowerCase();
+  if (!term) return null;
+  // Sentence-boundary scan. We don't want a half-sentence so prefer
+  // delimited clauses; fall back to a 140-char window around the match.
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const hit = sentences.find((s) => s.toLowerCase().includes(term));
+  if (hit) return truncate(hit.trim(), 180);
+  const idx = text.toLowerCase().indexOf(term);
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(text.length, idx + term.length + 100);
+  return truncate(text.slice(start, end).trim(), 180);
+}
+
 function buildRowSpec(key: RowKey): RowSpec {
+  if (isFreeformKey(key)) {
+    const axis = key.slice('freeform:'.length);
+    const label = axis.charAt(0).toUpperCase() + axis.slice(1);
+    return {
+      key,
+      label,
+      sortable: false,
+      extract: (p) => extractAxisSnippet(p.description, axis) ?? '',
+      render: (p) => {
+        const snippet = extractAxisSnippet(p.description, axis);
+        if (snippet) {
+          return <p className="text-sm leading-relaxed text-ink-600">{snippet}</p>;
+        }
+        return <span className="text-xs italic text-ink-400">Not published</span>;
+      },
+    };
+  }
   switch (key) {
     case 'image':
       return {
@@ -339,6 +408,10 @@ function buildMarkdown(rows: RowSpec[], products: ProductLike[]): string {
 }
 
 function textForCopy(key: RowKey, p: ProductLike): string {
+  if (isFreeformKey(key)) {
+    const axis = key.slice('freeform:'.length);
+    return extractAxisSnippet(p.description, axis) ?? '—';
+  }
   switch (key) {
     case 'price':
       return formatMoney(p.price, p.currency);

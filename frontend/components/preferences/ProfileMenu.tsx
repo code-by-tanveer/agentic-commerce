@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { User } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -101,72 +102,96 @@ export function ProfileMenu() {
         ) : null}
       </button>
 
-      <AnimatePresence>
-        {open ? (
-          <>
-            {/* Mobile scrim — visible only at <640px so the bottom sheet
-                reads as modal. Desktop popover floats over the page without a
-                scrim (it's a small dismissible surface, not a modal task). */}
-            <motion.div
-              key="scrim"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={popoverT}
-              onClick={close}
-              className="fixed inset-0 z-30 bg-ink-900/40 sm:hidden"
-              aria-hidden
-            />
-            <motion.div
-              key="popover"
-              ref={popoverRef}
-              id={dialogId}
-              role="dialog"
-              aria-modal
-              aria-labelledby="profile-menu-title"
-              initial={
-                reduced
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: 4, scale: 0.98 }
-              }
-              animate={
-                reduced
-                  ? { opacity: 1 }
-                  : { opacity: 1, y: 0, scale: 1 }
-              }
-              exit={
-                reduced
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: 4, scale: 0.98 }
-              }
-              transition={popoverT}
-              // Mobile: full-width sheet pinned to the bottom edge. Desktop:
-              // anchored card under the avatar in the top-right of the
-              // viewport. `max-w-sm` keeps the desktop popover compact per
-              // the brief; mobile takes the full width minus 1rem gutter.
-              className={cn(
-                'fixed z-40 rounded-2xl bg-white p-4 shadow-soft',
-                // Mobile bottom sheet
-                'inset-x-2 bottom-2 rounded-2xl',
-                // Desktop: anchored to top-right under the header
-                'sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-16 sm:w-[22rem] sm:max-w-sm',
-              )}
-            >
-              {/* Mobile grab handle — purely decorative; matches Shortlist
-                  sheet visual rhythm. */}
-              <div
-                aria-hidden
-                className="mx-auto mb-2 h-1 w-12 rounded-full bg-ink-100 sm:hidden"
-              />
-              {hasPrefs || isLoading ? (
-                <PreferencesCard />
-              ) : (
-                <EmptyExplainer onDismiss={close} />
-              )}
-            </motion.div>
-          </>
-        ) : null}
-      </AnimatePresence>
+      {/* QA sweep (2026-05-13): the dialog must be portaled to <body> rather
+          than rendered as a child of <Header>. Header carries
+          `backdrop-blur` (Tailwind backdrop-filter), which creates a
+          containing block for `position:fixed` descendants (CSS § 2:
+          backdrop-filter establishes a stacking context AND a containing
+          block). The popover's `inset-x-2 bottom-2` was therefore relative
+          to the header's box, not the viewport — at 360×800 the dialog
+          rendered at y≈-103 (above the visible viewport) instead of the
+          bottom edge. Portaling to <body> bypasses the header containing-
+          block trap. Guarded with `mounted` so SSR doesn't reach for
+          `document`. */}
+      {open && typeof document !== 'undefined' ? (
+        createPortal(<ProfilePopover
+          dialogId={dialogId}
+          popoverRef={popoverRef}
+          close={close}
+          reduced={reduced}
+          popoverT={popoverT}
+          hasPrefs={hasPrefs}
+          isLoading={isLoading}
+        />, document.body)
+      ) : null}
+    </>
+  );
+}
+
+// Renders the scrim + sheet/popover. Extracted so it can be portaled into
+// <body> without duplicating the JSX.
+function ProfilePopover({
+  dialogId,
+  popoverRef,
+  close,
+  reduced,
+  popoverT,
+  hasPrefs,
+  isLoading,
+}: {
+  dialogId: string;
+  popoverRef: React.MutableRefObject<HTMLDivElement | null>;
+  close: () => void;
+  reduced: boolean | null;
+  popoverT: { duration: number; ease?: 'easeOut' };
+  hasPrefs: boolean;
+  isLoading: boolean;
+}) {
+  return (
+    <>
+      {/* Mobile scrim — visible only at <640px so the bottom sheet reads
+          as modal. Desktop popover floats over the page without a scrim. */}
+      <motion.div
+        key="scrim"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={popoverT}
+        onClick={close}
+        className="fixed inset-0 z-30 bg-ink-900/40 sm:hidden"
+        aria-hidden
+      />
+      <motion.div
+        key="popover"
+        ref={popoverRef}
+        id={dialogId}
+        role="dialog"
+        aria-modal
+        aria-labelledby="profile-menu-title"
+        initial={reduced ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
+        animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+        exit={reduced ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
+        transition={popoverT}
+        className={cn(
+          'fixed z-40 rounded-2xl bg-white p-4 shadow-soft',
+          // Mobile bottom sheet
+          'inset-x-2 bottom-2 rounded-2xl',
+          // Desktop: anchored to top-right under the header
+          'sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-16 sm:w-[22rem] sm:max-w-sm',
+        )}
+      >
+        {/* Mobile grab handle — purely decorative; matches Shortlist
+            sheet visual rhythm. */}
+        <div
+          aria-hidden
+          className="mx-auto mb-2 h-1 w-12 rounded-full bg-ink-100 sm:hidden"
+        />
+        {hasPrefs || isLoading ? (
+          <PreferencesCard />
+        ) : (
+          <EmptyExplainer onDismiss={close} />
+        )}
+      </motion.div>
     </>
   );
 }

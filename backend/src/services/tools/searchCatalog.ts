@@ -115,6 +115,17 @@ export const searchCatalogTool: Tool<SearchCatalogArgs, SearchCatalogResult> = {
     if (typeof max === 'number') filtered = filtered.filter((p) => p.price <= max);
     if (typeof min === 'number') filtered = filtered.filter((p) => p.price >= min);
 
+    ctx.log.info(
+      {
+        query: args.query,
+        filters: args.filters,
+        rawCount: products.length,
+        filteredCount: filtered.length,
+        samplePrices: products.slice(0, 3).map((p) => `${p.currency} ${p.price}`),
+      },
+      'search_catalog debug',
+    );
+
     // Cache the un-chipped products; chips are recomputed per call so prefs
     // edits inside the same turn pick up immediately.
     ctx.cache.set(cacheKey, { products: filtered });

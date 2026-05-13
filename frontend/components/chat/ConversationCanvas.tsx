@@ -111,6 +111,19 @@ export function ConversationCanvas() {
         .join('|')}`
     : '0';
 
+  // A user-initiated send is unambiguous intent to see the result — reset the
+  // pinned-away flag so the agent's reply auto-scrolls into view even when the
+  // user had previously scrolled up (e.g. tapped Pair-with from a card mid-page).
+  // Detect "new turn" by watching the user-message count; an assistant streaming
+  // delta does NOT change it, so background streaming doesn't yank the viewport
+  // back if the user has intentionally scrolled away mid-reply.
+  const lastUserCountRef = useRef(0);
+  const userCount = messages.filter((m) => m.role === 'user').length;
+  if (userCount > lastUserCountRef.current) {
+    userPinnedAwayRef.current = false;
+    lastUserCountRef.current = userCount;
+  }
+
   useEffect(() => {
     if (userPinnedAwayRef.current) return;
     scrollToBottom(true);

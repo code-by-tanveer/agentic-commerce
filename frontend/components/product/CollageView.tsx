@@ -104,10 +104,17 @@ function CollageCard({ product, index }: CardProps) {
     window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
   }
 
-  // T1.1 — tap-to-save. Heart sits over the image.
+  // T1.1 — tap-to-save. Heart sits over the image. Second tap on a loved
+  // card un-saves it; earlier the handler always called `addToLane('love')`
+  // so the heart was a one-way switch (matches the ProductCard fix).
   function saveLove(e: React.MouseEvent) {
     e.stopPropagation();
     if (!shortlist) return;
+    if (isLoved) {
+      void shortlist.remove(product.id);
+      setAriaMsg('Removed from Love');
+      return;
+    }
     void shortlist.addToLane(product.id, 'love', product);
     setAriaMsg('Saved to Love');
   }

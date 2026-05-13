@@ -55,6 +55,20 @@ export async function chatRoutes(app: FastifyInstance) {
         .send({ error: 'invalid_request', details: parsed.error.flatten() });
     }
 
+    // Edge-case hardening (2026-05): the schema accepts `content: ""` and
+    // `content: "   "` because Cycle-1's shape was permissive (assistant/tool
+    // messages can legitimately have empty content). But the LAST user message
+    // is what drives the turn — if it's empty or only whitespace, the model
+    // gets called with no actual prompt and produces a generic "How can I
+    // help?" reply, burning a Groq call and a turn budget for nothing. Reject
+    // at the boundary so a UI bug (or curl probe) can't waste quota.
+    const lastUserMsg = [...parsed.data.messages].reverse().find((m) => m.role === 'user');
+    if (lastUserMsg && (lastUserMsg.content ?? '').trim().length === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'invalid_request', details: 'last user message is empty' });
+    }
+
     const cookieSid = request.cookies?.[COOKIE_NAME];
     const sessionId = parsed.data.sessionId || cookieSid || undefined;
 

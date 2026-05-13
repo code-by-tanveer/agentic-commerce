@@ -19,8 +19,28 @@ type JsonRpcResponse<T> = JsonRpcOk<T> | JsonRpcErr;
 
 let nextId = 1;
 
+/**
+ * UCP-defined symbolic error code carried in `error.data.code` for
+ * negotiation failures (mapped to JSON-RPC `-32001`). Surface-level callers
+ * (agent.classifyError) read `McpError.ucpCode` to distinguish retryable
+ * transport hiccups from non-retryable client-config faults (a bad profile
+ * URL is never going to fix itself on retry).
+ */
+export type UcpErrorCode =
+  | 'invalid_profile_url'
+  | 'profile_unreachable'
+  | 'profile_malformed'
+  | 'version_unsupported'
+  | 'capabilities_incompatible';
+
 export class McpError extends Error {
-  constructor(message: string, public readonly code?: number, public readonly status?: number) {
+  constructor(
+    message: string,
+    public readonly code?: number,
+    public readonly status?: number,
+    public readonly ucpCode?: string,
+    public readonly retryAfter?: number,
+  ) {
     super(message);
     this.name = 'McpError';
   }
@@ -53,13 +73,45 @@ export async function callTool<T = unknown>(
   const signal = opts.signal;
   const log = opts.log;
 
-  const enriched = {
+  // UCP 2026-04-08 catalog/mcp binding shape normalisation. Two protocol-level
+  // adjustments live here (not in `catalog.ts`) so every caller of `callTool`
+  // gets spec-compliant requests without each one re-deriving the shape:
+  //
+  //   1. `meta.ucp-agent.profile` is required on EVERY request (verified
+  //      against Shopify on 2026-05-13 — even `tools/list` errors with
+  //      -32001 `invalid_profile_url` without it). The spec places this at
+  //      `params.arguments.meta`, NOT `params.meta` or `params._meta`
+  //      (probed: both alternatives return -32001).
+  //
+  //   2. `search_catalog.limit` must live inside `catalog.pagination.limit`,
+  //      not at the top of `catalog`. Shopify SILENTLY ignores a top-level
+  //      `limit` and always returns the default page size (10). Verified
+  //      empirically: `{catalog: {query, limit: 3}}` → 10 products;
+  //      `{catalog: {query, pagination: {limit: 3}}}` → 3 products. This was
+  //      a real bug, not just a spec-conformance nit: every `searchCatalog`
+  //      call was over-fetching by ~25%.
+  //
+  // Callers (`catalog.ts`) keep their ergonomic `{catalog: {query, limit}}`
+  // surface; the wire shape is corrected here.
+  const enriched: Record<string, unknown> = {
     ...args,
     meta: {
       ...(args.meta as Record<string, unknown> | undefined),
       'ucp-agent': { profile: env.UCP_PROFILE_URL },
     },
   };
+  if (name === 'search_catalog' && enriched.catalog && typeof enriched.catalog === 'object') {
+    const cat = { ...(enriched.catalog as Record<string, unknown>) };
+    if ('limit' in cat || 'cursor' in cat) {
+      const pagination = { ...((cat.pagination as Record<string, unknown> | undefined) ?? {}) };
+      if ('limit' in cat && pagination.limit === undefined) pagination.limit = cat.limit;
+      if ('cursor' in cat && pagination.cursor === undefined) pagination.cursor = cat.cursor;
+      delete cat.limit;
+      delete cat.cursor;
+      cat.pagination = pagination;
+      enriched.catalog = cat;
+    }
+  }
 
   const payload = {
     jsonrpc: '2.0' as const,
@@ -109,7 +161,24 @@ export async function callTool<T = unknown>(
 
       const json = (await res.body.json()) as JsonRpcResponse<T>;
       if ('error' in json) {
-        throw new McpError(json.error.message, json.error.code);
+        // UCP error codes (overview spec §"Error Codes"):
+        //   -32001  Discovery / negotiation failure. `error.data.code` is one
+        //           of: invalid_profile_url, profile_unreachable,
+        //           profile_malformed, version_unsupported. These are
+        //           CLIENT-config faults — retrying without changing the
+        //           profile/version won't help.
+        //   -32000  Transport-level (auth/rate-limit/unavailable). May carry
+        //           `error.data.retry_after` for 429/503.
+        //   -32602  Invalid params (JSON-RPC standard).
+        //   -32603  Internal error (server-side; safe to retry).
+        const data = (json.error.data ?? null) as { code?: string; retry_after?: number } | null;
+        throw new McpError(
+          json.error.message,
+          json.error.code,
+          undefined,
+          data?.code,
+          data?.retry_after,
+        );
       }
       return json.result;
     } catch (err) {

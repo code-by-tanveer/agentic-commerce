@@ -113,6 +113,12 @@ export const normalizedVariantSchema = z.object({
   checkoutUrl: z.string(),
   options: z.record(z.string()).optional(),
   shipsTo: z.array(z.string()).optional(),
+  // Per-variant image list. Shopify Catalog MCP ships `variant.media[]`
+  // (verified on the live wire — Reebok Club C 85 'white' variant has its
+  // own URL distinct from the product's first media). Optional because
+  // legacy MCPs and the product-level image set are still valid fallbacks
+  // — the FE prefers `selectedVariant.images[0]` then `product.images[0]`.
+  images: z.array(z.string()).optional(),
 });
 
 // Reasoning chip — canonical shape. Cycle 1 pinned the contract; Cycle 2

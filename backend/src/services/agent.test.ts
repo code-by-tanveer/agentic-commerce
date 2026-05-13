@@ -444,4 +444,116 @@ describe('runAgent — turn loop with scripted Groq + stub registry', () => {
       true,
     );
   });
+
+  // Regression for the 2026-05 "rupee bug": `openai/gpt-oss-120b` got stuck
+  // in a token-level repetition trap, emitting `≈ ₹ ` over and over until the
+  // stream filled. The agent loop must (a) detect the degenerate pattern and
+  // early-terminate, and (b) request `max_tokens` + `frequency_penalty` on
+  // every text-completion call so the trap is less likely to form in the
+  // first place. This test asserts both: the SDK invocation includes the
+  // mitigation params, and the FE never sees more than REPETITION_WINDOW
+  // identical short text_deltas in a row even on a pathological stream.
+  it('aborts early on degenerate token repetition and forwards penalty params', async () => {
+    // 50 consecutive identical short deltas — way past the 12-chunk detector
+    // window. A non-mitigated agent would forward all 50 to the FE; we expect
+    // ≤12 + a sane terminator instead.
+    const reptChunks = Array.from({ length: 50 }, () => ({
+      choices: [
+        {
+          index: 0,
+          delta: { content: '≈ ₹ ' },
+          finish_reason: null,
+          logprobs: null,
+        } as unknown as ChatCompletionChunk['choices'][0],
+      ],
+    }));
+    // Plus a final stop frame the model would emit if it ever escaped (it
+    // shouldn't reach this in the asserted behaviour, but include it so the
+    // test fails loudly if the early-abort regresses to forwarding everything).
+    reptChunks.push({
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: 'stop',
+          logprobs: null,
+        } as unknown as ChatCompletionChunk['choices'][0],
+      ],
+    });
+
+    // Prefix with one varied content chunk so the assistant-blocks snapshot
+    // has at least one legitimate text emission for the FE to render.
+    const leading = chunksOf([
+      {
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'sure, in rupees it is roughly ' },
+            finish_reason: null,
+            logprobs: null,
+          } as unknown as ChatCompletionChunk['choices'][0],
+        ],
+      },
+      ...reptChunks,
+    ]);
+
+    mockStreamChatCompletion.mockResolvedValueOnce(leading);
+
+    const registry = makeRegistry({
+      onDispatch: () => ({ assistantString: '', events: [] }),
+    });
+
+    const events: ServerEvent[] = [];
+    const controller = new AbortController();
+
+    await runAgent({
+      sessionId: 'rupee-session',
+      history: [{ role: 'user', content: 'in rupees?' }],
+      system: 'system prompt',
+      registry,
+      emit: (e) => {
+        events.push(e);
+      },
+      signal: controller.signal,
+      log,
+      preferences: {},
+    });
+
+    const textDeltas = events.filter(
+      (e): e is Extract<ServerEvent, { type: 'text_delta' }> => e.type === 'text_delta',
+    );
+
+    // 1. The leading varied chunk got through.
+    expect(textDeltas[0]?.text).toBe('sure, in rupees it is roughly ');
+
+    // 2. The detector must have cut the stream before all 50 repeats reached
+    //    the FE. We allow up to the detector window (12) of repetitions
+    //    through — that's the trip threshold — but never 20+, and certainly
+    //    never the full 50.
+    const rupeeDeltas = textDeltas.filter((d) => d.text === '≈ ₹ ');
+    expect(rupeeDeltas.length).toBeLessThanOrEqual(12);
+
+    // 3. Stream completed cleanly (a `done` event was emitted — the user
+    //    never saw an error frame for this defensive path).
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+
+    // 4. Every text-completion call to Groq included the mitigation params.
+    //    Without these, the model would have been more likely to enter the
+    //    trap and would have run to its default token ceiling.
+    expect(mockStreamChatCompletion).toHaveBeenCalled();
+    const call = mockStreamChatCompletion.mock.calls[0]?.[0];
+    expect(call?.max_tokens).toBe(800);
+    expect(call?.frequency_penalty).toBe(0.3);
+
+    // 5. The persisted assistant block contains the legitimate prefix and at
+    //    most a small bounded suffix — no megablock of `≈ ₹ ` text.
+    const [, msgArg] = mockAppendMessage.mock.calls[0]!;
+    const blocks = (msgArg as { blocks: Array<{ type: string; text?: string }> }).blocks;
+    const textBlock = blocks.find((b) => b.type === 'text');
+    expect(textBlock?.text).toMatch(/^sure, in rupees it is roughly /);
+    // The detector trips at 12 identical chunks; the text block contains
+    // exactly the chunks emitted before the trip (≤12 × '≈ ₹ ' = ≤48 chars
+    // of repetition, plus the 30-char prefix → well under 100 chars total).
+    expect(textBlock?.text?.length ?? 0).toBeLessThan(100);
+  });
 });

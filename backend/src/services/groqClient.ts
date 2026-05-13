@@ -31,6 +31,15 @@ export interface StreamChatOpts {
   temperature?: number;
   /** Hard cap on output tokens. Cycle 4 uses this on the vision call. */
   max_tokens?: number;
+  /**
+   * OpenAI-shape `frequency_penalty` (range -2..2). Mitigates token-level
+   * repetition traps observed on `openai/gpt-oss-120b` (e.g. the model
+   * emitting `≈ ₹ ₹ ₹ ≈ ₹ ₹ ₹ ...` indefinitely when the rupee glyph hits a
+   * degenerate state). Forwarded as-is to Groq.
+   */
+  frequency_penalty?: number;
+  /** OpenAI-shape `presence_penalty` (range -2..2). Companion to frequency_penalty. */
+  presence_penalty?: number;
   signal?: AbortSignal;
   /** Free-form tag forwarded into usage_log.jsonl so we can break out vision vs chat spend (cycle-4.md open question Q3). */
   usageTag?: string;
@@ -52,6 +61,67 @@ function isRetriable(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { status?: number };
   return typeof e.status === 'number' && RETRIABLE_HTTP.has(e.status);
+}
+
+/**
+ * Edge-case hardening (2026-05): Groq sends `Retry-After` on 429 (and
+ * sometimes 503) — sometimes seconds, sometimes a date. The earlier audit
+ * flagged that we were ignoring it and burning quota with a fixed
+ * jittered 400ms backoff while the server explicitly told us to wait longer.
+ *
+ * If the header is present and parses to a sane delay (≤30s — we don't want
+ * to hold a request open longer than the user's likely patience), honour it
+ * with a small jitter to avoid stampeding when many requests rate-limit at
+ * once. Otherwise fall back to the original jittered base.
+ */
+const MAX_RETRY_AFTER_MS = 30_000;
+function retryAfterDelay(err: unknown, fallbackBaseMs: number): number {
+  if (!err || typeof err !== 'object') return jitter(fallbackBaseMs);
+  // groq-sdk exposes response headers under `.headers` on its APIError shape.
+  // Cast loosely — the SDK's type isn't exported in a stable way and we only
+  // care about the one field.
+  const headers = (err as { headers?: Record<string, string | string[] | undefined> }).headers;
+  const raw = headers?.['retry-after'] ?? headers?.['Retry-After'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return jitter(fallbackBaseMs);
+  // Numeric seconds form.
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber) && asNumber >= 0) {
+    const ms = Math.min(Math.round(asNumber * 1000), MAX_RETRY_AFTER_MS);
+    // Add ≤200ms jitter so concurrent retriers don't all wake at the same ms.
+    return ms + Math.floor(Math.random() * 200);
+  }
+  // HTTP-date form.
+  const asDate = Date.parse(value);
+  if (Number.isFinite(asDate)) {
+    const ms = Math.min(Math.max(asDate - Date.now(), 0), MAX_RETRY_AFTER_MS);
+    return ms + Math.floor(Math.random() * 200);
+  }
+  return jitter(fallbackBaseMs);
+}
+
+/**
+ * Abort-aware sleep. Resolves when either the timer fires OR the signal
+ * aborts — whichever comes first. The caller then re-checks `signal.aborted`
+ * to decide whether to skip the retry. Without this, a user-aborted request
+ * still serves a retry attempt against Groq, which then throws a separate
+ * AbortError downstream — wasted RTT and one extra log line per abort.
+ */
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise((resolve) => setTimeout(resolve, ms));
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**
@@ -109,6 +179,8 @@ export async function streamChatCompletion(
         tool_choice: opts.tool_choice,
         temperature: opts.temperature,
         max_tokens: opts.max_tokens,
+        frequency_penalty: opts.frequency_penalty,
+        presence_penalty: opts.presence_penalty,
         stream: true,
       },
       { signal: opts.signal },
@@ -119,13 +191,17 @@ export async function streamChatCompletion(
     return wrapStream(stream, primary, tag, log, startedAt);
   } catch (err) {
     if (!isRetriable(err)) throw err;
-    // retry once with jitter
-    await new Promise((r) => setTimeout(r, jitter(400)));
+    // Edge-case hardening (2026-05): honour `Retry-After` if present, and
+    // make the wait abort-aware — a user who navigated away should not
+    // wake a retry attempt against Groq.
+    await abortableDelay(retryAfterDelay(err, 400), opts.signal);
+    if (opts.signal?.aborted) throw err;
     try {
       const stream = await tryOnce(primary);
       return wrapStream(stream, primary, tag, log, startedAt);
     } catch (err2) {
       if (!isRetriable(err2) || primary === fallback) throw err2;
+      if (opts.signal?.aborted) throw err2;
       // fallback model — single attempt
       const stream = await tryOnce(fallback);
       return wrapStream(stream, fallback, tag, log, startedAt);
@@ -189,6 +265,8 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
         tool_choice: opts.tool_choice,
         temperature: opts.temperature,
         max_tokens: opts.max_tokens,
+        frequency_penalty: opts.frequency_penalty,
+        presence_penalty: opts.presence_penalty,
         stream: false,
       },
       { signal: opts.signal },
@@ -200,11 +278,13 @@ export async function chatCompletion(opts: NonStreamChatOpts): Promise<ChatCompl
     resp = await tryOnce(primary);
   } catch (err) {
     if (!isRetriable(err)) throw err;
-    await new Promise((r) => setTimeout(r, jitter(400)));
+    await abortableDelay(retryAfterDelay(err, 400), opts.signal);
+    if (opts.signal?.aborted) throw err;
     try {
       resp = await tryOnce(primary);
     } catch (err2) {
       if (!isRetriable(err2) || primary === fallback) throw err2;
+      if (opts.signal?.aborted) throw err2;
       model = fallback;
       resp = await tryOnce(fallback);
     }

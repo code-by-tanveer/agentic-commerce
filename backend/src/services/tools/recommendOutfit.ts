@@ -8,6 +8,12 @@ import type { PreferencesSnapshot, Tool } from '../../types/tool.js';
 /**
  * `recommend_outfit` — build a coordinated 2-4 item bundle around an anchor.
  *
+ * Catalog reconcile (2026-05-13): the Shopify Catalog MCP advertises three
+ * tools — `search_catalog`, `get_product`, `lookup_catalog` (UCP 2026-04-08).
+ * There is NO server-side `recommend_products` / `complementary_products` /
+ * `recommend_outfit` capability. The fan-out below is the only path; this
+ * comment exists so future audits don't re-ask the question. See ADR-0003.
+ *
  * ADR-0003 justification (composition over raw MCP):
  *   1. Resolve the anchor product (one MCP `get_product`).
  *   2. Derive 2-3 complementary categories from a small heuristic table
@@ -160,11 +166,18 @@ export const recommendOutfitTool: Tool<RecommendOutfitArgs, RecommendOutfitResul
     }
 
     if (picked.length === 0) {
+      // Distinct from the "no categories known" branch above — here we
+      // *had* complementary categories but every sub-search returned
+      // empty (or every candidate was the anchor itself). Keep the same
+      // error code (the FE / agent prompt only handles two values) but
+      // make the `detail` distinguishable for logs.
       return {
         ok: false,
         anchorProductId: anchor.id,
         error: 'no_complementary_categories',
-        detail: `Complementary categories returned no matching products for "${anchor.title}".`,
+        detail: `Searched ${categories.length} complementary categor${
+          categories.length === 1 ? 'y' : 'ies'
+        } for "${anchor.title}" but found no usable products.`,
       } satisfies RecommendOutfitResult;
     }
 
@@ -337,7 +350,15 @@ function buildBundleRationale(
 ): string {
   const cats = categories.slice(0, items.length).join(' + ');
   const merchantSet = new Set(items.map((i) => i.merchant).filter(Boolean));
-  const sameMerchant = merchantSet.size === 1 && merchantSet.has(anchor.merchant);
+  // Only claim "same merchant" when the anchor's merchant is real
+  // (non-empty) AND every item shares it. Without the `anchor.merchant`
+  // truthiness check, an empty-string anchor merchant + empty-string item
+  // merchants would silently pass `merchantSet.has('')` and emit a
+  // nonsensical "All N pieces ship from ." sentence.
+  const sameMerchant =
+    Boolean(anchor.merchant) &&
+    merchantSet.size === 1 &&
+    merchantSet.has(anchor.merchant);
   const merchantNote = sameMerchant
     ? ` All ${items.length} pieces ship from ${anchor.merchant}.`
     : '';

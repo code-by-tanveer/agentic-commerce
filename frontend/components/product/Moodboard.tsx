@@ -117,6 +117,17 @@ export function Moodboard({
   const entryInitial = reduced ? { opacity: 0 } : { opacity: 0, y: 4 };
   const entryAnimate = reduced ? { opacity: 1 } : { opacity: 1, y: 0 };
 
+  // The vision tool returns the inbound `imageUrl` verbatim, which for the
+  // production flow is a `signed:<token>...` string minted by /api/upload.
+  // That scheme is opaque to the browser — feeding it to <Image> emits a
+  // broken-image icon. We only render the thumbnail when the URL is
+  // actually loadable (http/https/data/blob); otherwise we drop the image
+  // cell and the attribute chips carry the cell on their own. The agent's
+  // `extract_style_from_image` description already directs the LLM to ship
+  // signed: URLs, so this is the expected production path.
+  const isRenderableUrl =
+    /^(https?:|data:|blob:)/i.test(imageUrl ?? '');
+
   return (
     <motion.div
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
@@ -126,19 +137,21 @@ export function Moodboard({
       aria-label="Image attributes"
     >
       <div className="flex items-start gap-3">
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100 sm:h-32 sm:w-32">
-          {/* Sized to DESIGN.md §4 Moodboard spec: max 128px. We keep aspect
-              by clamping both axes; vision tool's source image may be any
-              ratio so object-cover trims sensibly. T4.N — next/image with
-              fill; parent is the sized box. */}
-          <Image
-            src={imageUrl}
-            alt={description || 'Uploaded reference image'}
-            fill
-            sizes="(max-width: 640px) 96px, 128px"
-            className="object-cover"
-          />
-        </div>
+        {isRenderableUrl ? (
+          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100 sm:h-32 sm:w-32">
+            {/* Sized to DESIGN.md §4 Moodboard spec: max 128px. We keep aspect
+                by clamping both axes; vision tool's source image may be any
+                ratio so object-cover trims sensibly. T4.N — next/image with
+                fill; parent is the sized box. */}
+            <Image
+              src={imageUrl}
+              alt={description || 'Uploaded reference image'}
+              fill
+              sizes="(max-width: 640px) 96px, 128px"
+              className="object-cover"
+            />
+          </div>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div

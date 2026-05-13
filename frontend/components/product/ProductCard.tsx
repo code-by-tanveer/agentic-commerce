@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { ChevronDown, ExternalLink, Heart, Store, Wand2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, Heart, Loader2, Store, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { clientLocale, formatMoney } from '@/lib/format';
 import type { Product } from '@/types/product';
@@ -11,7 +11,7 @@ import {
   encodeDragPayload,
   useOptionalShortlist,
 } from '@/hooks/useShortlist';
-import { useConversationActions } from '@/hooks/useConversation';
+import { useConversationActions, useConversationState } from '@/hooks/useConversation';
 import { ProductImage } from './ProductImage';
 import { VariantPicker } from './VariantPicker';
 import { ReasoningChips } from './ReasoningChips';
@@ -27,6 +27,11 @@ export function ProductCard({ product, index = 0 }: Props) {
   const [selectedVariantId, setSelectedVariantId] = useState<string>(
     product.variants?.[0]?.id ?? '',
   );
+  // Per-card unique panel id so the merchant-tap and other expanders can
+  // wire `aria-controls` without colliding when several cards share a page.
+  // React 18's `useId` returns ids with `:` which are valid HTML but break
+  // CSS selectors (and Playwright's `#...` locator). Strip the colons.
+  const panelId = `product-panel-${useId().replace(/:/g, '')}`;
   // DESIGN.md §6 / §7 — prefers-reduced-motion collapses all motion to a 100ms
   // opacity-only crossfade. Wired at the ProductCard level per the Cycle 1 brief.
   const reduce = useReducedMotion();
@@ -35,12 +40,23 @@ export function ProductCard({ product, index = 0 }: Props) {
   // ShortlistProvider; the keyboard handler simply no-ops in that case.
   const shortlist = useOptionalShortlist();
   const { send } = useConversationActions();
+  const { isSearching } = useConversationState();
   const [ariaMsg, setAriaMsg] = useState('');
+  // Tracks "this card initiated the most recent Pair-with". Used to render a
+  // brief pressed state on the Pair button so the user sees their click
+  // landed — without it, the submitted user-message appears at the bottom of
+  // the chat (potentially below the fold) and the click feels lost.
+  const [pairing, setPairing] = useState(false);
 
   const selectedVariant = product.variants?.find((v) => v.id === selectedVariantId);
   const checkoutUrl = selectedVariant?.checkoutUrl || product.checkoutUrl;
   const price = selectedVariant?.price ?? product.price;
   const currency = selectedVariant?.currency ?? product.currency;
+  // Variant-aware hero image. Shopify ships per-variant `media[]`; we prefer
+  // the selected variant's first image so a Color/Pattern pill tap reflects
+  // in the card hero. Falls back to the product-level image set when the
+  // variant has none (legacy MCPs, single-image products).
+  const heroImage = selectedVariant?.images?.[0] ?? product.images[0];
   const canBuy = !!checkoutUrl;
   // T4.K (Priya) — pull the browser's locale on client so INR / EUR / etc.
   // get correct grouping (lakh comma for en-IN, etc.). Falls back to en-US
@@ -60,22 +76,35 @@ export function ProductCard({ product, index = 0 }: Props) {
 
   // T1.1 — tap-to-save heart. Touch-only at rest; fade-in on hover/focus for
   // fine-pointer users (the L/M/S keyboard fallback below still works there).
+  // Second tap on a loved card REMOVES it (un-like). Earlier the handler
+  // always called `addToLane('love')`, so the heart was a one-way switch.
   function saveLove(e: React.MouseEvent | React.KeyboardEvent) {
     e.stopPropagation();
     if (!shortlist) return;
+    if (isLoved) {
+      void shortlist.remove(product.id);
+      setAriaMsg('Removed from Love');
+      return;
+    }
     void shortlist.addToLane(product.id, 'love', product);
     setAriaMsg('Saved to Love');
   }
 
-  // T1.8 — "Pair with…" — uses the conversation `send` with the title as
-  // user-visible context, plus the productId via an inline marker so the
-  // backend can route to recommend_outfit. The agent's system prompt already
-  // routes "what would go with X" through that tool (PRODUCT.md move #4).
-  function pairWith(e: React.MouseEvent) {
+  // "Pair with…" — submits a natural-language ask so the agent's system prompt
+  // routes through `recommend_outfit` (PRODUCT.md move #4). The product id is
+  // kept in the message so the agent has an unambiguous anchor without a
+  // round-trip lookup, but the user-visible text reads as a normal request.
+  // The `pairing` flag drives a brief pressed state on the button so the click
+  // registers visually even when the new user-bubble lands below the fold.
+  async function pairWith(e: React.MouseEvent) {
     e.stopPropagation();
-    void send(
-      `what would go with this? (product: ${product.title}, id: ${product.id})`,
-    );
+    if (isSearching) return;
+    setPairing(true);
+    try {
+      await send(`What would go with the ${product.title}? [pair_anchor:${product.id}]`);
+    } finally {
+      setPairing(false);
+    }
   }
 
   const entryInitial = reduce ? { opacity: 0 } : { opacity: 0, y: 12 };
@@ -198,25 +227,44 @@ export function ProductCard({ product, index = 0 }: Props) {
       {/* Collapsed row — div (not button) so the inner Buy is a real
           sibling button (T1.14). Click on this region toggles expand. */}
       <div
+        data-testid="card-body"
         onClick={() => setExpanded((x) => !x)}
         className="flex w-full cursor-pointer items-stretch gap-3 p-3 text-left"
       >
         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
           <ProductImage
-            src={product.images[0]}
+            src={heroImage}
             alt={product.title}
             sizes="96px"
           />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h3 className="truncate text-sm font-semibold text-ink-900">{product.title}</h3>
-              {/* T1.30 — mt-0.5 → mt-1 (no decimal spacing). */}
-              <p className="mt-1 flex items-center gap-1 text-xs text-ink-400">
-                <Store className="h-3 w-3" aria-hidden />
+              {/* Merchant tap — dedicated button with its own
+                  aria-controls pointing at this card's expansion panel.
+                  Previously the merchant was a passive <p> inside the
+                  collapsed row; clicking still expanded the card via
+                  bubbling, but the framer `layout` reflow on the grid
+                  visually flowed adjacent cards so the wrong one looked
+                  like it was opening. A real button with aria-controls
+                  pins the interaction to this card and gives SR users
+                  a proper expand affordance. */}
+              <button
+                type="button"
+                data-testid="merchant-tap"
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded((x) => !x);
+                }}
+                className="mt-1 flex w-full min-w-0 items-center gap-1 text-left text-xs text-ink-400 hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+              >
+                <Store className="h-3 w-3 shrink-0" aria-hidden />
                 <span className="truncate">{product.merchant}</span>
-              </p>
+              </button>
             </div>
             <ChevronDown
               aria-hidden
@@ -233,13 +281,16 @@ export function ProductCard({ product, index = 0 }: Props) {
               <ReasoningChips chips={product.reasoningChips} />
             </div>
           ) : null}
-          <div className="mt-auto flex items-end justify-between pt-2">
-            <p className="text-base font-semibold text-ink-900">
+          <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pt-2">
+            <p className="shrink-0 text-base font-semibold text-ink-900">
               {formatMoney(price, currency, locale)}
             </p>
             {/* T1.6 — "Buy now" → "Buy on {merchant}" everywhere. T1.14 —
                 now a sibling <button>, no longer a nested role="button"
-                inside an outer <button>. T1.30 — py-1.5 → py-2 (no decimal). */}
+                inside an outer <button>. The button is constrained with
+                `min-w-0` + `max-w-full` and the inner merchant span uses
+                `truncate` so long merchant strings (e.g. "Commonwealthrunning")
+                shrink instead of pushing past the card's right edge. */}
             <button
               type="button"
               onClick={(e) => {
@@ -249,17 +300,17 @@ export function ProductCard({ product, index = 0 }: Props) {
               disabled={!canBuy}
               aria-label={canBuy ? `Buy on ${product.merchant}` : 'Unavailable'}
               className={cn(
-                'inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-medium transition',
+                'inline-flex min-w-0 max-w-full items-center gap-1 rounded-full px-3 py-2 text-xs font-medium transition',
                 'focus:outline-none focus-visible:shadow-glow',
                 canBuy
                   ? 'bg-ink-900 text-white hover:bg-ink-600'
                   : 'cursor-not-allowed bg-ink-100 text-ink-400',
               )}
             >
-              <span className="truncate">
+              <span className="min-w-0 truncate">
                 Buy on <span className="font-semibold">{product.merchant}</span>
               </span>
-              <ExternalLink className="h-3 w-3" aria-hidden />
+              <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
             </button>
           </div>
         </div>
@@ -269,6 +320,7 @@ export function ProductCard({ product, index = 0 }: Props) {
         {expanded && (
           <motion.div
             key="details"
+            id={panelId}
             initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
             animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
             exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
@@ -328,14 +380,25 @@ export function ProductCard({ product, index = 0 }: Props) {
                   <button
                     type="button"
                     onClick={pairWith}
+                    disabled={pairing || isSearching}
+                    aria-busy={pairing}
                     aria-label={`Pair with — what would go with ${product.title}?`}
                     className={cn(
-                      'inline-flex h-9 items-center gap-2 rounded-full bg-white px-3 text-sm font-medium text-ink-900 shadow-soft transition hover:bg-ink-50',
+                      'inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-medium transition',
                       'focus:outline-none focus-visible:shadow-glow',
+                      pairing
+                        ? 'bg-ink-900 text-white shadow-lift'
+                        : isSearching
+                          ? 'bg-white text-ink-400 shadow-soft cursor-not-allowed'
+                          : 'bg-white text-ink-900 shadow-soft hover:bg-ink-50',
                     )}
                   >
-                    <Wand2 className="h-3.5 w-3.5 text-ink-400" aria-hidden />
-                    Pair with…
+                    {pairing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <Wand2 className="h-3.5 w-3.5 text-ink-400" aria-hidden />
+                    )}
+                    {pairing ? 'Asking…' : 'Pair with…'}
                   </button>
                   {/* T1.6 — unified "Buy on {merchant}" wording.
                       T1.29 — focus-visible:shadow-glow on the primary CTA

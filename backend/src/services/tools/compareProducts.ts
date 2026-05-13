@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getProduct } from '../catalog.js';
+import { lookupCatalog } from '../catalog.js';
 import { stableKey } from '../cache.js';
 import { computeChips } from '../reasoning.js';
 import type { NormalizedProduct } from '../../types/product.js';
@@ -20,7 +20,7 @@ export interface CompareProductsResult {
 }
 
 const description =
-  'Compare 2–6 products side-by-side along a set of axes (defaults: price, rating, shipping). Fans out parallel `get_product_details` calls and returns a comparison table that the UI renders inline. Use when the user asks "which one is better" or "compare X and Y".';
+  'Compare 2–6 products side-by-side along a set of axes. ALWAYS pass an `axes` array that reflects what the user actually asked about — e.g. for "which has better battery" pass `["battery"]`, for "compare on price and shipping" pass `["price","shipping"]`. Only omit `axes` for a fully open-ended "compare X and Y" with no stated criterion (defaults to price/rating/shipping). The UI renders only the axes you list, so a focused `axes` array keeps the table short and on-topic; an over-broad list produces a noisy 8-row dump. Use when the user asks "which one is better", "compare X and Y", or "which is better at <criterion>".';
 
 export const compareProductsTool: Tool<CompareProductsArgs, CompareProductsResult> = {
   name: 'compare_products',
@@ -39,7 +39,8 @@ export const compareProductsTool: Tool<CompareProductsArgs, CompareProductsResul
       axes: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Optional comparison axes. Defaults to price, rating, shipping.',
+        description:
+          'Comparison axes to show as rows. Strongly recommended — pass the dimensions the user actually asked about (e.g. ["battery"], ["price","shipping"], ["material","origin"]). The UI shows EXACTLY the axes you list (plus the product image header). Omit only for an open-ended "compare X and Y" with no stated criterion; in that case the UI shows the default 3-row set (price/rating/shipping). Known axis aliases: price, rating, shipping, returns, origin/country, merchant. Unknown axes (e.g. battery, weight, material, features) render as a free-form row pulled from product description/specs.',
       },
     },
     required: ['ids'],
@@ -57,11 +58,25 @@ export const compareProductsTool: Tool<CompareProductsArgs, CompareProductsResul
     if (cached) {
       products = cached;
     } else {
+      // Catalog reconcile (2026-05-13): switched from N parallel `get_product`
+      // round-trips to a single `lookup_catalog` call. Shopify exposes this as
+      // `dev.ucp.shopping.catalog.lookup` and returns up to 10 products per
+      // request (we cap at 6 already via the args schema). Saves N-1 HTTP
+      // hops on every compare, and missing IDs come back gracefully as
+      // `messages` entries rather than throws — `lookupCatalog` surfaces them
+      // via the `missing` array, which we log for observability.
       // R3-cleanup (architect-code LOW): thread `ctx.log` for MCP retry visibility.
-      const fetched = await Promise.all(
-        args.ids.map((id) => getProduct(id, { signal: ctx.signal, log: ctx.log })),
-      );
-      products = fetched.filter((p): p is NormalizedProduct => p !== null);
+      const { products: fetched, missing } = await lookupCatalog(args.ids, {
+        signal: ctx.signal,
+        log: ctx.log,
+      });
+      if (missing.length > 0) {
+        ctx.log.warn(
+          { tool: 'compare_products', missing, requested: args.ids.length },
+          'compare_products: lookup_catalog returned partial result',
+        );
+      }
+      products = fetched;
       ctx.cache.set(cacheKey, products);
     }
 

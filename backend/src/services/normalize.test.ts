@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeProduct } from './normalize.js';
+import { extractProducts, normalizeProduct } from './normalize.js';
 
 // Architect Top-5 #1 — fixture-driven coverage of `normalize.ts`. The function
 // is the only place where wire-shape catalog payloads cross into our internal
@@ -123,5 +123,274 @@ describe('normalizeProduct', () => {
         merchant: { name: 'M' },
       }),
     ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real Shopify Catalog MCP (UCP 2026-04-08) fixtures.
+//
+// These are verbatim copy-pastes from `curl https://catalog.shopify.com/api/ucp/mcp`
+// (search_catalog tool, profile = the upstream UCP profile). Captured 2026-05-13.
+// They pin every shape divergence between the wire and our prior assumed model:
+//
+//   1. `description: {plain}` not bare string
+//   2. `price: {amount: <minor-units>, currency}` — integer cents, NOT dollars
+//   3. `price_range: {min: MoneyV2, max: MoneyV2}` — wrappers around MoneyV2
+//   4. `availability: {available: boolean}` — nested, not bare
+//   5. Variant `options: [{name, label}]` — not `[{name, value}]`
+//   6. Variant `url` (the canonical product page) — no separate `checkout_url`
+//   7. No top-level product `url` — propagate from variants[0]
+//   8. No merchant/seller/shop blob — must derive from variant URL host
+//
+// If Shopify ever changes the wire, refresh these fixtures and re-run.
+// ---------------------------------------------------------------------------
+
+describe('normalizeProduct — real Shopify fixtures', () => {
+  it('desk lamp: parses MoneyV2 cents, variant URL becomes checkoutUrl + product url, merchant derives from host', () => {
+    const raw = {
+      id: 'gid://shopify/p/3lpAsimzbK80q4zN4ccM87',
+      title: 'Lume Cube Edge Light 2.0 Black LED Desk Lamp',
+      description: {
+        plain:
+          'A modern clamp-on LED desk lamp with edge-lit technology, adjustable brightness, and color temperature control for optimal focus and workspace ambiance.',
+      },
+      options: [
+        { name: 'Color', values: [{ label: 'Black' }, { label: 'White' }] },
+      ],
+      media: [
+        {
+          type: 'image',
+          url: 'https://cdn.shopify.com/s/files/1/0078/6628/6137/files/edge-light-2-0-lume-cube-led-desk-lamp_01.jpg',
+          alt_text: 'Lume Cube Edge Light 2.0 LED Desk Lamp LC-EDGE2',
+        },
+      ],
+      variants: [
+        {
+          id: 'gid://shopify/ProductVariant/42035779272761?shop=7866286137',
+          title: 'Lume Cube Edge Light 2.0 Black LED Desk Lamp',
+          url: 'https://lumecube.com/products/edge-light-2-0-black-led-desk-lamp?variant=42035779272761',
+          price: { amount: 14999, currency: 'USD' },
+          availability: { available: true },
+          options: [{ name: 'Color', label: 'Black' }],
+        },
+        {
+          id: 'gid://shopify/ProductVariant/42035774193721?shop=7866286137',
+          title: 'Lume Cube Edge Light 2.0 White LED Desk Lamp',
+          url: 'https://lumecube.com/products/edge-light-2-0-white-led-desk-lamp?variant=42035774193721',
+          price: { amount: 14999, currency: 'USD' },
+          availability: { available: true },
+          options: [{ name: 'Color', label: 'White' }],
+        },
+      ],
+      price_range: {
+        min: { amount: 14999, currency: 'USD' },
+        max: { amount: 14999, currency: 'USD' },
+      },
+    };
+
+    const out = normalizeProduct(raw);
+
+    // MoneyV2 cents → major units.
+    expect(out.price).toBe(149.99);
+    expect(out.currency).toBe('USD');
+
+    // description.plain is unpacked.
+    expect(out.description).toContain('clamp-on LED desk lamp');
+
+    // Top-level product url propagated from first variant.
+    expect(out.url).toBe(
+      'https://lumecube.com/products/edge-light-2-0-black-led-desk-lamp?variant=42035779272761',
+    );
+    // checkoutUrl == variant.url for the first available variant.
+    expect(out.checkoutUrl).toBe(
+      'https://lumecube.com/products/edge-light-2-0-black-led-desk-lamp?variant=42035779272761',
+    );
+
+    // Variant availability extracted from `{available: true}` wrapper.
+    expect(out.variants?.[0]?.available).toBe(true);
+
+    // Variant options use `{name, label}` shape, not `{name, value}`.
+    expect(out.variants?.[0]?.options).toEqual({ Color: 'Black' });
+    expect(out.variants?.[1]?.options).toEqual({ Color: 'White' });
+
+    // Variant price also normalized to major units.
+    expect(out.variants?.[0]?.price).toBe(149.99);
+    expect(out.variants?.[0]?.currency).toBe('USD');
+
+    // Merchant derives from `lumecube.com` → "Lumecube".
+    expect(out.merchant).toBe('Lumecube');
+
+    // Image survives from `media[].url`.
+    expect(out.images).toEqual([
+      'https://cdn.shopify.com/s/files/1/0078/6628/6137/files/edge-light-2-0-lume-cube-led-desk-lamp_01.jpg',
+    ]);
+  });
+
+  it('running shoes: multi-option variants (Color/Fit/Shoe size/Size) all survive verbatim', () => {
+    const raw = {
+      id: 'gid://shopify/p/1AnCOGcT8JmvQgupBNR9Cl',
+      title: "Men's On Cloudrunner 2 (Clearance)",
+      description: {
+        plain:
+          'Supportive, cushioned running shoes with recycled mesh and advanced comfort for every run.',
+      },
+      options: [
+        {
+          name: 'Color',
+          values: [
+            { label: 'White' },
+            { label: 'White/Green (Final Sale)' },
+            { label: 'Wolf/Ivory (Final Sale)' },
+          ],
+        },
+        { name: 'Fit', values: [{ label: 'Regular' }, { label: 'Wide' }] },
+        { name: 'Shoe size', values: [{ label: '8.5' }] },
+        {
+          name: 'Size',
+          values: [{ label: '10.5' }, { label: '11' }, { label: '11.5' }, { label: '9' }],
+        },
+      ],
+      media: [
+        {
+          type: 'image',
+          url: 'https://cdn.shopify.com/s/files/1/0314/5200/4483/files/Screenshot_2025-12-07_at_1.43.41_PM.png',
+          alt_text: "Men's On Cloudrunner 2 (Clearance)",
+        },
+      ],
+      variants: [
+        {
+          id: 'gid://shopify/ProductVariant/46998510272725?shop=31452004483',
+          title: "Men's On Cloudrunner 2 (Clearance)",
+          url: 'https://commonwealthrunning.com/products/mens-on-cloudrunner-2?variant=46998510272725',
+          price: { amount: 12495, currency: 'USD' },
+          availability: { available: true },
+          options: [
+            { name: 'Fit', label: 'Regular' },
+            { name: 'Color', label: 'White' },
+            { name: 'Shoe size', label: '8.5' },
+            { name: 'Size', label: '11' },
+          ],
+        },
+        {
+          id: 'gid://shopify/ProductVariant/46998510469333?shop=31452004483',
+          title: "Men's On Cloudrunner 2 (Clearance)",
+          url: 'https://commonwealthrunning.com/products/mens-on-cloudrunner-2?variant=46998510469333',
+          price: { amount: 12495, currency: 'USD' },
+          availability: { available: true },
+          options: [
+            { name: 'Fit', label: 'Regular' },
+            { name: 'Color', label: 'White' },
+            { name: 'Shoe size', label: '8.5' },
+            { name: 'Size', label: '11.5' },
+          ],
+        },
+      ],
+      price_range: {
+        min: { amount: 12495, currency: 'USD' },
+        max: { amount: 12495, currency: 'USD' },
+      },
+    };
+
+    const out = normalizeProduct(raw);
+
+    // All four options survive on each variant (regression test: prior code
+    // read `o.value` and dropped every Shopify variant option silently).
+    expect(out.variants?.[0]?.options).toEqual({
+      Fit: 'Regular',
+      Color: 'White',
+      'Shoe size': '8.5',
+      Size: '11',
+    });
+    expect(out.variants?.[1]?.options).toEqual({
+      Fit: 'Regular',
+      Color: 'White',
+      'Shoe size': '8.5',
+      Size: '11.5',
+    });
+
+    // Different variants have different sizes (the reasoning-chip size match
+    // path depends on this).
+    expect(out.variants?.[0]?.options?.Size).toBe('11');
+    expect(out.variants?.[1]?.options?.Size).toBe('11.5');
+
+    // Price: 12495 cents → $124.95.
+    expect(out.price).toBe(124.95);
+    expect(out.variants?.[0]?.price).toBe(124.95);
+
+    // Merchant derived from `commonwealthrunning.com` host.
+    expect(out.merchant).toBe('Commonwealthrunning');
+  });
+
+  it('price_range.min MoneyV2 backs product price when no variants surface a price', () => {
+    // Shopify can return a product with `price_range` but no individually-
+    // priced variants in some lookups. Make sure the wrapper is unpacked to
+    // major units (not left as integer cents).
+    const out = normalizeProduct({
+      id: 'p1',
+      title: 'Vase',
+      price_range: {
+        min: { amount: 1800, currency: 'USD' },
+        max: { amount: 2700, currency: 'USD' },
+      },
+    });
+    expect(out.price).toBe(18);
+    expect(out.currency).toBe('USD');
+  });
+
+  it('availability: {available: false} → variant.available === false', () => {
+    const out = normalizeProduct({
+      id: 'p1',
+      variants: [
+        {
+          id: 'v1',
+          price: { amount: 5000, currency: 'USD' },
+          availability: { available: false },
+        },
+      ],
+    });
+    expect(out.variants?.[0]?.available).toBe(false);
+  });
+
+  it('JPY MoneyV2 (zero-decimal currency) is NOT divided by 100', () => {
+    // ¥12,000 should display as ¥12,000 — dividing by 100 would print ¥120.
+    const out = normalizeProduct({
+      id: 'p1',
+      variants: [
+        {
+          id: 'v1',
+          price: { amount: 12000, currency: 'JPY' },
+          availability: { available: true },
+        },
+      ],
+    });
+    expect(out.variants?.[0]?.price).toBe(12000);
+    expect(out.variants?.[0]?.currency).toBe('JPY');
+    expect(out.price).toBe(12000);
+  });
+
+  it('legacy flat-number price (`{price: 70}`) is treated as already-major-units', () => {
+    // Back-compat: unit tests / older MCPs that ship a bare number should
+    // pass through unchanged. We only divide when the input is an object
+    // (Shopify MoneyV2 shape) AND the amount is a non-zero integer.
+    const out = normalizeProduct({ price: 70 });
+    expect(out.price).toBe(70);
+  });
+
+  it('extractProducts unwraps structuredContent.products from the real MCP envelope', () => {
+    // The Shopify MCP wraps results in `result.structuredContent.products`.
+    // Passing the inner `result` payload through `extractProducts` must
+    // produce the products array unchanged.
+    const wireEnvelope = {
+      structuredContent: {
+        ucp: { version: '2026-04-08', status: 'success' },
+        products: [
+          { id: 'a', title: 'A' },
+          { id: 'b', title: 'B' },
+        ],
+      },
+    };
+    const out = extractProducts(wireEnvelope);
+    expect(out).toHaveLength(2);
+    expect(out[0]?.id).toBe('a');
   });
 });

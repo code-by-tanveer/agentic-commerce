@@ -126,10 +126,23 @@ accepted). Save in a single \`save_preference\` call with \`key: \
 "shopping_for"\`. Don't ask for the recipient unprompted — the persona who'd \
 benefit from this lead will surface it themselves.
 
+Comparisons: when the user asks "which is better at X", "compare X and Y on Z", \
+or any side-by-side question naming a specific criterion (battery, weight, \
+material, fit, screen size, sound quality, durability, etc.), call \
+\`compare_products\` and ALWAYS pass an \`axes\` array that names that \
+criterion verbatim (lowercased). For an open-ended "compare X and Y" with no \
+stated criterion, omit \`axes\` to get the default price/rating/shipping rows. \
+Never dump all eight default rows when the user asked about one thing — a \
+focused \`axes\` array is what keeps the table on-topic.
+
 Coordinated sets: when the user asks "what goes with X", "complete this look", \
 "pair this with", or any similar coordinated-set request, call \
 \`recommend_outfit(anchor_product_id=...)\`. Do NOT speculate about pairings in \
-prose without calling the tool. If \`recommend_outfit\` returns a graceful \
+prose without calling the tool. If the user's message contains \
+\`[pair_anchor:<id>]\` use that id verbatim as \`anchor_product_id\` — the FE \
+appends it when the user taps the in-card "Pair with…" button so you don't \
+need to re-look up the product. Do NOT echo the bracketed marker back to the \
+user in your reply. If \`recommend_outfit\` returns a graceful \
 "no_complementary_categories" result, report that plainly to the user — do not \
 invent pairings to fill the gap.
 
@@ -143,6 +156,41 @@ pass an external http(s) URL.`.trim();
 // R3-cleanup (architect-code LOW): promoted from file-local to
 // `env.AGENT_MAX_TURNS` so ops can tune the turn budget without a code edit.
 const MAX_TURNS = env.AGENT_MAX_TURNS;
+
+/**
+ * Rupee-bug mitigation (2026-05): `openai/gpt-oss-120b` was observed getting
+ * stuck in a token-level repetition trap when asked about prices in rupees,
+ * emitting `≈ ₹ ₹ ₹ ≈ ₹ ₹ ₹` until the SDK's default token budget exhausted.
+ * Without an explicit cap, the model would fill thousands of tokens with the
+ * degenerate pattern + trailing whitespace, producing a bubble that extended
+ * outside its box on the FE.
+ *
+ * These three settings are the belt-and-braces fix:
+ *  - `max_tokens` caps the per-turn output so a stuck model can't run away.
+ *  - `frequency_penalty` discourages the repetition trap from forming in the
+ *    first place at the sampler level.
+ *  - `REPETITION_*` constants below drive a runtime detector that early-aborts
+ *    the stream if the trap fires anyway (defence against a future regression
+ *    on a different model where the penalty doesn't help).
+ *
+ * 800 tokens is enough for our longest sanctioned shopping-context answers
+ * (verified against the cycle-7 prompt rubric); raising it would re-open the
+ * spillover window. Tradeoff: an answer that legitimately needs >800 tokens
+ * will be cut with `finish_reason=length` rather than continuing — the agent
+ * loop handles that path the same as `stop` so the FE just sees `done`.
+ */
+const TEXT_MAX_TOKENS = 800;
+const TEXT_FREQUENCY_PENALTY = 0.3;
+
+/**
+ * Rolling repetition detector: if the last N emitted-text segments
+ * (text_deltas) are byte-identical AND short (≤8 chars), the stream is in a
+ * degenerate state. 12 consecutive identical short deltas is well past any
+ * legitimate pattern (markdown bullet lists, tables, etc. would tokenize to
+ * varied chunks) and well before the user sees the bubble explode.
+ */
+const REPETITION_WINDOW = 12;
+const REPETITION_MAX_CHUNK_LEN = 8;
 
 export interface RunAgentOpts {
   sessionId: string;
@@ -274,6 +322,8 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
         messages,
         tools,
         tool_choice: isFinalTurn ? 'none' : 'auto',
+        max_tokens: TEXT_MAX_TOKENS,
+        frequency_penalty: TEXT_FREQUENCY_PENALTY,
         signal,
         // T2.12: symmetric usage tagging — text completion path tags every
         // call so `usage_log.jsonl` differentiates by tag, not by absence.
@@ -305,6 +355,27 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
       // response and the user never sees the underlying glitch. Distinct from
       // the XML-leak path above: this one fires when Groq itself rejects the
       // call before it ever reaches `delta.content`.
+      // Rolling window of recent short text-delta emissions. When the model
+      // gets stuck in a token-level repetition trap (see TEXT_MAX_TOKENS doc
+      // above), the same short string lands here back-to-back. If the entire
+      // window is identical, we early-terminate the stream instead of
+      // forwarding the degenerate output to the FE.
+      const recentChunks: string[] = [];
+      const detectRepetition = (chunk: string): boolean => {
+        if (chunk.length > REPETITION_MAX_CHUNK_LEN) {
+          // Long chunks reset the detector — legitimate prose contains varied
+          // tokenization, so any single emission this large is evidence the
+          // model is not in a stuck state.
+          recentChunks.length = 0;
+          return false;
+        }
+        recentChunks.push(chunk);
+        if (recentChunks.length > REPETITION_WINDOW) recentChunks.shift();
+        if (recentChunks.length < REPETITION_WINDOW) return false;
+        const first = recentChunks[0];
+        return recentChunks.every((c) => c === first);
+      };
+
       const consume = async (s: AsyncIterable<unknown>): Promise<void> => {
         for await (const chunk of s as AsyncIterable<{
           choices?: Array<{ delta?: { content?: string; tool_calls?: unknown }; finish_reason?: typeof finishReason }>;
@@ -318,6 +389,14 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
           if (delta?.content) {
             const { safeText, foundCalls, droppedReasons } = sanitizer.feed(delta.content);
             if (safeText) {
+              if (detectRepetition(safeText)) {
+                log.warn(
+                  { pattern: 'token-repetition', sample: safeText, window: REPETITION_WINDOW },
+                  'detected degenerate token repetition; stopping stream early',
+                );
+                finishReason = 'stop';
+                return;
+              }
               aggregateContent += safeText;
               await emit({ type: 'text_delta', text: safeText });
             }
@@ -369,8 +448,14 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
         const apiErr = err as { status?: number; error?: { code?: string } };
         const isToolUseFailed =
           apiErr?.status === 400 && apiErr?.error?.code === 'tool_use_failed';
-        if (!isToolUseFailed || isFinalTurn) throw err;
-        log.warn({ err }, 'groq tool_use_failed; retrying turn without tools');
+        // Recover from tool_use_failed on ALL turns, including the final one.
+        // On the final turn the cause is typically "tool_choice: none, but
+        // model called a tool" — the model insists on another tool despite
+        // our directive. Retrying with `tools: undefined` (below) guarantees
+        // a clean text-only summary instead of leaving the user with an
+        // error block after we already streamed real product cards.
+        if (!isToolUseFailed) throw err;
+        log.warn({ err, finalTurn: isFinalTurn }, 'groq tool_use_failed; retrying turn without tools on fallback model');
         // Discard any partial accumulation from the failed attempt — the BE
         // hasn't emitted anything FE-visible yet for this turn (text_delta
         // would only fire on `delta.content`, which doesn't accompany the
@@ -380,16 +465,42 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
         finishReason = null;
         sanitizer = new ContentSanitizer();
         xmlRecoveredSlotBase = 1_000_000;
-        stream = await streamChatCompletion({
-          model: env.GROQ_MODEL,
-          messages,
-          tools: undefined,
-          tool_choice: 'none',
-          signal,
-          usageTag: 'text-fallback-no-tools',
-          log,
-        });
-        await consume(stream);
+        // Switch to the fallback model for the no-tools retry. `openai/gpt-
+        // oss-120b` has been observed to ignore `tools: undefined` + `tool_
+        // choice: 'none'` and hallucinate tool calls (e.g. `repo_browser.open_
+        // file`), producing a second `tool_use_failed` on the retry itself.
+        // `llama-3.1-8b-instant` respects the directive and produces clean
+        // text-only summaries. If even the fallback fails the outer catch
+        // below ends the turn gracefully so the user keeps the cards.
+        try {
+          stream = await streamChatCompletion({
+            model: env.GROQ_FALLBACK_MODEL,
+            messages,
+            tools: undefined,
+            tool_choice: 'none',
+            max_tokens: TEXT_MAX_TOKENS,
+            frequency_penalty: TEXT_FREQUENCY_PENALTY,
+            signal,
+            usageTag: 'text-fallback-no-tools',
+            log,
+          });
+          await consume(stream);
+        } catch (retryErr) {
+          // Second-tier safety net: the user already has the streamed product
+          // cards from the earlier turns. Rather than surfacing an error block,
+          // log the retry failure and let the loop fall through to the
+          // `done` emission below with empty `aggregateContent`. The UI shows
+          // products without a closing paragraph — strictly better than
+          // products + "Something went wrong".
+          log.error({ retryErr }, 'fallback retry also failed; ending turn gracefully');
+          aggregateContent = '';
+          toolCallAccumulator = new Map();
+          // Force the downstream branch to treat this as a terminal text turn
+          // (no further tool calls), so the loop emits `done` cleanly with
+          // whatever was streamed earlier this turn (typically nothing —
+          // products already shipped on prior turns).
+          finishReason = 'stop' as 'stop' | 'length' | 'tool_calls' | 'function_call' | null;
+        }
       }
 
       if (signal.aborted) {
@@ -424,6 +535,16 @@ export async function runAgent(opts: RunAgentOpts): Promise<void> {
           // Should not happen — tool_choice=none on final turn — but defend.
           await emit({ type: 'done', turnsUsed });
           await persistAssistant('done');
+          return;
+        }
+
+        // Edge-case hardening (2026-05): the model can emit a tool-call
+        // payload right as the user navigates away. The for-loop guard above
+        // catches abort BETWEEN turns; this catches it between consuming the
+        // LLM response and dispatching its tool calls. Without this check
+        // we'd Promise.all() N MCP / vision RTTs against a doomed stream.
+        if (signal.aborted) {
+          await persistAssistant('truncated');
           return;
         }
 
@@ -570,12 +691,50 @@ function classifyError(err: unknown): ClassifiedError {
   const e = err as {
     status?: number;
     name?: string;
-    code?: string;
+    code?: string | number;
+    ucpCode?: string;
     error?: { code?: string; type?: string };
   };
 
-  // McpError — catalog unreachable / MCP-level failure.
+  // McpError — UCP catalog/mcp transport failure. The UCP 2026-04-08
+  // overview spec partitions JSON-RPC errors into a fixed set of code
+  // classes; conflating them all into one retryable "couldn't reach
+  // catalog" message hides a real distinction:
+  //
+  //   -32001 + ucpCode in {invalid_profile_url, profile_unreachable,
+  //                        profile_malformed, version_unsupported}
+  //          → CLIENT-config fault. Retrying with the same profile/version
+  //            will fail the same way. `retryable: false`. These are ops
+  //            problems (bad UCP_PROFILE_URL, profile not on a CDN, etc.) —
+  //            surface them as invalid_request so the agent loop doesn't
+  //            burn turns retrying.
+  //   -32000 → transport-level (auth, rate limit, unavailable). Retryable.
+  //   -32602 → invalid params (we sent bad shape). Not retryable.
+  //   -32603 → internal server error. Retryable.
+  //   anything else / no code → conservative `retryable: true`.
   if (e.name === 'McpError') {
+    const jsonRpcCode = typeof e.code === 'number' ? e.code : undefined;
+    const ucpCode = e.ucpCode;
+    if (jsonRpcCode === -32001) {
+      // -32001 always wraps a UCP discovery/negotiation failure; the inner
+      // `ucpCode` is the actionable bit. All four documented codes are
+      // operator-fix, not user-retry.
+      return {
+        code: 'invalid_request',
+        message:
+          ucpCode === 'version_unsupported'
+            ? 'Catalog protocol version mismatch. Contact support.'
+            : 'Catalog profile unavailable. Contact support.',
+        retryable: false,
+      };
+    }
+    if (jsonRpcCode === -32602) {
+      return {
+        code: 'invalid_request',
+        message: "Couldn't reach the catalog.",
+        retryable: false,
+      };
+    }
     return {
       code: 'mcp_error',
       message: "Couldn't reach the catalog.",
