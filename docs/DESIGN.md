@@ -409,6 +409,66 @@ The orchestrator's `cycle-N-design.md` will expand each of these into a checklis
   - Not a refactor of `ProductCard` or `InputBar` — both shipped clean in Cycle 6's polish round-6. The Cycle 7 work is additive (new components, new tokens) or scoped to non-audited files (`VariantPicker`, `SuggestionChips`, `Moodboard`, `MessageRenderer`).
   - Not a motion overhaul. The motion budget is already correct; we're filling in two missing shapes (skeleton, zero-results entry) within it.
 
+  ---
+
+  **Cycle 7 — elevation pass (2026-05-14).**
+
+  Direction-setting addendum filed after the user's "feels too basic and bland — want modern, sleek, premium without being over complicated" diagnosis on 2026-05-14. The token canon (§2.1–§2.9) is correct; what's wrong is that the canon ships at 30%. Below are the seven moves that close the gap. Each move sharpens an existing direction — none replaces a principle. Build order is by leverage; engineers in subsequent turns pull a move per turn.
+
+  ##### Move 1 — Welcome held-shape *(LANDED 2026-05-14 as proof; ConversationCanvas.tsx)*
+
+  - **Why.** Welcome was a sentence in a bubble (`useConversation.tsx:163`). No first-impression weight, no held shape, no signal that this is the start of a session vs. another assistant turn.
+  - **Spec.** When `onlyWelcome` is true, the canvas renders a centered serif headline ("What are you *looking for*?") in `font-display text-3xl italic sm:text-4xl md:text-5xl text-ink-900` with `tracking-tight leading-[1.05]`. The question's terminal `?` glyph uses `text-accent-500` — the orange's first earned moment in the session, sized to be felt without breaking §2.2's commitment rule (the user IS committing to start). Trust copy drops to `text-sm text-ink-400` beneath. Suggestion chips below. Entry: 350ms `[0.16,1,0.3,1]` opacity+y8. The `WELCOME` text block in `useConversation.tsx` becomes irrelevant for rendering (kept as a fallback for screen-reader announce semantics).
+  - **Files.** `frontend/components/chat/ConversationCanvas.tsx`.
+  - **Risk.** A11y: the headline is decorative — screen-reader users still need the trust promise read. Mitigated: the trust sentence is a real `<p>`, the headline is `<h2>`. No `sr-only` is required because the welcome canvas is content, not chrome.
+
+  ##### Move 2 — Wordmark gets the serif
+
+  - **Why.** §2.4 was misread in cycle 4 — the wordmark was reverted to `font-sans` over a "fifth serif home" concern (`Header.tsx:13-21`). But §2.4 enumerates **content** serif homes, not the masthead. A serif masthead is not a serif body — it's a logotype. The persistent sans wordmark is the single biggest reason the app reads "app" instead of "magazine".
+  - **Spec.** `Header.tsx:45` — change `font-sans text-xl font-semibold` → `font-display text-2xl tracking-tight text-ink-900`. Keep `leading-none`. No italic (italic is reserved for the SummaryHero gist). The wordmark is not a fifth serif content home; §2.4 is amended to call out "logotype / wordmark" as a category distinct from the four content homes. No token change.
+  - **Files.** `frontend/components/chat/Header.tsx`. Update the §2.4 preamble (one sentence noting the logotype carve-out).
+  - **Risk.** If the serif renders before the webfont loads, FOUT flashes Georgia (the fallback in `tailwind.config.ts:12`). Already the case today for every existing `font-display` site; acceptable.
+
+  ##### Move 3 — ProductCard hero shifts to 4:5 portrait for portrait sources
+
+  - **Why.** §4 / `ProductCard.tsx:268` ships a `h-24 w-24` square hero. SSENSE / Aritzia / MR PORTER live in 4:5 / 3:4 portrait. The current 96² reads as "search result row", not "editorial card". The fix is conditional: keep 96² as the floor for square sources, but when the source image's intrinsic aspect ratio is portrait (`h > w`), the hero takes a 4:5 portrait frame (`w-24 h-30` ≈ 96×120, or at expanded `w-32 h-40`).
+  - **Spec.** `ProductImage` (or a thin wrapper) reads `naturalHeight / naturalWidth` on load; if ratio ≥ 1.15 (portrait), the parent gets `aspect-[4/5]` and `w-24` (`h` derives). Else the existing `h-24 w-24` square. Container radius stays `rounded-xl`. New token: none. New spacing: none — `w-24` is already in the six-step scale.
+  - **Files.** `frontend/components/product/ProductCard.tsx`, `frontend/components/product/ProductImage.tsx`.
+  - **Risk.** Mixed portrait/square in the same `ProductCardGroup` makes the row uneven. Acceptable — editorial commerce *embraces* aspect variance. But test the masonry path doesn't break.
+
+  ##### Move 4 — Orange earns three more moments (still commitment-scoped)
+
+  - **Why.** §2.2 says orange is *commitment*. Today it only lights the expanded Buy CTA — a single deep-in-the-flow surface. The user never sees it on cold load. §2.2 needs three more commitment hooks: SaveOutfit confirmation flash, the active Pair-with state, and the welcome's earned `?` (already landed in Move 1).
+  - **Spec.** (a) `OutfitBundle.tsx` — on Save success, the bundle frame's `bg-accent-50` tint pulses to `accent-50/100` for 600ms then settles back. (b) `ProductCard.tsx:464` — replace `pairing ? 'bg-ink-900'` with `pairing ? 'bg-accent-500'` for the 250ms it's pressed; orange = "I am committing this anchor for a pair". Revert on resolve. (c) Jump-to-Latest pill (`ConversationCanvas.tsx:170`) stays ink-900 — `Latest` is navigation, not commitment. No new tokens.
+  - **Files.** `OutfitBundle.tsx`, `ProductCard.tsx`.
+  - **Risk.** Orange on Pair-with might read as the Buy CTA — but the icon (`Wand2`), the size (`h-9` not `h-9 px-4`), and the wording ("Asking…") are unambiguous. The pulse is bounded to 250ms.
+
+  ##### Move 5 — ToolStatus dot becomes a slow rotating line
+
+  - **Why.** `ToolStatus.tsx:154-163` ships a 600ms rotating dot at `bg-ink-400`. At 8px it's a smudge — present but forgettable. Signature motion is the one place a chat app can quietly look unlike every other chat app. The Granola dot is the reference; we can earn ours by changing the *primitive* — a thin rotating line (1.5px stroke) reads as a watch second-hand, calmer than a dot.
+  - **Spec.** Replace the inner `<span class="block h-2 w-2 rounded-full bg-ink-400" />` with a 12×12 SVG containing a vertical 1.5px line from the center to the top, stroke `currentColor` (inherits `text-ink-400`). The wrapping `motion.span` keeps its 600ms rotation. Reduced-motion path stays static `Loader2`. No token change; the duration sits in the existing motion budget.
+  - **Files.** `frontend/components/chat/ToolStatus.tsx`.
+  - **Risk.** A line at 12×12 is thin enough that on hi-DPI screens it may anti-alias to a 1px stroke — acceptable, even desirable.
+
+  ##### Move 6 — ProfileMenu "About you" eyebrow gets the serif
+
+  - **Why.** `ProfileMenu.tsx:230` renders "ABOUT YOU" as `text-[11px] uppercase tracking-wider`. It's a label, not a display moment — but the popover IS a moment of authorial voice ("I'll remember"). The serif lifts the panel from "settings sheet" to "personal note".
+  - **Spec.** Replace the uppercase 11px caption with `font-display text-xl italic text-ink-900` reading simply "About you" (sentence case). Drop the uppercase tracking. Same applies to the populated `PreferencesCard` heading. This adds a fifth content serif home — the §2.4 amendment in Move 2 (logotype carve-out) makes room for this by separating logotype from content; this remains a content home and must be justified.
+  - **Spec — §2.4 amendment.** Add a fifth content serif home: "5. The **ProfileMenu / PreferencesCard heading** ('About you'). The panel is the app's most personal authorial moment — first-person voice ('I'll remember') — and a serif lift differentiates it from settings UI." The serif gift count is now five. Still rare.
+  - **Files.** `frontend/components/preferences/ProfileMenu.tsx`, `frontend/components/preferences/PreferencesCard.tsx`, `docs/DESIGN.md §2.4`.
+  - **Risk.** Adding a fifth serif home is the single biggest token-canon shift in this directive. Justified above; rejecting it leaves the panel reading as a settings menu, which is what made the user say "feels like an app" in the first place.
+
+  ##### Move 7 — Product card entry: signature stagger (gentle slide-up, not crossfade)
+
+  - **Why.** `ProductCard.tsx:144-151` does opacity + y:12→0 over 300ms with 40ms stagger. Functional, but reads as "list mounting". Signature motion would have the cards arrive *as if dealt* — a slight pre-skew and longer settle on the FIRST product of a group (the anchor card), with subsequent siblings entering on the existing 40ms stagger. Treats the first card as the lede.
+  - **Spec.** In `ProductCardGroup`, pass `isAnchor={index === 0}` to each card. The anchor card uses `initial={{opacity:0, y:24, rotate: -0.5}}` and `transition={{duration: 0.45, ease: [0.16,1,0.3,1]}}`. Non-anchor cards keep today's `y:12 / 300ms`. The rotate is sub-degree — invisible-when-still, perceptible-on-arrival. The motion budget stays under 500ms.
+  - **Files.** `frontend/components/product/ProductCard.tsx`, `frontend/components/product/ProductCardGroup.tsx`.
+  - **Risk.** A rotation on the first card can read as "broken layout" if the easing settles late. Mitigation: rotate snaps to 0 at 80% of the animation, not the full duration.
+
+  **Build order (highest leverage first):** 2 (wordmark — 1 line), 1 (welcome — landed), 6 (ProfileMenu eyebrow — 3 lines + §2.4 amendment), 4 (orange extends — 3 places, ~15 lines), 5 (ToolStatus line — 5 lines), 3 (ProductCard 4:5 — ~25 lines), 7 (signature card entry — ~10 lines).
+
+  **What this addendum is NOT.** Not a redesign brief. None of these moves touches the spacing scale, the radius scale, the shadow scale, or the motion budget table. They are sharpening tools on the existing canon. If a future move requires a new token, it goes through the §2.x justification rule, not this list.
+
 ---
 
 ## 9. References (specifically what to borrow)

@@ -137,18 +137,42 @@ export function ConversationCanvas() {
       style={{ paddingBottom: 'calc(var(--input-bar-height, 100px) + 24px)' }}
     >
       <div className="flex flex-col gap-4">
-        <AnimatePresence initial={false}>
-          {messages.map((m) => (
-            <motion.div key={m.id} layout>
-              <MessageBubble message={m} />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {onlyWelcome && (
-          <div className="pt-1">
-            <SuggestionChips suggestions={STARTERS} onPick={(s) => void send(s)} />
-          </div>
+        {/* Cycle 7 — welcome held-shape. The previous welcome was a single
+            sentence inside the standard assistant bubble: no first-impression
+            weight, no held composition, no signal that this is the start of
+            a session. DESIGN.md §2.4 names the welcome canvas as authorial
+            voice (not data), and §3.9 "the serif is a gift" reserves
+            Instrument Serif for moments the app speaks with a voice. This is
+            one. A centered serif headline lives ABOVE the suggestion chips;
+            the trust-promise sentence drops to a quiet caption beneath. No
+            bubble, no chrome — the headline IS the held shape. */}
+        {onlyWelcome ? (
+          <motion.div
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            transition={reduce ? { duration: 0.1 } : { duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-start gap-6 py-8 sm:py-16"
+          >
+            <h2 className="font-display text-3xl italic leading-[1.05] tracking-tight text-ink-900 sm:text-4xl md:text-5xl">
+              What are you{' '}
+              <span className="text-ink-600">looking for</span>
+              <span className="text-accent-500">?</span>
+            </h2>
+            <p className="max-w-md text-sm leading-relaxed text-ink-400">
+              Shopify merchants, ranked by your preferences — not paid placement.
+            </p>
+            <div className="pt-1">
+              <SuggestionChips suggestions={STARTERS} onPick={(s) => void send(s)} />
+            </div>
+          </motion.div>
+        ) : (
+          <AnimatePresence initial={false}>
+            {messages.map((m) => (
+              <motion.div key={m.id} layout>
+                <MessageBubble message={m} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
 
         <div ref={endRef} aria-hidden />
