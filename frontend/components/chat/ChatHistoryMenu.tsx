@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { MessageSquare, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -161,25 +161,33 @@ export function ChatHistoryMenu() {
         ) : null}
       </button>
 
-      <AnimatePresence>
-        {open && typeof document !== 'undefined'
-          ? createPortal(
-              <HistoryPopover
-                dialogId={dialogId}
-                popoverRef={popoverRef}
-                close={close}
-                reduced={reduced}
-                popoverT={popoverT}
-                entries={entries}
-                otherEntries={otherEntries}
-                activeId={sessionId}
-                onPick={handlePick}
-                onDelete={handleDelete}
-              />,
-              document.body,
-            )
-          : null}
-      </AnimatePresence>
+      {/* Bug-repro fix (2026-05-14): the previous build wrapped the portal in
+          <AnimatePresence>. AnimatePresence's child analysis traverses the
+          ReactNode tree it receives, and a `createPortal(...)` return value is
+          a ReactPortal — not a `motion.*` element. AnimatePresence saw a
+          non-motion direct child and silently skipped the enter mount, so
+          aria-expanded flipped to "true" but no [role=dialog] ever appeared
+          in the body. ProfileMenu (the working reference) renders the portal
+          unconditionally without AnimatePresence; we match that pattern. The
+          motion.* elements inside still animate enter — exit animation is the
+          only thing we lose, and it's worth the trade for reliable open. */}
+      {open && typeof document !== 'undefined'
+        ? createPortal(
+            <HistoryPopover
+              dialogId={dialogId}
+              popoverRef={popoverRef}
+              close={close}
+              reduced={reduced}
+              popoverT={popoverT}
+              entries={entries}
+              otherEntries={otherEntries}
+              activeId={sessionId}
+              onPick={handlePick}
+              onDelete={handleDelete}
+            />,
+            document.body,
+          )
+        : null}
     </>
   );
 }

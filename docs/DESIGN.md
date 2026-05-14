@@ -295,7 +295,13 @@ Three breakpoints. Tailwind defaults: `sm` (640), `md` (768), `lg` (1024), `xl` 
 - **Tablet** (641–1024): canvas centers at `max-w-3xl` (768px). Shortlist remains a bottom sheet (avoids cramping). `ProductCardGroup` is 2 columns in list mode, 2 in collage.
 - **Desktop** (>1024): canvas: **text column 640px** for messages and `text-only` blocks, **grid column 960px** for `ProductCardGroup`, `ComparisonTable`, `CollageView`. The text column is centered; the grid column extends `-mx-40` (40px outdent) on each side to break out. Shortlist is a 320px right rail, optionally pinned. `PreferencesCard` sits above the input bar inside the same 640px column.
 
-**Z-index palette:** input bar `z-10`, sticky header `z-20`, shortlist rail `z-30`, modal/sheet `z-40`, dropzone overlay `z-50`. Toasts (none planned) would be `z-60`.
+**Chat-history placement (decided 2026-05-14).** Chat history is a **left rail**, not a header pill. Rationale: it is primary persistent navigation ("where am I, what other chats are open"), not a settings-adjacent menu, and §3.2 "Content over chrome" forbids piling 5 affordances into the header trigger-cluster.
+
+- **Desktop (>1024):** 260px left rail, flex sibling of the canvas (canvas stays bounded to `max-w-3xl`; rail does not steal its width). Top row is **New chat** (`bg-ink-900 text-white rounded-full h-9`, leading `RotateCcw`). Below: grouped list (Today / Yesterday / Earlier), each row `h-10 px-3 rounded-xl text-sm`, current chat `bg-ink-100 text-ink-900`, others `text-ink-600 hover:bg-ink-50`. Footer pinned to bottom: `ProfileMenu` stays in the header, not the rail.
+- **Tablet (641–1024):** rail collapses to a 56px icon strip (New-chat icon + last 6 chats as 32px avatars/initials). Click expands to the full 260px panel as an overlay (`z-30`, scrim).
+- **Phone (≤640):** rail becomes a bottom-sheet, triggered by a `MessageSquare` icon in the header (replaces today's `Chats` pill). The existing `ChatHistoryMenu` portal+popover is the bottom-sheet body — reuse as-is.
+
+**Z-index palette:** input bar `z-10`, sticky header `z-20`, chat-history rail (mobile/tablet overlay) `z-30`, shortlist rail `z-30`, modal/sheet `z-40`, dropzone overlay `z-50`. Toasts (none planned) would be `z-60`.
 
 ---
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Layers, RotateCcw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Layers, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import {
   useConversationActions,
@@ -28,6 +28,18 @@ export function Header() {
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
   const hasHistory = messages.length > 1;
+  // Bug-repro fix (2026-05-14): the user-reported "New chat is flaky"
+  // boiled down to two things — (a) no visible feedback during the
+  // /api/session round-trip, so a click during a slow request looked like
+  // a no-op and prompted re-clicks (which the second click could land on
+  // a button that was about to unmount once switch_session reset messages
+  // to [WELCOME] and hasHistory flipped false); (b) a silent catch on
+  // BE error inside createNewSession, leaving the user stranded. We fix
+  // (a) here with a local `inflight` flag that disables the button +
+  // swaps the glyph to a spinner; the underlying createNewSession() still
+  // catches BE errors but the inflight flag releases on the awaited
+  // resolve, so a failed request now visibly bounces back to enabled.
+  const [creating, setCreating] = useState(false);
 
   // Header trigger badge = Love + Maybe (Skip not counted — DESIGN.md §4
   // Shortlist + Cycle 3 brief).
@@ -123,13 +135,27 @@ export function Header() {
             // previous session stays in the chat-history dropdown so the
             // user can still hop back to it.
             <button
+              type="button"
+              disabled={creating}
               onClick={() => {
-                void createNewSession();
+                if (creating) return;
+                setCreating(true);
+                // The promise from createNewSession is intentionally not
+                // returned to the caller — fire-and-forget with a finally
+                // that releases the inflight flag whether the BE succeeded
+                // or threw. Visible feedback: button disabled + spinner
+                // glyph while POST /api/session is in flight.
+                void createNewSession().finally(() => setCreating(false));
               }}
               aria-label="Start a new chat"
-              className="hidden min-[380px]:inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50"
+              aria-busy={creating}
+              className="hidden min-[380px]:inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              {creating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              )}
               <span>New chat</span>
             </button>
           )}
