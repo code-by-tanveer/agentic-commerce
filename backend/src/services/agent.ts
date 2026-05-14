@@ -97,90 +97,39 @@ function appendBlock(blocks: AssistantBlock[], event: ServerEvent): AssistantBlo
 /**
  * Appended to the base system prompt at agent-loop start. Rewritten
  * 2026-05-13 for the preference tier model (see `services/taskPrefs.ts`).
+ * Trimmed 2026-05-14 (perf): cut prose redundancy; every behavior preserved
+ * verbatim. Prior addendum was ~1030 tokens (≈40% of typical system prompt);
+ * this version is ~430 tokens. With prompt-caching off, every call paid the
+ * full tab — perf logs showed median promptTokens 2602; the trim reclaims
+ * ~600 prompt tokens per turn and trims TTFT proportionally on the primary
+ * model. Behavior parity verified against `agent.edge.test.ts` cases.
  *
  * Two tiers the agent must keep straight:
  *
- *   - Identity tier (ships_to, palette, ethics): survives across shopping
- *     topics; call `save_preference` for these.
+ *   - Identity tier (ships_to, palette, ethics, size): survives across
+ *     topics; call `save_preference`.
  *   - Task tier (budget, shipping_speed, shopping_for): bound to the
- *     current shopping topic; pass via `search_catalog` filters per call,
- *     do NOT call `save_preference`.
- *
- * `size` is a known gap: it's logically scoped (size:shoe vs size:dress)
- * but today it still routes through `save_preference` until the v1.5
- * scoped tier ships.
+ *     current shopping topic; pass as `search_catalog` filters, do NOT
+ *     call `save_preference`. Cleared automatically on topic shift.
  */
 const PREFERENCE_SYSTEM_ADDENDUM = `
-Preference memory has two tiers — keep them separate.
+Preference tiers — keep them separate.
 
-Identity-tier preferences (\`ships_to\`, \`palette\`, \`ethics\`): when the \
-user states one, call \`save_preference\` BEFORE responding. These are \
-identity facts that should survive across shopping topics. \`size\` also \
-routes through \`save_preference\` for now (scoped-by-category support \
-ships later).
+Identity tier (\`ships_to\`, \`palette\`, \`ethics\`, \`size\`): when the user states one, call \`save_preference\` BEFORE responding. These survive across topics. Fold saved identity prefs into \`search_catalog\` filters (e.g. \`filters.ships_to\`). Call \`get_preferences\` only if unsure what's saved.
 
-Task-tier preferences (\`budget\`, \`shipping_speed\`, \`shopping_for\`): \
-when the user states a BUDGET, shipping_speed, or shopping_for, DO NOT call \
-\`save_preference\`. Instead include the value in your next tool call's \
-filters (e.g. \`search_catalog\` with \`filters.price.max\` for budget or \
-\`filters.shipping_speed\` for shipping speed). The runtime tracks the value \
-within this shopping-topic thread and clears it automatically when the \
-topic shifts. If the user says "lamp under $15" then later "running shoes", \
-the $15 cap is gone — only honour what the current message restates.
+Task tier (\`budget\`, \`shipping_speed\`, \`shopping_for\`): DO NOT \`save_preference\`. Pass as \`search_catalog\` filters (e.g. \`filters.price.max\` for budget). The runtime clears these on topic shift — only honour values the user restates in the current message.
 
-Topic detection. Each turn, extract the product topic (the head noun phrase) \
-from the user's message. If it differs from the prior turn's topic, treat \
-task-tier prefs (budget / shipping_speed / shopping_for) as cleared and only \
-honour ones the user explicitly states in the current message. Identity \
-prefs are NOT cleared by topic shift.
+Topic shift: each turn, extract the head noun phrase. If different from prior turn, treat task-tier prefs as cleared; identity prefs are NOT cleared.
 
-When a relevant identity preference exists, fold it into your search filters \
-(e.g. pass \`filters.ships_to\` to \`search_catalog\`). You can call \
-\`get_preferences\` if context is unclear about what's already saved.
+Ethics: user-initiated only — don't proactively save. Map to this closed vocabulary: sustainable, fair-trade, organic, b-corp, women-owned, small-batch, vegan, recycled. Save multiple values as an array in one \`save_preference\` call with \`key:"ethics"\`. For vague mentions ("ethical brands"), ask one clarifying question listing the vocabulary before saving.
 
-Ethics is user-initiated (don't proactively save). When a user says \
-"I care about ethical sourcing" or names a value, map it to the closest entry \
-in this closed vocabulary: sustainable, fair-trade, organic, b-corp, \
-women-owned, small-batch, vegan, recycled. If the user names multiple, save \
-them all in a single \`save_preference\` call with \`key: "ethics"\` and \
-\`value\` as the array of mapped values (e.g. \`["fair-trade", "b-corp"]\`). \
-If a user says something vague like "ethical brands only" without naming a \
-specific value, ask one short clarifying question listing the vocabulary \
-before saving.
+Shopping-for: user-initiated only. Map to: self, partner, kid_4_to_12, kid_13_to_17, adult_friend, parent. If recipient doesn't map cleanly, use the user's phrase verbatim. Don't ask unprompted.
 
-Shopping-for (gift use case) is task-tier and user-initiated — pass it as a \
-filter when relevant, don't save it. When a user explicitly states the \
-recipient ("a gift for my niece", "buying for my dad", "shopping for \
-myself"), map to one of: self, partner, kid_4_to_12, kid_13_to_17, \
-adult_friend, parent. If the recipient doesn't cleanly map, use the user's \
-own phrase verbatim. Don't ask for the recipient unprompted.
+Comparisons ("which is better at X", "compare X and Y on Z"): call \`compare_products\` with an \`axes\` array naming the criterion verbatim (lowercased). For open-ended "compare X and Y" with no criterion, omit \`axes\` for the default rows. Never dump all default rows when the user asked about one thing.
 
-Comparisons: when the user asks "which is better at X", "compare X and Y on Z", \
-or any side-by-side question naming a specific criterion (battery, weight, \
-material, fit, screen size, sound quality, durability, etc.), call \
-\`compare_products\` and ALWAYS pass an \`axes\` array that names that \
-criterion verbatim (lowercased). For an open-ended "compare X and Y" with no \
-stated criterion, omit \`axes\` to get the default price/rating/shipping rows. \
-Never dump all eight default rows when the user asked about one thing — a \
-focused \`axes\` array is what keeps the table on-topic.
+Coordinated sets ("what goes with X", "pair this with", "complete this look"): call \`recommend_outfit(anchor_product_id=...)\`. Do NOT speculate about pairings in prose without the tool. If the user's message contains \`[pair_anchor:<id>]\` use that id verbatim and do NOT echo the marker back. If the tool returns \`no_complementary_categories\`, report that plainly — do not invent pairings.
 
-Coordinated sets: when the user asks "what goes with X", "complete this look", \
-"pair this with", or any similar coordinated-set request, call \
-\`recommend_outfit(anchor_product_id=...)\`. Do NOT speculate about pairings in \
-prose without calling the tool. If the user's message contains \
-\`[pair_anchor:<id>]\` use that id verbatim as \`anchor_product_id\` — the FE \
-appends it when the user taps the in-card "Pair with…" button so you don't \
-need to re-look up the product. Do NOT echo the bracketed marker back to the \
-user in your reply. If \`recommend_outfit\` returns a graceful \
-"no_complementary_categories" result, report that plainly to the user — do not \
-invent pairings to fill the gap.
-
-Image inputs: when the user sends an image (a "find something like this" \
-message with a moodboard upstream), trust the \`extract_style_from_image\` \
-tool's output. Don't re-describe the image yourself. If \`attributes\` is empty \
-or \`suggestedQuery\` looks generic, ask one specific clarifying question before \
-searching. The tool only accepts \`signed:\` URLs minted by /api/upload — never \
-pass an external http(s) URL.`.trim();
+Image inputs: trust \`extract_style_from_image\` output; don't re-describe. If \`attributes\` is empty or \`suggestedQuery\` is generic, ask one specific clarifying question before searching. The tool only accepts \`signed:\` URLs from /api/upload — never an external http(s) URL.`.trim();
 
 // R3-cleanup (architect-code LOW): promoted from file-local to
 // `env.AGENT_MAX_TURNS` so ops can tune the turn budget without a code edit.

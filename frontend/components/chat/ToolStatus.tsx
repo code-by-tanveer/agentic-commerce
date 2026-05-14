@@ -133,30 +133,33 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       </span>
     );
   }
-  // Running — 2026-05-14: three pulsing dots (ChatGPT-style typing
-  // indicator) replacing the prior rotating-dot / watch-hand iterations.
-  // User feedback: "still the ai loader typing is old animation and slow."
-  // Three dots reads as modern + universally "AI is typing"; staggered
-  // opacity pulses are perceptually faster than a single rotating glyph.
-  // No framer-motion — pure CSS keyframe so it runs on the compositor
-  // thread (no React reconcile per frame). Reduced-motion: static row.
+  // Running — RESTORED 2026-05-14 to the watch-hand rotating line. User
+  // confirmed this is the loader they liked ("the stick like thing
+  // rotated felt better"). I cycled through dot → watch-hand → dot →
+  // 3-dots and the user's final word is watch-hand. Same 12×12 wrapper,
+  // 600ms cadence, currentColor stroke (text-ink-400 cascade). The line
+  // points to 12 o'clock; the parent rotates 360°.
+  const HAND = (
+    <svg viewBox="0 0 12 12" className="h-3 w-3 text-ink-400" aria-hidden fill="none">
+      <line x1="6" y1="6" x2="6" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
   if (reduced) {
     return (
-      <span
-        className="inline-flex items-center gap-1"
-        aria-hidden
-      >
-        <span className="block h-1 w-1 rounded-full bg-ink-400" />
-        <span className="block h-1 w-1 rounded-full bg-ink-400" />
-        <span className="block h-1 w-1 rounded-full bg-ink-400" />
+      <span className="inline-flex h-3 w-3 items-center justify-center" aria-hidden>
+        {HAND}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1" aria-hidden>
-      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '0ms' }} />
-      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '160ms' }} />
-      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '320ms' }} />
-    </span>
+    <motion.span
+      className="inline-flex h-3 w-3 items-center justify-center"
+      animate={{ rotate: 360 }}
+      transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }}
+      style={{ transformOrigin: '50% 50%' }}
+      aria-hidden
+    >
+      {HAND}
+    </motion.span>
   );
 }
