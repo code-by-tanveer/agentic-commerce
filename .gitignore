@@ -10,5 +10,6 @@ backend/data
 *.tsbuildinfo
 test-results/
 playwright-report/
+tests/e2e/screenshots/
 
 .claude/

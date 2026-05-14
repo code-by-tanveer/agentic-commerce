@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
@@ -140,12 +140,13 @@ export function ChatHistoryMenu() {
             : 'Open chat history'
         }
         // T1.30 / Header.tsx — matches the Shortlist trigger's pill shape so
-        // the action row reads as one rhythm. `hidden min-[380px]:inline-flex`
-        // collapses the trigger entirely on the canonical narrow phone width
-        // (the action is recoverable via reload + the menu is least-useful on
-        // a 360px screen anyway).
+        // the action row reads as one rhythm. DESIGN §5 (2026-05-14) — on
+        // phone (≤640) this is the *only* way into chat history (the rail
+        // sits at ≥641), so we keep it visible across all narrow widths.
+        // The parent in Header.tsx gates the wrapper with `min-[641px]:hidden`
+        // so the trigger only renders on phone.
         className={cn(
-          'hidden min-[380px]:inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
+          'inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
         )}
       >
@@ -222,7 +223,19 @@ function HistoryPopover({
   onPick: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
+  const { createNewSession } = useConversationActions();
+  const [creating, setCreating] = useState(false);
   const hasOthers = otherEntries.length > 0;
+  async function onNewChat() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      await createNewSession();
+      close();
+    } finally {
+      setCreating(false);
+    }
+  }
   // The current session is part of the list visually so the user understands
   // which row they're "on". Pull it out for the active-row rendering above
   // the other rows.
@@ -268,6 +281,28 @@ function HistoryPopover({
         >
           Recent chats
         </p>
+
+        {/* New-chat row — only meaningful affordance to mint a fresh session
+            on phone (the desktop rail's top row owns this on ≥1025px; this
+            mobile sheet is the parity surface). Disabled+spinner while the
+            BE creates the row so the tap registers visually. */}
+        <button
+          type="button"
+          onClick={onNewChat}
+          disabled={creating}
+          aria-busy={creating}
+          aria-label="Start a new chat"
+          className={cn(
+            'mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900',
+            creating
+              ? 'bg-ink-900 text-white opacity-80'
+              : 'bg-ink-900 text-white hover:bg-ink-600',
+          )}
+        >
+          <Plus className="h-4 w-4 shrink-0" aria-hidden />
+          <span>{creating ? 'Starting…' : 'New chat'}</span>
+        </button>
 
         {hasOthers ? (
           <ul className="flex flex-col gap-0.5" role="list">

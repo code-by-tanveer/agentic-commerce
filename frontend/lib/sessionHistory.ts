@@ -164,6 +164,52 @@ export function labelFromText(text: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Recency grouping — chat-history rail (DESIGN §5, 2026-05-14). The left rail
+// presents history under three calendar buckets: TODAY / YESTERDAY / EARLIER.
+// Grouping is on local-calendar day boundaries (NOT rolling 24h windows) so
+// the labels match how a human reads the chat list — a message at 11:55pm
+// last night is "yesterday", not "8h ago".
+//
+// Within each group, entries sort by `lastUsedAt` DESC (newest first). The
+// cookie's stored order is already most-recently-used-first, but we re-sort
+// here so a buggy upstream writer (or a future numeric-sort migration) can't
+// silently reorder the rail.
+// ---------------------------------------------------------------------------
+
+export interface GroupedHistory {
+  today: SessionEntry[];
+  yesterday: SessionEntry[];
+  earlier: SessionEntry[];
+}
+
+function startOfLocalDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function groupByRecency(
+  entries: SessionEntry[],
+  now: number = Date.now(),
+): GroupedHistory {
+  const todayStart = startOfLocalDay(now);
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  const today: SessionEntry[] = [];
+  const yesterday: SessionEntry[] = [];
+  const earlier: SessionEntry[] = [];
+  for (const e of entries) {
+    if (e.lastUsedAt >= todayStart) today.push(e);
+    else if (e.lastUsedAt >= yesterdayStart) yesterday.push(e);
+    else earlier.push(e);
+  }
+  const byRecency = (a: SessionEntry, b: SessionEntry) => b.lastUsedAt - a.lastUsedAt;
+  today.sort(byRecency);
+  yesterday.sort(byRecency);
+  earlier.sort(byRecency);
+  return { today, yesterday, earlier };
+}
+
+// ---------------------------------------------------------------------------
 // Relative timestamp — kept tiny + dep-free per the task constraint. Returns
 // strings like "2h ago", "yesterday", "3 days ago", "just now". Anything
 // older than a week falls back to a locale date (so the dropdown doesn't

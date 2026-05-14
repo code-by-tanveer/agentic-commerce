@@ -1,12 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Layers, Loader2, RotateCcw } from 'lucide-react';
+import { useMemo } from 'react';
+import { Layers } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import {
-  useConversationActions,
-  useConversationState,
-} from '@/hooks/useConversation';
 import { useSession } from '@/hooks/useSession';
 import { useShortlist } from '@/hooks/useShortlist';
 import { ProfileMenu } from '@/components/preferences/ProfileMenu';
@@ -23,23 +19,8 @@ import { ViewToggle } from './ViewToggle';
 // reached the SummaryHero italic moment. Inter at the existing weight keeps
 // brand presence without flattening the gift downstream.
 export function Header() {
-  const { messages } = useConversationState();
-  const { createNewSession } = useConversationActions();
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
-  const hasHistory = messages.length > 1;
-  // Bug-repro fix (2026-05-14): the user-reported "New chat is flaky"
-  // boiled down to two things — (a) no visible feedback during the
-  // /api/session round-trip, so a click during a slow request looked like
-  // a no-op and prompted re-clicks (which the second click could land on
-  // a button that was about to unmount once switch_session reset messages
-  // to [WELCOME] and hasHistory flipped false); (b) a silent catch on
-  // BE error inside createNewSession, leaving the user stranded. We fix
-  // (a) here with a local `inflight` flag that disables the button +
-  // swaps the glyph to a spinner; the underlying createNewSession() still
-  // catches BE errors but the inflight flag releases on the awaited
-  // resolve, so a failed request now visibly bounces back to enabled.
-  const [creating, setCreating] = useState(false);
 
   // Header trigger badge = Love + Maybe (Skip not counted — DESIGN.md §4
   // Shortlist + Cycle 3 brief).
@@ -66,24 +47,23 @@ export function Header() {
           </p>
         </div>
 
-        {/* Action row — `gap-1` at narrow widths so 4–5 trailing controls
-            (ViewToggle, ShareButton, Shortlist trigger, optional New chat,
-            ProfileMenu) fit within a 360px viewport without horizontal
-            overflow. The QA sweep (2026-05-13) caught the actions row
-            extending 19px past the viewport once `hasHistory` flipped on
-            and added the New-chat button; tightening the gap and clipping
-            New-chat below 380px (where the label was already hidden)
-            keeps the row inside the page. */}
+        {/* Action row — DESIGN §5 (2026-05-14): chat-history left the
+            header on desktop/tablet. The trailing chrome is now (in order)
+            ViewToggle, optional Share, mobile-only chat-history trigger,
+            Shortlist trigger, ProfileMenu. `gap-1` at narrow widths keeps
+            the row inside a 360px viewport (R2/T2.x narrow-phone fix). */}
         <div className="flex items-center gap-1 min-[380px]:gap-2">
           <ViewToggle />
           {canShare && sessionId && <ShareButton sessionId={sessionId} />}
-          {/* Cycle 7 chat-history (PRODUCT §6 AC #1) — anchored between the
-              ViewToggle and the existing trailing chrome so it lives next
-              to the New-chat button (per the task brief). Collapses to
-              icon-only at <480px and disappears entirely under 380px to
-              match the existing narrow-viewport rule (same as the
-              Shortlist label collapse and the New-chat button). */}
-          <ChatHistoryMenu />
+          {/* DESIGN §5 — phone-only bottom-sheet trigger. `min-[641px]:hidden`
+              keeps the pill only on ≤640px (the spec's phone tier). The
+              rail's tablet icon strip covers 641–1024 and the desktop rail
+              covers >1024. ChatHistoryMenu's existing popover positioning
+              at the ≤sm breakpoint renders it as a bottom-sheet, which is
+              the surface DESIGN §5 calls for on phone. */}
+          <div className="min-[641px]:hidden">
+            <ChatHistoryMenu />
+          </div>
           <button
             type="button"
             // Stable id so the drawer's outside-click detector can exclude
@@ -119,46 +99,14 @@ export function Header() {
               {badge}
             </span>
           </button>
-          {hasHistory && (
-            // QA sweep (2026-05-13) — the WHOLE button is now `hidden
-            // min-[380px]:inline-flex`. Previously only the label collapsed
-            // at <380px; the icon-only button still consumed ~38px and
-            // pushed the action row past the viewport at 360px (the canonical
-            // narrow phone width). The action is recoverable via the
-            // ProfileMenu / page reload, so dropping it from the chrome at
-            // narrow widths is the lower-cost option than further squeezing.
-            //
-            // Cycle 7 chat-history — the click handler is now
-            // `createNewSession` (mints a fresh BE session row and updates
-            // the cookie list), NOT `reset` (which just cleared the in-memory
-            // messages but left the user on the same backing row). The
-            // previous session stays in the chat-history dropdown so the
-            // user can still hop back to it.
-            <button
-              type="button"
-              disabled={creating}
-              onClick={() => {
-                if (creating) return;
-                setCreating(true);
-                // The promise from createNewSession is intentionally not
-                // returned to the caller — fire-and-forget with a finally
-                // that releases the inflight flag whether the BE succeeded
-                // or threw. Visible feedback: button disabled + spinner
-                // glyph while POST /api/session is in flight.
-                void createNewSession().finally(() => setCreating(false));
-              }}
-              aria-label="Start a new chat"
-              aria-busy={creating}
-              className="hidden min-[380px]:inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs text-ink-600 transition hover:bg-ink-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {creating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-              )}
-              <span>New chat</span>
-            </button>
-          )}
+          {/* DESIGN §5 (2026-05-14) — the desktop "New chat" button moved
+              to the top of <ChatHistoryRail />. The phone surface relies
+              on the bottom-sheet's row list (a user tapping the most-recent
+              row reuses that session; a brand-new session is one tap on
+              the rail's New-chat affordance once we expose it in the
+              bottom-sheet — out of scope for this migration; the existing
+              ChatHistoryMenu has not yet been extended to include a
+              top New-chat row). */}
           {/* ProfileMenu — Cycle 5. Replaces the always-on PreferencesCard
               above the InputBar (read as intrusive). Quiet 36px avatar that
               opens an anchored popover with the same chip-editing card. Dot
