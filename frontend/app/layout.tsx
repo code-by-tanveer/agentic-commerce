@@ -9,13 +9,18 @@ import './globals.css';
 // welcome held-shape headline, ProductCard total price, ProfileMenu
 // "About you" eyebrow. Load both via next/font here so the cascade
 // resolves the intended typeface across the whole shell.
+// 2026-05-14: `display: optional` on the serif means: use the loaded font
+// only if it arrives in the first 100ms; otherwise stay on the cascade
+// fallback (Georgia / serif) for this load. No visible font-swap mid-page,
+// no FOIT/FOUT flicker — the user perceives instant paint. Inter stays on
+// `swap` because UI text needs the real font for line-metrics fidelity.
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 const instrumentSerif = Instrument_Serif({
   subsets: ['latin'],
   weight: '400',
   style: ['normal', 'italic'],
   variable: '--font-display',
-  display: 'swap',
+  display: 'optional',
 });
 
 export const metadata: Metadata = {

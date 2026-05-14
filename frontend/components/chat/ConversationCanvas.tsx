@@ -170,10 +170,11 @@ export function ConversationCanvas() {
             the trust-promise sentence drops to a quiet caption beneath. No
             bubble, no chrome — the headline IS the held shape. */}
         {onlyWelcome ? (
-          <motion.div
-            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
-            animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={reduce ? { duration: 0.1 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          // 2026-05-14: dropped the framer-motion entrance — first paint
+          // should be instant. The welcome state is the user's first
+          // impression; any motion delay here reads as "slow load," not
+          // "deliberate craft." Held shape, no animation.
+          <div
             className="flex flex-col items-start gap-6 py-8 sm:py-16"
           >
             <h2 className="font-display text-3xl italic leading-[1.05] tracking-tight text-ink-900 sm:text-4xl md:text-5xl">
@@ -187,7 +188,7 @@ export function ConversationCanvas() {
             <div className="pt-1">
               <SuggestionChips suggestions={STARTERS} onPick={(s) => void send(s)} />
             </div>
-          </motion.div>
+          </div>
         ) : (
           <AnimatePresence initial={false}>
             {messages.map((m) => (

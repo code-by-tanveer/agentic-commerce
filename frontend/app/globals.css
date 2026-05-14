@@ -2,7 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+/* 2026-05-14: removed `@import url('https://fonts.googleapis.com/...')`.
+   That import was render-blocking (CSS @import blocks first paint until
+   the stylesheet resolves), AND it duplicated next/font's loading in
+   layout.tsx — every cold visit was paying for the same font twice.
+   next/font now owns font loading; this file no longer touches it. */
 
 :root {
   color-scheme: light;
@@ -41,5 +45,15 @@ html, body {
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: rgba(16, 16, 16, 0.12);
     border-radius: 999px;
+  }
+  /* AI typing indicator — three dots pulsing in sequence. Pure CSS so it
+     runs on the compositor thread (no React reconcile per frame). */
+  @keyframes tool-dot-pulse {
+    0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-1px); }
+  }
+  .tool-dot {
+    animation: tool-dot-pulse 1.2s ease-in-out infinite;
+    will-change: opacity, transform;
   }
 }

@@ -133,30 +133,30 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       </span>
     );
   }
-  // Running — REVERTED 2026-05-14 from the watch-hand line back to the
-  // rotating dot per user feedback ("loading/typing animation was much
-  // better and more modern" with the dot). The watch-hand read as too
-  // mechanical / cold; the dot reads as a soft Granola-style beat. Same
-  // 12×12 wrapper, same 600ms cadence, same `text-ink-400` colour.
-  // Reduced-motion path: static dim dot (no rotation).
+  // Running — 2026-05-14: three pulsing dots (ChatGPT-style typing
+  // indicator) replacing the prior rotating-dot / watch-hand iterations.
+  // User feedback: "still the ai loader typing is old animation and slow."
+  // Three dots reads as modern + universally "AI is typing"; staggered
+  // opacity pulses are perceptually faster than a single rotating glyph.
+  // No framer-motion — pure CSS keyframe so it runs on the compositor
+  // thread (no React reconcile per frame). Reduced-motion: static row.
   if (reduced) {
     return (
       <span
-        className="inline-flex h-3 w-3 items-center justify-center"
+        className="inline-flex items-center gap-1"
         aria-hidden
       >
-        <span className="block h-2 w-2 rounded-full bg-ink-400" />
+        <span className="block h-1 w-1 rounded-full bg-ink-400" />
+        <span className="block h-1 w-1 rounded-full bg-ink-400" />
+        <span className="block h-1 w-1 rounded-full bg-ink-400" />
       </span>
     );
   }
   return (
-    <motion.span
-      className="inline-block h-3 w-3"
-      animate={{ rotate: 360 }}
-      transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }}
-      aria-hidden
-    >
-      <span className="block h-2 w-2 rounded-full bg-ink-400" />
-    </motion.span>
+    <span className="inline-flex items-center gap-1" aria-hidden>
+      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '0ms' }} />
+      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '160ms' }} />
+      <span className="tool-dot block h-1 w-1 rounded-full bg-ink-400" style={{ animationDelay: '320ms' }} />
+    </span>
   );
 }

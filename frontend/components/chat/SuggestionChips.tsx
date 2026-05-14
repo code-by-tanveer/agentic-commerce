@@ -1,6 +1,5 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
 
 interface Props {
   suggestions: string[];
@@ -34,13 +33,12 @@ interface Props {
 // ---------------------------------------------------------------------------
 
 export function SuggestionChips({ suggestions, onPick }: Props) {
-  const reduce = useReducedMotion();
   if (!suggestions.length) return null;
   return (
-    <motion.ul
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={reduce ? { duration: 0.1 } : { duration: 0.2, delay: 0.05 }}
+    // 2026-05-14: dropped the framer-motion fade-in. The welcome state must
+    // paint instantly; chips appearing 250ms after the headline read as
+    // "page still loading" — exactly the bland-slow perception we're killing.
+    <ul
       className="flex flex-col gap-y-2"
       aria-label="Suggested searches"
     >
@@ -63,6 +61,6 @@ export function SuggestionChips({ suggestions, onPick }: Props) {
           </button>
         </li>
       ))}
-    </motion.ul>
+    </ul>
   );
 }
