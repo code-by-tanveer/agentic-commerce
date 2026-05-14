@@ -127,10 +127,16 @@ export function ChatHistoryRail() {
           keeps its `max-w-3xl` centering; the rail just steals 260px of
           page width from the left. DESIGN §5 puts the desktop tier at
           >1024px; we use `min-[1025px]:flex` instead of `lg:flex`
-          (1024) to keep the 1024 boundary in tablet exactly as spec'd. */}
+          (1024) to keep the 1024 boundary in tablet exactly as spec'd.
+          `sticky top-0 h-dvh` locks the rail to the viewport regardless of
+          page scroll; the inner `RailPanel` owns its own `overflow-y-auto`
+          so long lists scroll inside the rail, not on the page. Both
+          rail and page share `bg-ink-50`, so the `border-r-ink-200`
+          hairline is the only panel-break signal — bumped from `ink-100`
+          (too subtle on cream) per the 2026-05-14 user-test pass. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[1025px]:flex w-[260px] flex-shrink-0 flex-col border-r border-ink-100 bg-ink-50/30"
+        className="hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col border-r border-ink-200 bg-ink-50"
       >
         <RailPanel
           activeId={sessionId}
@@ -144,10 +150,10 @@ export function ChatHistoryRail() {
 
       {/* Tablet icon strip — 56px wide, visible at 641–1024. On phone
           (≤640) the whole thing is `hidden`; the bottom-sheet trigger
-          lives in <Header /> instead. */}
+          lives in <Header /> instead. Sticky + `h-dvh` same as desktop. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[641px]:flex min-[1025px]:hidden w-14 flex-shrink-0 flex-col items-center gap-2 border-r border-ink-100 bg-ink-50/30 py-3"
+        className="hidden min-[641px]:flex min-[1025px]:hidden sticky top-0 h-dvh w-14 flex-shrink-0 flex-col items-center gap-2 border-r border-ink-200 bg-ink-50 py-3"
       >
         <button
           type="button"

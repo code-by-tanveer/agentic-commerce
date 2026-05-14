@@ -62,6 +62,17 @@ export function ConversationCanvas() {
     [reduce],
   );
 
+  // We re-read `messages.length` inside the scroll handler via a ref so the
+  // listener doesn't have to be torn down + reattached on every render.
+  // (Bug from 2026-05-14 user test: "Latest" button visible on a fresh tab.
+  // Root cause: the welcome held-shape's `py-8 sm:py-16` + the canvas's
+  // `paddingBottom: calc(input-bar-height + 24px)` make scrollHeight just
+  // barely > viewport at some widths, so distanceFromBottom > 200 at rest.
+  // Even when it isn't, the button is meaningless with no "latest message"
+  // to jump to. Gate showJump on having at least one user-initiated turn.)
+  const messageCountRef = useRef(messages.length);
+  messageCountRef.current = messages.length;
+
   useEffect(() => {
     const markUserIntent = () => {
       if (programmaticScrollLockRef.current) return;
@@ -71,7 +82,10 @@ export function ConversationCanvas() {
 
     const onScroll = () => {
       const d = distanceFromBottom();
-      setShowJump(d > SHOW_JUMP_PX);
+      // Welcome-only state (messages.length === 1, the seeded assistant
+      // welcome) has nothing to jump TO. Suppress the button until at
+      // least one real turn has happened.
+      setShowJump(d > SHOW_JUMP_PX && messageCountRef.current > 1);
       if (programmaticScrollLockRef.current) return;
       if (d <= NEAR_BOTTOM_PX) userPinnedAwayRef.current = false;
     };
@@ -128,6 +142,15 @@ export function ConversationCanvas() {
     if (userPinnedAwayRef.current) return;
     scrollToBottom(true);
   }, [fingerprint, scrollToBottom]);
+
+  // Re-evaluate the Jump button visibility when the gate input
+  // (messages.length > 1) flips. Without this, showJump stays `false` after
+  // the first send even if the page is already scrollable, because the
+  // scroll handler only fires on actual scroll events.
+  useEffect(() => {
+    const d = distanceFromBottom();
+    setShowJump(d > SHOW_JUMP_PX && messages.length > 1);
+  }, [messages.length]);
 
   const onlyWelcome = messages.length === 1 && messages[0].role === 'assistant';
 

@@ -21,6 +21,21 @@ import { ViewToggle } from './ViewToggle';
 // No italic: italic is reserved for the SummaryHero gist. Mobile narrows
 // to `text-xl` below the 380px breakpoint so the wordmark stays on one
 // line in the 360px viewport without competing with the action row.
+//
+// §1.1 BRAND IDENTITY (2026-05-14) — the wordmark gained a *mark*. A
+// custom-cut "T" sits LEFT of the wordmark, drawn from the Instrument
+// Serif italic skeleton but with a deliberate identity alteration: the
+// TOP-LEFT serif extends past the vertical stroke as a drawer-pull /
+// tag-handle terminal, and the tip carries a tiny circular finial — the
+// "trove" signature (a held thing, a thing you pull open, a clasp on a
+// box of valuables). This is the MR PORTER full-stop equivalent: one
+// piece of typographic punctuation that converts a styled string into
+// a brand mark. The mark is rendered inline as an SVG (no asset file,
+// no FOUT risk — it ships with the JS bundle) and is sized in `em` so
+// it tracks the wordmark's responsive `text-xl` / `text-3xl` shift
+// without a second media query. The mark is masthead-only — never in
+// body content, never in the summary page hero, never as a favicon
+// stand-in. See DESIGN.md §1.1 for the full identity rule.
 export function Header() {
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
@@ -40,18 +55,66 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
-          {/* Wordmark — Instrument Serif (`font-display`), per Cycle 7
-              Move 2 / §2.4 logotype carve-out. `text-xl` at sub-380px keeps
-              the wordmark on one line inside a 360px viewport. The "Trove"
-              rename (2026-05-14) collapsed the wordmark to one short word,
-              so we bumped the ≥380px size from `text-2xl` to `text-3xl` to
-              restore masthead weight against the action row — verified at
-              1280 and 360 in `tests/e2e/screenshots/wordmark-*.png`.
-              `tracking-tight` tightens the serif at display size;
-              `whitespace-nowrap` is the belt-and-suspenders against future
-              copy changes wrapping at the smallest breakpoint. */}
-          <p className="font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-3xl">
-            Trove
+          {/* Wordmark + identity mark — Instrument Serif (`font-display`),
+              per Cycle 7 Move 2 / §2.4 logotype carve-out and §1.1 brand
+              identity. The mark (inline SVG, `aria-hidden`) sits LEFT of
+              the wordmark and is sized in `em` so it tracks the responsive
+              `text-xl` ↔ `text-3xl` shift; `flex items-baseline` aligns the
+              mark's optical baseline to the wordmark's. The mark is a
+              custom-cut "T" with a drawer-pull terminal serif extending
+              left past the vertical stroke, and a finial dot on the tip —
+              the "trove" signature (held thing / clasp on a box). The
+              <p> reads "Trove" as text so screen readers and search engines
+              see the brand name (the mark is decorative chrome). */}
+          <p
+            aria-label="Trove"
+            className="flex items-baseline gap-[0.18em] font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-3xl"
+          >
+            {/* The identity mark. Geometry:
+                - viewBox 24×32 (4:3 portrait, matches a tall serif T's
+                  optical bounds at display size).
+                - Vertical stroke from (11.4, 5) to (13.6, 27) — slight
+                  italic skew via the x-delta, ~5° (Instrument Serif
+                  italic angle).
+                - Top serif: a horizontal bar from x=3 to x=20 at y=5,
+                  asymmetric — the LEFT side extends 5 units past the
+                  stem (the drawer-pull) and the right side extends ~4
+                  (a traditional Didone top serif). The asymmetry is the
+                  identity move.
+                - Tiny circular finial at the LEFT tip of the top serif
+                  (cx=3, cy=5, r=1) — the "clasp / pull / signature dot".
+                - Bottom-of-stem serif: traditional but compact — a thin
+                  horizontal bracket at y=27. Keeps the T grounded.
+                The mark is filled in `currentColor` so it inherits the
+                wordmark's `text-ink-900` (and any future theme shift)
+                with zero JS plumbing. `1em` height makes it scale with
+                the `<p>` font-size at the responsive breakpoint without
+                a second media query. `relative -top-[0.08em]` is the
+                optical lift — the serif T's visual center sits a touch
+                below the wordmark cap line, so we nudge it up. */}
+            <svg
+              aria-hidden
+              focusable="false"
+              viewBox="0 0 24 32"
+              height="1em"
+              className="relative -top-[0.06em] inline-block w-auto shrink-0"
+              style={{ fill: 'currentColor' }}
+            >
+              {/* Top serif — asymmetric, the LEFT extension is the
+                  drawer-pull. Drawn as a single path so the join with
+                  the finial circle and the stem read as one mark. */}
+              <path d="M3 4.4 H20 V6.2 H3 Z" />
+              {/* Finial — the "trove" signature dot on the LEFT tip. */}
+              <circle cx="3" cy="5.3" r="1.15" />
+              {/* Vertical stem — slight italic skew (top-x 11.4 →
+                  bottom-x 13.2 across 22 units of height ≈ 4.7°,
+                  matching Instrument Serif italic). Drawn as a
+                  parallelogram path. */}
+              <path d="M11.4 6.2 L13.0 6.2 L14.4 27 L12.8 27 Z" />
+              {/* Bottom serif — compact, symmetric, traditional. */}
+              <path d="M9 26.4 H17 V28.0 H9 Z" />
+            </svg>
+            <span>Trove</span>
           </p>
         </div>
 

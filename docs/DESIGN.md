@@ -10,6 +10,26 @@ Agentic Commerce should feel like flipping through a thoughtful magazine with a 
 
 ---
 
+## 1.1 Brand identity (the Trove mark)
+
+Added 2026-05-14 after the Cycle 7 elevation pass shipped seven polish moves and the user feedback was still "no identity — Trove should be in brand like." The serif wordmark (Move 2) was a typographic *choice*, not a brand *mark*; the app read as a styled string, not a logo. Survey of premium chat + commerce brands in `docs/research/2026-05-14-brand-identity.md` showed three constants: one distinctive primitive (Granola's dot, Goyard's chevron, MR PORTER's full-stop), punctuation-as-logo (small glyph beside or above the wordmark), and restraint as the move (Mucca / Aritzia / Notion all earned identity by subtraction). The Trove answer sits in that vocabulary.
+
+**The mark.** A custom-cut serif "T" rendered inline as SVG, sitting to the LEFT of the wordmark. Drawn from the Instrument Serif italic skeleton with one deliberate identity alteration: the TOP serif extends asymmetrically LEFT past the vertical stroke (a drawer-pull / tag-handle terminal), and the LEFT tip carries a tiny circular finial — the *trove* signature. Reads as a clasp on a small box, or a key's bow, or the handle of a drawer that's about to be opened. The semantic is the word itself: *a collection of valuable or delightful things, often found*. You don't see a trove; you open one.
+
+**Geometry.** viewBox 24×32 (4:3 portrait, matches a tall serif T's optical bounds). Vertical stem skewed ~5° to the right (Instrument Serif italic angle). Top serif `H 3→20`, asymmetric: the left extension is the drawer-pull; the right is a traditional Didone serif. Finial circle r=1.15 at the LEFT tip (cx=3, cy=5.3). Bottom serif compact and symmetric. Filled in `currentColor` so it inherits `text-ink-900` and any future theme shift with no JS plumbing. Sized in `em` (`height: 1em`) so it tracks the wordmark's responsive `text-xl` ↔ `text-3xl` shift without a second media query.
+
+**Rule — where the mark appears.** Masthead only. Specifically: `Header.tsx` is the *single* surface in the app where the mark renders. The mark is the wordmark's identity signature, not a brand badge — repeating it on every card or button would dilute it from logo to ornament. Future surfaces that need a brand signal (the OG image, the favicon, a future shareable PDF cover) inherit the mark from `Header.tsx`'s SVG via copy-paste; they do not import a shared component, because the mark is a *single instance*, not a reusable primitive.
+
+**Rule — where the mark must NOT appear.** Never in body content. Never inside a ProductCard, MessageBubble, ToolStatus line, or Shortlist lane. Never as a bullet, divider, or list marker. Never on the SummaryHero page (the hero's serif italic gist is the page's authorial moment; the mark would compete). Never animated — the mark is a static mark; if a future identity move needs motion, it goes through a §1.x amendment, not by adding `animate-spin` to this SVG.
+
+**Rule — the mark and the wordmark are one logotype.** The mark is `aria-hidden`; the `<p>` carries `aria-label="Trove"` so screen readers and search engines see the brand name as text. The mark is decorative chrome that lives inside the same `<p>` as the word "Trove". A future refactor that moves the mark into its own `<span>` for layout flexibility is fine; a refactor that splits it into its own React component imported elsewhere violates the masthead-only rule.
+
+**Rule — color.** The mark inherits `text-ink-900` from its parent `<p>`. It does NOT take `accent-500`. Orange is the color of commitment (§2.2); the brand mark is not a commitment affordance. Future temptation: light the finial dot in orange to make it "pop". Resist. The mark must read as ink to keep the §2.2 rule clean.
+
+**Versioning.** This is v1 of the Trove identity. v2 candidates (deferred): a dual-color identity rule (a moss-green or ink-blue companion to orange at specific signature moments — see research §"Synthesis"), and a one-shot mount animation (a settle, a serif-tail elongation). v2 is unlocked by the user asking for "more identity, not different identity"; until then, the static mark is the brand.
+
+---
+
 ## 2. Tokens
 
 Everything in this section either matches `tailwind.config.ts` today or is a small, justified addition. No new values introduced just to be cute.
@@ -308,7 +328,7 @@ Three breakpoints. Tailwind defaults: `sm` (640), `md` (768), `lg` (1024), `xl` 
 
 **Chat-history placement (decided 2026-05-14).** Chat history is a **left rail**, not a header pill. Rationale: it is primary persistent navigation ("where am I, what other chats are open"), not a settings-adjacent menu, and §3.2 "Content over chrome" forbids piling 5 affordances into the header trigger-cluster.
 
-- **Desktop (>1024):** 260px left rail, flex sibling of the canvas (canvas stays bounded to `max-w-3xl`; rail does not steal its width). Top row is **New chat** (`bg-ink-900 text-white rounded-full h-9`, leading `RotateCcw`). Below: grouped list (Today / Yesterday / Earlier), each row `h-10 px-3 rounded-xl text-sm`, current chat `bg-ink-100 text-ink-900`, others `text-ink-600 hover:bg-ink-50`. Footer pinned to bottom: `ProfileMenu` stays in the header, not the rail.
+- **Desktop (>1024):** 260px left rail, flex sibling of the canvas (canvas stays bounded to `max-w-3xl`; rail does not steal its width). The rail is `position: sticky; top: 0; height: 100dvh` so it stays beside the canvas regardless of page scroll; its inner list owns `overflow-y-auto`. Background `bg-ink-50` (matches the page so the rail and canvas read as one continuous cream surface), demarcated by a single `border-r-ink-200` hairline — bumped from `ink-100` on 2026-05-14 because `ink-100` was too quiet on the new cream bg and the eye read rail+canvas as one undivided panel. Top row is **New chat** (`bg-ink-900 text-white rounded-full h-9`, leading `RotateCcw`). Below: grouped list (Today / Yesterday / Earlier), each row `h-10 px-3 rounded-xl text-sm`, current chat `bg-ink-100 text-ink-900`, others `text-ink-600 hover:bg-ink-50`. Footer pinned to bottom: `ProfileMenu` stays in the header, not the rail.
 - **Tablet (641–1024):** rail collapses to a 56px icon strip (New-chat icon + last 6 chats as 32px avatars/initials). Click expands to the full 260px panel as an overlay (`z-30`, scrim).
 - **Phone (≤640):** rail becomes a bottom-sheet, triggered by a `MessageSquare` icon in the header (replaces today's `Chats` pill). The existing `ChatHistoryMenu` portal+popover is the bottom-sheet body — reuse as-is.
 
@@ -479,6 +499,53 @@ The orchestrator's `cycle-N-design.md` will expand each of these into a checklis
   **Build order (highest leverage first):** 2 (wordmark — 1 line), 1 (welcome — landed), 6 (ProfileMenu eyebrow — 3 lines + §2.4 amendment), 4 (orange extends — 3 places, ~15 lines), 5 (ToolStatus line — 5 lines), 3 (ProductCard 4:5 — ~25 lines), 7 (signature card entry — ~10 lines).
 
   **What this addendum is NOT.** Not a redesign brief. None of these moves touches the spacing scale, the radius scale, the shadow scale, or the motion budget table. They are sharpening tools on the existing canon. If a future move requires a new token, it goes through the §2.x justification rule, not this list.
+
+  ---
+
+  **Cycle 8 — depth pass (2026-05-14).**
+
+  Direction-setting addendum filed after the user's "still very bland, no identity" diagnosis on the post-Cycle-7 walk. Cycle 7 elevated *moments* (welcome headline, wordmark serif, anchor card entry); Cycle 8 has to put identity into the **repeated surfaces** — the product card, the suggestion chips, the InputBar, the chrome. Same canon, deeper application. None of these moves adds a new spacing / radius / shadow / motion token. Engineers pull one move per turn.
+
+  ##### Move 1 — Product card title gets the editorial typographic treatment
+
+  - **Why bland today.** `ProductCard.tsx:333` ships titles as `truncate text-sm font-semibold text-ink-900`. From the mid-conversation screenshot at 1280, the card reads as a search-results row: square photo left, bold sans title, ink-400 merchant byline, $price, ink-900 Buy pill. SSENSE / MR PORTER / Aritzia treat the product title as the editorial detail — serif, larger line-height, sentence case, sometimes italic on category. Our card has zero serif inside the most-repeated surface in the app. The serif is everywhere *around* the card (welcome headline, wordmark, ProfileMenu eyebrow, expanded Total) — and absent from the card itself.
+  - **Spec.** `ProductCard.tsx:333` — title becomes `font-display text-base leading-snug text-ink-900 line-clamp-2` (drop `truncate`+`text-sm font-semibold`; the serif at 16/leading-snug carries weight without semibold, and `line-clamp-2` lets editorial titles wrap one line instead of `…`-truncating mid-word). Merchant byline stays `text-xs text-ink-400`. Price stays sans (`text-base font-semibold text-ink-900`) — the contrast between serif title and tabular sans price is the editorial signature, not a token shift. This is a sixth content serif home (titles in product cards) — the §2.4 cap moves from five to six. **Justification:** the product title IS the app's authorial voice in the body of the canvas. Suppressing it to sans is what made the body read as an e-commerce list. Adding a sixth requires the §2.4 amendment, included with this move.
+  - **Files.** `frontend/components/product/ProductCard.tsx`, `docs/DESIGN.md §2.4`.
+  - **Risk.** Serif titles wrap differently than sans — a `font-display text-base` two-line title is taller than today's truncated single-line sans, so the collapsed-row height bumps by ~16px. Acceptable: the row is editorial-tall, not list-compact, by design.
+
+  ##### Move 2 — Suggestion chips become an editorial cluster (NOT pills)  *(LANDED 2026-05-14 as proof — SuggestionChips.tsx)*
+
+  - **Why bland today.** `SuggestionChips.tsx:30` renders four identical `rounded-full border border-ink-200 bg-white px-3 py-2 text-xs` pills, flex-wrap with `gap-2`. From the welcome-1280 screenshot they read as a polite tag row — the same shape as a filter row in any e-commerce app. The welcome state has serif headline + ink-400 trust copy + GENERIC PILLS + huge cream void. The pills are the only typographic moment on the page that *isn't* expressing identity.
+  - **Spec.** Drop the bordered-pill shape. Each suggestion becomes a left-aligned link-row: serif italic prefix (`"Try —"` in `font-display italic text-ink-400 text-sm`) + the suggestion text in `font-display text-base text-ink-900 leading-snug hover:text-accent-600`. Cluster sits inside the welcome's serif rhythm — same family as the headline, ~50% the size. Reads as a table-of-contents, not a tag row. Stack vertically with `gap-y-2` (taller than today, but identity-bearing). Motion stays opacity-fade. Focus ring is the canonical `ring-2 ring-ink-900 ring-offset-2 ring-offset-ink-50`.
+  - **Files.** `frontend/components/chat/SuggestionChips.tsx`.
+  - **Risk.** Stacking the suggestions vertically on mobile makes the welcome state taller — the InputBar still sticks to the bottom, so above-the-fold the user sees headline + 2-3 suggestions + the fold (acceptable; the rest scroll into view).
+
+  ##### Move 3 — Reasoning chips visual signature (a quiet rule, not a flat label)
+
+  - **Why bland today.** `ReasoningChips.tsx:69-72` ships chips as `rounded-full px-2 py-1 text-xs font-medium` with tone-mapped backgrounds (`bg-ink-100`, `bg-accent-50`, `bg-emerald-50`, etc.). From the mid-conversation shots they read as Tailwind UI badges — exactly the same shape every commerce app ships. No identity beyond the tone color.
+  - **Spec.** Drop the filled-pill. Each chip becomes a left-icon (kind-mapped: `Ruler` for `size_match`, `Sparkles` for `discount`, `Truck` for `shipping`, `Leaf` for `ethics`, `Clock` for `low_stock`, `AlertCircle` for `price`) + label in `text-[11px] uppercase tracking-wider font-medium`, with a 1.5px left border in the chip's tone color (`border-l-emerald-500`, `border-l-accent-500`, etc.) and `pl-2 py-0.5`. Background drops to transparent — only the left rule + icon carries the tone. Reads as a magazine sidenote ("WHY THIS:"), not a tag. The §2.7 shadow-XOR-border rule still holds — the 1.5px left-edge is a *rule*, not a frame border.
+  - **Files.** `frontend/components/product/ReasoningChips.tsx`.
+  - **Risk.** Uppercase-tracking at 11px is harder to scan than sentence case. Acceptable — reasoning chips are skim signals, not body copy, and the §7 12px floor carves out `text-quiet` at 11px which this matches.
+
+  ##### Move 4 — InputBar focus signature (custom outline + serif placeholder)
+
+  - **Why bland today.** `InputBar.tsx:135-148` ships the textarea wrapper as `rounded-3xl bg-white px-3 py-2 shadow-soft focus-within:shadow-lift`. The placeholder is "What are you looking for?" in `text-sm text-ink-400` (sans). On focus the shadow lifts; nothing else changes. The textarea is the single most-touched surface in the app and it has zero typographic identity. The welcome headline asks the question in serif italic — and the InputBar asks the same question 0.5cm below in sans. Visual whiplash.
+  - **Spec.** Two changes. (a) Textarea placeholder gets `font-display italic` and a hair larger (`text-base text-ink-300`). The placeholder rhymes with the welcome headline ("What are you *looking for*?"). On the second message and beyond, the placeholder shortens to `font-display italic "Add a thought…"`. (b) The wrapper's focus state adds an inner ring: `focus-within:ring-1 focus-within:ring-accent-500/30 focus-within:ring-offset-0` — accent orange at 30% opacity, 1px, no offset. Pairs with the existing `shadow-lift`. Orange-on-focus reads as commitment per §2.2 (the user is about to send).
+  - **Files.** `frontend/components/chat/InputBar.tsx`.
+  - **Risk.** Italic placeholder rendered before the webfont loads flashes Georgia italic — already the existing fallback path for every `font-display` site. The accent-500/30 ring at 1px on a white bg is on the edge of perceptible — desired (signature, not chrome).
+
+  ##### Move 5 — One photographic moment in chrome (welcome state hero footer image)
+
+  - **Why bland today.** The welcome state at 1280 (and 360) has a huge cream void below the suggestion chips. No imagery anywhere in the chrome. Every premium commerce app has ≥1 photographic anchor (SSENSE landing hero, Aritzia category headers, MR PORTER editorial shelf). Trove has zero. The cream is beautiful but it's the same cream from edge to edge — a single photographic moment teaches the eye that this app *curates* imagery, not just lists it.
+  - **Spec.** Welcome state only (when `onlyWelcome` is true, ConversationCanvas already gates this). Below the suggestion cluster, render a single landscape image (`aspect-[5/2]`, `max-w-2xl mx-auto`, `rounded-2xl`, `mt-12`) sourced from a curated set of 3-4 editorial product/lifestyle stills (a folded sweater, a desk lamp, a ceramic vase — flat-lay, paper-cream-adjacent). Picked deterministically by session seed so it stays stable. Image gets a quiet `font-display italic text-xs text-ink-400` caption beneath ("Ceramic, hand-thrown · from a recent search"). Caption is editorial framing, not a content serif home — §2.4 cap unaffected by this move. Image sourced from `/public/welcome-hero/{1,2,3}.jpg` (1600×640, optimised, <40KB).
+  - **Files.** `frontend/components/chat/ConversationCanvas.tsx` (gated render under `onlyWelcome`), `frontend/public/welcome-hero/*.jpg` (new assets). Likely conflicts with the engineer agent's ConversationCanvas turf — coordinate before landing.
+  - **Risk.** Highest-stakes move in the list. (a) Adding imagery to a fast-loading welcome state is a perceived-perf hit; mitigate with `next/image priority` and a 40KB JPEG budget. (b) Sourcing the asset set is real curatorial work, not a one-line change. (c) Conflicts with the engineer agent's ConversationCanvas turf — hold until the rail-sticky / Latest-btn work is in.
+
+  **Build order (highest leverage first):** 2 (suggestion cluster — landed as proof), 1 (card title serif — ~5 lines + §2.4 amendment), 3 (reasoning chips rule — ~25 lines), 4 (InputBar focus signature — ~6 lines), 5 (welcome hero image — biggest stakes, ship last).
+
+  **§2.4 amendment (Cycle 8, 2026-05-14): the SIXTH content serif home — PRODUCT CARD TITLE.** The product card title is the body of the canvas — the single most-repeated authorial moment in the app. Suppressing it to sans is what made the body read as an e-commerce list. Add: "6. The **ProductCard title** (collapsed row `<h3>`). Editorial title treatment — `font-display text-base leading-snug` — earns identity inside the most-repeated surface." The serif gift count is now six. **Adding a seventh requires a fresh §2.x amendment.** Engineers reaching for a seventh: the bar is unchanged — is this the app speaking with authorial voice, or is this chrome?
+
+  **What this addendum is NOT.** Not a redesign brief. Same canon, deeper application. No new tokens. Cycle 8 ends when all five moves ship; if a sixth move emerges it goes into Cycle 9, not into this list.
 
 ---
 
