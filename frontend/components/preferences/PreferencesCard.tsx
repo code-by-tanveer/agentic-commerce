@@ -85,9 +85,17 @@ export function PreferencesCard() {
 function Header({ count }: { count: number }) {
   return (
     <div className="flex items-baseline justify-between">
+      {/* Cycle 7 Move #6 (2026-05-14) — the panel's eyebrow promotes to the
+          5th content serif home. Was `text-[11px] uppercase tracking-wider
+          text-ink-400` (chrome label); now `font-display text-xl italic
+          text-ink-900` (authorial moment). Justified in DESIGN.md §2.4: the
+          ProfileMenu is the app's most personal surface — a serif italic
+          reads as a promise ("I'll remember") instead of a Settings sheet.
+          The sibling `DefaultFiltersSection` keeps its 11px uppercase
+          eyebrow — that block is utility, not voice. */}
       <p
         id="profile-menu-title"
-        className="text-[11px] uppercase tracking-wider text-ink-400"
+        className="font-display text-xl italic text-ink-900"
       >
         About you
       </p>

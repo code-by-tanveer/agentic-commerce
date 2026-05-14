@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, Check, Loader2 } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 // Invisible-AI per DESIGN.md §3 principle 1: a tiny verb + object, dim, never
@@ -133,32 +133,53 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       </span>
     );
   }
-  // Running — single rotating dot (Granola-style). Under reduced motion we
-  // drop ALL loops: T4.E (Lila) — Round-5 polish. The previous reduced-motion
-  // path swapped infinite rotation for an infinite opacity pulse, which
-  // missed the spirit of the preference (one infinite loop replacing
-  // another). The aria-live "Searching desk lamps" announcement already
-  // carries the "alive" signal, so the dot can be static. Static dim
-  // Loader2 icon, no rotation.
-  // T1.32 — non-reduced duration brought under DESIGN.md §6's 600ms loop.
+  // Running — Cycle 7 Move #5 (2026-05-14): the dim rotating dot became a
+  // 1.5px stroke watch-hand line. Same 12×12 wrapper, same 600ms cadence,
+  // same `text-ink-400` colour — but the primitive itself reads as a
+  // clock second-hand rather than a Granola smudge. The line points to
+  // 12 o'clock (`y1=6 → y2=1` inside an `viewBox="0 0 12 12"`). Stroke
+  // inherits `currentColor` so the surrounding `text-ink-400` cascade
+  // controls the dim. Reduced-motion path: same SVG, static at 12 o'clock
+  // (no rotate). Don't substitute a different glyph — the spec is
+  // "calmer primitive, not a different one".
+  // T1.32 — duration sits within DESIGN.md §2.8's 600ms loop budget.
+  const HAND = (
+    <svg
+      viewBox="0 0 12 12"
+      className="h-3 w-3 text-ink-400"
+      aria-hidden
+      fill="none"
+    >
+      <line
+        x1="6"
+        y1="6"
+        x2="6"
+        y2="1"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
   if (reduced) {
     return (
       <span
-        className="inline-flex h-3 w-3 items-center justify-center text-ink-400"
+        className="inline-flex h-3 w-3 items-center justify-center"
         aria-hidden
       >
-        <Loader2 className="h-3 w-3" strokeWidth={2} />
+        {HAND}
       </span>
     );
   }
   return (
     <motion.span
-      className="inline-block h-3 w-3"
+      className="inline-flex h-3 w-3 items-center justify-center"
       animate={{ rotate: 360 }}
       transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }}
+      style={{ transformOrigin: '50% 50%' }}
       aria-hidden
     >
-      <span className="block h-2 w-2 rounded-full bg-ink-400" />
+      {HAND}
     </motion.span>
   );
 }
