@@ -133,53 +133,30 @@ function Indicator({ status, reduced }: { status: ToolStatusKind; reduced: boole
       </span>
     );
   }
-  // Running — Cycle 7 Move #5 (2026-05-14): the dim rotating dot became a
-  // 1.5px stroke watch-hand line. Same 12×12 wrapper, same 600ms cadence,
-  // same `text-ink-400` colour — but the primitive itself reads as a
-  // clock second-hand rather than a Granola smudge. The line points to
-  // 12 o'clock (`y1=6 → y2=1` inside an `viewBox="0 0 12 12"`). Stroke
-  // inherits `currentColor` so the surrounding `text-ink-400` cascade
-  // controls the dim. Reduced-motion path: same SVG, static at 12 o'clock
-  // (no rotate). Don't substitute a different glyph — the spec is
-  // "calmer primitive, not a different one".
-  // T1.32 — duration sits within DESIGN.md §2.8's 600ms loop budget.
-  const HAND = (
-    <svg
-      viewBox="0 0 12 12"
-      className="h-3 w-3 text-ink-400"
-      aria-hidden
-      fill="none"
-    >
-      <line
-        x1="6"
-        y1="6"
-        x2="6"
-        y2="1"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+  // Running — REVERTED 2026-05-14 from the watch-hand line back to the
+  // rotating dot per user feedback ("loading/typing animation was much
+  // better and more modern" with the dot). The watch-hand read as too
+  // mechanical / cold; the dot reads as a soft Granola-style beat. Same
+  // 12×12 wrapper, same 600ms cadence, same `text-ink-400` colour.
+  // Reduced-motion path: static dim dot (no rotation).
   if (reduced) {
     return (
       <span
         className="inline-flex h-3 w-3 items-center justify-center"
         aria-hidden
       >
-        {HAND}
+        <span className="block h-2 w-2 rounded-full bg-ink-400" />
       </span>
     );
   }
   return (
     <motion.span
-      className="inline-flex h-3 w-3 items-center justify-center"
+      className="inline-block h-3 w-3"
       animate={{ rotate: 360 }}
       transition={{ duration: 0.6, repeat: Infinity, ease: 'linear' }}
-      style={{ transformOrigin: '50% 50%' }}
       aria-hidden
     >
-      {HAND}
+      <span className="block h-2 w-2 rounded-full bg-ink-400" />
     </motion.span>
   );
 }

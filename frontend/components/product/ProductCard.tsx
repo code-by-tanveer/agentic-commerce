@@ -158,14 +158,16 @@ export function ProductCard({ product, index = 0 }: Props) {
   // stagger capped at 5. Reduced motion collapses both paths to the same
   // 100ms opacity-only crossfade — the anchor does NOT get a different
   // reduced-motion treatment.
-  // §2.8 carve-out: 450ms exceeds the `motion-default` 300ms but stays under
-  // the `motion-never` 500ms cap. Justified in DESIGN.md §2.8 amendment as
-  // a deliberate signal of focal-moment arrival, not a general loosening.
+  // §2.8 carve-out — TIGHTENED 2026-05-14: 450ms → 320ms. The longer
+  // settle read as "slow" to the user in live testing. 320ms still
+  // honours the carve-out (above motion-default 300ms, under
+  // motion-never 500ms) while feeling snappier; the rotate + scale
+  // sub-gestures still register as focal-moment arrival.
   const isAnchor = index === 0;
   const entryInitial = reduce
     ? { opacity: 0 }
     : isAnchor
-      ? { opacity: 0, y: 24, rotate: -0.4, scale: 0.98 }
+      ? { opacity: 0, y: 16, rotate: -0.3, scale: 0.99 }
       : { opacity: 0, y: 12 };
   const entryAnimate = reduce
     ? { opacity: 1 }
@@ -175,8 +177,8 @@ export function ProductCard({ product, index = 0 }: Props) {
   const entryTransition = reduce
     ? { duration: 0.1 }
     : isAnchor
-      ? { duration: 0.45, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }
-      : { duration: 0.3, delay: Math.min(index, 5) * 0.04, ease: 'easeOut' as const };
+      ? { duration: 0.32, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }
+      : { duration: 0.24, delay: Math.min(index, 5) * 0.03, ease: 'easeOut' as const };
 
   function onNativeDragStart(e: React.DragEvent<HTMLElement>) {
     e.dataTransfer.setData(

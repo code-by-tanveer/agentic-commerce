@@ -173,7 +173,7 @@ export function ConversationCanvas() {
           <motion.div
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
             animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={reduce ? { duration: 0.1 } : { duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            transition={reduce ? { duration: 0.1 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-col items-start gap-6 py-8 sm:py-16"
           >
             <h2 className="font-display text-3xl italic leading-[1.05] tracking-tight text-ink-900 sm:text-4xl md:text-5xl">

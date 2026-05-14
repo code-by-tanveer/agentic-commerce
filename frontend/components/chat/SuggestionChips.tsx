@@ -40,7 +40,7 @@ export function SuggestionChips({ suggestions, onPick }: Props) {
     <motion.ul
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: reduce ? 0 : 0.1 }}
+      transition={reduce ? { duration: 0.1 } : { duration: 0.2, delay: 0.05 }}
       className="flex flex-col gap-y-2"
       aria-label="Suggested searches"
     >
