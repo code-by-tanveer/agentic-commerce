@@ -15,6 +15,15 @@ import { cn } from '@/lib/cn';
 // `sizes` is a reasonable default for product cards on the 640px-wide
 // conversation canvas. CollageView tiles are smaller (2/3/4 columns) so
 // we widen the breakpoints to let next-image pick the right srcset entry.
+//
+// Cycle 7 Move #3 — optional `onAspect` callback exposes the source's
+// intrinsic aspect ratio (`naturalWidth / naturalHeight`) once the image
+// has decoded. Callers that want to reshape the container (e.g. the
+// ProductCard collapsed-row hero shifting from square → 4:5 on portrait
+// sources) opt in by passing the callback; everyone else (CollageView,
+// Shortlist thumbs, the expanded-card gallery) ignores it and the parent
+// keeps its fixed aspect. SSR-safe — the callback only fires post-mount
+// inside next/image's `onLoadingComplete`.
 
 interface Props {
   src?: string;
@@ -22,11 +31,12 @@ interface Props {
   className?: string;
   priority?: boolean;
   sizes?: string;
+  onAspect?: (ratio: { w: number; h: number }) => void;
 }
 
 const DEFAULT_SIZES = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px';
 
-export function ProductImage({ src, alt, className, priority, sizes }: Props) {
+export function ProductImage({ src, alt, className, priority, sizes, onAspect }: Props) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) {
     return (
@@ -55,6 +65,15 @@ export function ProductImage({ src, alt, className, priority, sizes }: Props) {
       sizes={sizes ?? DEFAULT_SIZES}
       priority={priority}
       onError={() => setFailed(true)}
+      onLoadingComplete={
+        onAspect
+          ? (img) => {
+              const w = img.naturalWidth || 0;
+              const h = img.naturalHeight || 0;
+              if (w > 0 && h > 0) onAspect({ w, h });
+            }
+          : undefined
+      }
       className={cn('object-cover', className)}
     />
   );

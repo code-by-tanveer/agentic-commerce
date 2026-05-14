@@ -48,6 +48,14 @@ export function ProductCard({ product, index = 0 }: Props) {
   // landed — without it, the submitted user-message appears at the bottom of
   // the chat (potentially below the fold) and the click feels lost.
   const [pairing, setPairing] = useState(false);
+  // Cycle 7 Move #3 — collapsed-row hero shape. Default 'square' so SSR and
+  // pre-load both render the 96² floor; post-mount, ProductImage's `onAspect`
+  // callback reports the source's intrinsic ratio and we promote portrait
+  // sources (`h > w * 1.1`) to a `w-20 aspect-[4/5]` frame (80×100). Landscape
+  // (`w > h * 1.5`) stays square so a wide editorial shot doesn't compress
+  // into a portrait crop. The shape is persisted in component state so
+  // re-renders (price/variant flips, expand/collapse) don't re-trigger.
+  const [heroShape, setHeroShape] = useState<'square' | 'portrait'>('square');
 
   const selectedVariant = product.variants?.find((v) => v.id === selectedVariantId);
   const checkoutUrl = selectedVariant?.checkoutUrl || product.checkoutUrl;
@@ -265,11 +273,34 @@ export function ProductCard({ product, index = 0 }: Props) {
         onClick={() => setExpanded((x) => !x)}
         className="flex w-full cursor-pointer items-stretch gap-3 p-3 text-left"
       >
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
+        {/* Cycle 7 Move #3 — hero shape derives from the source's intrinsic
+            aspect ratio. SSR + first paint render the 96² square; once
+            ProductImage decodes the file and reports back via `onAspect`,
+            portrait sources promote to `w-20 aspect-[4/5]` (80×100 —
+            slightly narrower but visually taller than the 96² floor).
+            Square + landscape sources keep the 96² square. The textual
+            right-hand side keeps `flex-1` so reshaping the hero never
+            crowds the title row. */}
+        <div
+          className={cn(
+            'relative shrink-0 overflow-hidden rounded-xl bg-ink-100',
+            heroShape === 'portrait'
+              ? 'aspect-[4/5] w-20'
+              : 'aspect-square h-24 w-24',
+          )}
+        >
           <ProductImage
             src={heroImage}
             alt={product.title}
             sizes="96px"
+            onAspect={({ w, h }) => {
+              // Portrait — `h > w * 1.1` per spec; threshold absorbs near-
+              // square sources. Landscape (`w > h * 1.5`) or roughly-square
+              // sources fall through to 'square' — the row's horizontal
+              // rhythm only varies when the source is unambiguously tall.
+              if (h > w * 1.1) setHeroShape('portrait');
+              else setHeroShape('square');
+            }}
           />
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -455,8 +486,13 @@ export function ProductCard({ product, index = 0 }: Props) {
                     className={cn(
                       'inline-flex h-9 items-center gap-2 rounded-full px-3 text-sm font-medium transition',
                       'focus:outline-none focus-visible:shadow-glow',
+                      // Cycle 7 Move #4b — pressed state uses accent-500
+                      // (orange = commitment, §2.2). Was bg-ink-900 (black),
+                      // which conflicted with the orange-is-commitment rule.
+                      // Hover/idle styles unchanged; only the in-flight
+                      // `pairing` press flips. Spinner stays text-white.
                       pairing
-                        ? 'bg-ink-900 text-white shadow-lift'
+                        ? 'bg-accent-500 text-white shadow-lift'
                         : isSearching
                           ? 'bg-white text-ink-400 shadow-soft cursor-not-allowed'
                           : 'bg-white text-ink-900 shadow-soft hover:bg-ink-50',

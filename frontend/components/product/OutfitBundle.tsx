@@ -83,9 +83,41 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
   return (
     <motion.section
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
-      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      transition={reduce ? { duration: 0.1 } : { duration: 0.3, ease: 'easeOut' as const }}
+      // Cycle 7 Move 4a — SaveOutfit accent pulse. On `savedAt` flipping
+      // from null → number, animate a soft accent-500 ring via `boxShadow`
+      // for ~400ms, then settle back to the bundle's resting shadow-soft.
+      // Using boxShadow (vs. backgroundColor) keeps the `accent-50` tint
+      // intact — the pulse reads as a brief earned glow, not a state flash.
+      // Reduced-motion path collapses to a 100ms opacity-only blink so the
+      // commitment still has *some* embodied feedback for users who opt
+      // out of motion.
+      animate={
+        reduce
+          ? savedAt
+            ? { opacity: [1, 0.85, 1] }
+            : { opacity: 1 }
+          : savedAt
+            ? {
+                opacity: 1,
+                y: 0,
+                boxShadow: [
+                  // Resting shadow-soft, then accent ring, then back.
+                  '0 1px 2px rgba(16,16,16,0.04), 0 8px 24px -8px rgba(16,16,16,0.08)',
+                  '0 0 0 3px rgba(255,106,19,0.20), 0 8px 24px -8px rgba(255,106,19,0.35)',
+                  '0 1px 2px rgba(16,16,16,0.04), 0 8px 24px -8px rgba(16,16,16,0.08)',
+                ],
+              }
+            : { opacity: 1, y: 0 }
+      }
+      transition={
+        reduce
+          ? { duration: savedAt ? 0.1 : 0.1 }
+          : savedAt
+            ? { duration: 0.6, ease: 'easeOut' as const, times: [0, 0.35, 1] }
+            : { duration: 0.3, ease: 'easeOut' as const }
+      }
       aria-label="Outfit bundle"
+      data-pulse-state={savedAt ? 'on' : 'off'}
       className={cn(
         // `accent-50` tint reads as a single coordinated object. Shadow only
         // (§2.7) — no border to compound the tint.

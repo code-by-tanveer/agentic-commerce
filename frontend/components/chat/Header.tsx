@@ -10,14 +10,17 @@ import { ChatHistoryMenu } from './ChatHistoryMenu';
 import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
-// Wordmark renders in Inter `font-sans font-semibold`, not the serif.
-// DESIGN.md §2.4 enumerates exactly four serif homes (ProductCard total,
-// SummaryHero gist, SummaryProductList section headers, CollageView hover
-// caption) and explicitly forbids a fifth — "Nowhere else." Yuki's round-4
-// audit caught the masthead as the fifth site: a persistent serif above
-// every conversation turn pre-spent the serif scarcity before the user
-// reached the SummaryHero italic moment. Inter at the existing weight keeps
-// brand presence without flattening the gift downstream.
+// Wordmark renders in Instrument Serif (`font-display`) — Cycle 7 Move 2.
+// The cycle-4 revert to `font-sans` over a "fifth serif home" concern was a
+// misread of DESIGN.md §2.4: the four enumerated homes are *content* serif
+// sites (ProductCard total, SummaryHero gist, SummaryProductList headers,
+// CollageView hover). A wordmark is a LOGOTYPE — a brand mark, not body
+// content — and the §2.4 amendment in Cycle 7 carves logotype out as a
+// separate category. The serif masthead is the single biggest reason the
+// app reads "magazine" instead of "app", per the 2026-05-14 elevation pass.
+// No italic: italic is reserved for the SummaryHero gist. Mobile narrows
+// to `text-xl` below the 380px breakpoint so the wordmark stays on one
+// line in the 360px viewport without competing with the action row.
 export function Header() {
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
@@ -37,12 +40,15 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
-          {/* Wordmark — Inter `font-sans font-semibold`. The four serif
-              homes per DESIGN.md §2.4 do NOT include the persistent app
-              chrome (Yuki R4 audit). R3 polish: tagline dropped per Skeptic
-              re-walk (defensive marketing copy was the strongest remaining
-              bot-tell). */}
-          <p className="font-sans text-xl font-semibold leading-none text-ink-900">
+          {/* Wordmark — Instrument Serif (`font-display`), per Cycle 7
+              Move 2 / §2.4 logotype carve-out. `text-xl` at sub-380px keeps
+              the wordmark on one line inside a 360px viewport (the desktop
+              `text-2xl` overflowed alongside the action row); `text-2xl`
+              from 380px up restores the masthead weight Yuki's R4 audit
+              gave away. `tracking-tight` tightens the serif at display
+              size; `whitespace-nowrap` is the belt-and-suspenders against
+              future copy changes wrapping at the smallest breakpoint. */}
+          <p className="font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-2xl">
             Agentic Commerce
           </p>
         </div>

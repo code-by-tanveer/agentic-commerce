@@ -82,6 +82,8 @@ Inter, weights `400 / 500 / 600 / 700`. Tracking default; no display-letter-spac
 
 Nowhere else. No serif in the chat stream. No serif on the buy button. No serif in the preferences panel. The serif is *earned* by moments of authorial voice.
 
+**§2.4 amendment (Cycle 7, 2026-05-14): the LOGOTYPE carve-out.** The wordmark is a **logotype**, not a content serif home. The four enumerated homes above are *content* sites — moments where the app speaks with an authorial voice. A logotype is a brand mark. It does not compete with the content serif gift because the user reads it as identity ("Agentic Commerce"), not as voice ("a quiet desk for a slow morning"). Logotype is therefore granted as a **separate category** from the four content homes so brand can read in serif without inflating the serif-home count. The four content homes (ProductCard total / SummaryHero gist / SummaryProductList section headers / CollageView hover caption) still cap. Future engineers: when you reach for a fifth serif site, ask whether it is content (counts against the cap, requires a §2.x amendment) or logotype (does not). The wordmark in `Header.tsx` is the only logotype today and is therefore the only thing this carve-out covers.
+
 ### 2.5 Spacing scale
 
 Tailwind ships dozens. Restrict to **six steps** for in-component spacing. Layout-level (gaps between sections) may use `8` and `12`.
