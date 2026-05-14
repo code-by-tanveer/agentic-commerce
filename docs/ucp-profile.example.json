@@ -27,7 +27,7 @@
     }
   },
   "agent_id": "agentic-commerce",
-  "name": "Agentic Commerce",
+  "name": "Trove",
   "description": "A conversational shopping companion that helps users decide what to buy. Renders streamed product results, reasoning chips, and preference memory. Operates over the Shopify Catalog MCP; never places orders on a user's behalf.",
   "homepage": "https://github.com/code-by-tanveer/agentic-commerce",
   "operator": {

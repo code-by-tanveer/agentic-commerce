@@ -49,7 +49,7 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
     if (!shareUrl) return;
     try {
       await navigator.share({
-        title: 'A lookbook from Agentic Commerce',
+        title: 'A lookbook from Trove',
         text: gist,
         url: shareUrl,
       });

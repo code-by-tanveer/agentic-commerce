@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
 
   const gist = expired
     ? 'This collection is no longer available.'
-    : (blob?.gist ?? 'A collection from Agentic Commerce');
+    : (blob?.gist ?? 'A collection from Trove');
   const thumbs = blob ? pickThumbs(blob, 3) : [];
   const meta = expired
     ? 'Shared lookbooks expire after 7 days · agentic.commerce'
@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
               fontFamily: sansStack,
             }}
           >
-            Agentic Commerce
+            Trove
           </div>
           <div
             style={{

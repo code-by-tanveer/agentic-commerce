@@ -18,12 +18,14 @@ Everything in this section either matches `tailwind.config.ts` today or is a sma
 
 | Token | Hex | Use |
 |---|---|---|
-| `ink-50` | `#f7f7f5` | Page background. Body uses this. |
+| `ink-50` | `#f7f4ed` | Page background — paper-cream. Body uses this. |
 | `ink-100` | `#ededea` | Hairline dividers, skeleton fills, disabled chip background. |
 | `ink-200` | `#d6d6d1` | 1px borders on cards, input, chips. |
 | `ink-400` | `#8a8a85` | Secondary text, meta (merchant, timestamps, "Total" label). |
 | `ink-600` | `#3a3a37` | Body text on cards, expanded descriptions, hover on `ink-900` buttons. |
 | `ink-900` | `#101010` | Primary text, primary button fill. The "anchor" of the page. |
+
+**Cycle 7 (2026-05-14): `ink-50` shifted from `#fafaf9` (near-pure-white-cool) to `#f7f4ed` (paper-cream-warm).** The white-to-cream move is to give the white cards on the page enough contrast to read as "documents on parchment." For brand context, the Trove app's premise is curatorial — content sitting on a held surface — and the prior near-pure-white page bg flattened the entire canvas into one undifferentiated white mass. Cards stay `bg-white` (the contrast IS the point). Don't add card borders to amplify the effect further — §2.7 (shadow XOR border) still holds; the shadow retune in §2.7 carries the rest of the lift. The cream remains a single `ink-50` token — no separate `ink-cream`. The 4.5:1 body-text rule in §7 still holds with `ink-600 (#3a3a37)` on `ink-50 (#f7f4ed)` (calculated 9.6:1 — well above AA); `ink-400 (#8a8a85)` on the new cream computes 4.05:1 — still inside the §7 carve-out ("acceptable for `text-quiet` only at ≥12px"), with a hair less margin than before. Watch this on any text-quiet near 12px.
 
 **Gaps to add** (justified): `ink-300` `#bcbcb6` for placeholder image fills and dragged-card scrim; `ink-700` `#2a2a27` for the rare midpoint between body copy and primary text (used in summary page only). Add only when first needed; do not pre-add.
 
@@ -120,9 +122,11 @@ Tailwind ships dozens. Restrict to **six steps** for in-component spacing. Layou
 
 | Token | Value | Use |
 |---|---|---|
-| `shadow-soft` | (already defined) | Resting elevation on cards, message bubbles, input bar. |
+| `shadow-soft` | `0 4px 12px -4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)` (Cycle 7 retune) | Resting elevation on cards, message bubbles, input bar. |
 | `shadow-lift` | (already defined) | Hover state on product cards only. Apply only to cursor-interactive cards, not message bubbles. |
-| `shadow-glow` | **new:** `0 0 0 6px rgba(255,106,19,0.12), 0 8px 24px -8px rgba(255,106,19,0.45)` | The Buy CTA on hover/focus, and *only* there. |
+| `shadow-glow` | `0 0 0 6px rgba(255,106,19,0.12), 0 8px 24px -8px rgba(255,106,19,0.45)` | The Buy CTA on hover/focus, and *only* there. |
+
+**Cycle 7 (2026-05-14): `shadow-soft` retuned** from the prior `0 1px 2px rgba(16,16,16,0.04), 0 8px 24px -8px rgba(16,16,16,0.08)` to a layered, paper-shadow feel: a tight 4px contact + a broader 12px-blur lift. The retune is paired with the `ink-50` parchment shift (§2.1) — on a near-white page bg the prior shadow was already enough; on the new cream bg the cards needed a hair more weight to read as documents resting on the surface, not floating in it. **Do NOT add a 1px border to compensate further** — §2.7's hard rule (shadow XOR border) is preserved through this retune.
 
 **Hard rule:** soft shadows **OR** 1px border, never both. Today's `ProductCard.tsx` violates this with `border border-ink-100 ... shadow-soft`. Cycle 1 design directive includes the fix: drop the border, keep the shadow. (See §8 Cycle 1.)
 

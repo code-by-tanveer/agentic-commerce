@@ -9,7 +9,11 @@
 }
 
 html, body {
-  background: #f7f7f5;
+  /* Mirrors `ink-50` in `tailwind.config.ts`. Hardcoded here so the html/body
+     paints the parchment cream before React hydrates and the inner
+     `bg-ink-50` div takes over — without this the page flashes white on
+     initial load. Cycle 7 (2026-05-14): retuned with the ink-50 shift. */
+  background: #f7f4ed;
   color: #101010;
   -webkit-font-smoothing: antialiased;
 }

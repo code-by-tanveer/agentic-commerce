@@ -23,7 +23,7 @@ npm run dev:frontend    # terminal 2 → http://localhost:3000 (Next.js)
 
 Open `http://localhost:3000` in a desktop Chrome window. You should see:
 
-- A sticky header reading **Agentic Commerce** (Inter, semibold, no serif).
+- A sticky header reading **Trove** (Inter, semibold, no serif).
 - A blank chat canvas (no greeting bubble — the assistant only speaks when spoken to).
 - A sticky input bar pinned to the bottom with placeholder text **What are you looking for?**.
 - Directly below the input bar, two lines of disclosure copy:

@@ -31,7 +31,7 @@ async function waitForStreamingDone(page: Page, timeout = 90_000) {
 //        is skipped with a clear `test.skip()` annotation — the wordmark
 //        half still passes. Per task brief: do not invent a fake save flow.
 
-const WORDMARK_TEXT = 'Agentic Commerce';
+const WORDMARK_TEXT = 'Trove';
 
 async function findWordmark(page: Page) {
   // The wordmark is the `<p>` inside the sticky header, identified by its

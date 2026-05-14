@@ -455,10 +455,39 @@ export function ComparisonTable({ products, axes }: Props) {
     );
   }, [leniant, rows, sort]);
 
+  // Empty-row suppression (2026-05-14 bug-fix).
+  //
+  // User reported asking "which has better battery" on a Nord-4/Nord-5
+  // compare and got a "Battery" row with "Not published" in every cell.
+  // Root cause: `extractAxisSnippet` only scans `description`, which on
+  // Shopify is marketing copy without spec fields. The agent's prose
+  // above the table answered correctly — the empty row is pure noise.
+  //
+  // Contract (also covered by axis-driven test stubs once FE test infra
+  // lands): for a `freeform:*` row, if every product in the comparison
+  // returns `null` from `extractAxisSnippet(p.description, axis)`, the
+  // row is suppressed entirely (no <tr>, no header, no cells). Default
+  // rows (price/rating/shipping/etc.) keep their per-cell "Not published"
+  // fallback — they have semantic meaning even when sparse.
+  //
+  // If suppression empties the body to just `image`, the table still
+  // renders with default columns intact (resolveAxes never returned
+  // bare-`image` to begin with, but a hand-tuned list could).
+  const visibleRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (!isFreeformKey(row.key)) return true;
+      const axis = row.key.slice('freeform:'.length);
+      const anyHit = leniant.some(
+        (p) => extractAxisSnippet(p.description, axis) !== null,
+      );
+      return anyHit;
+    });
+  }, [rows, leniant]);
+
   async function copyMarkdown() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
-      await navigator.clipboard.writeText(buildMarkdown(rows, sortedProducts));
+      await navigator.clipboard.writeText(buildMarkdown(visibleRows, sortedProducts));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -531,7 +560,7 @@ export function ComparisonTable({ products, axes }: Props) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {visibleRows.map((row) => {
               const isSorted = sort?.key === row.key;
               const SortIcon = !row.sortable
                 ? null

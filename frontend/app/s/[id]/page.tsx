@@ -62,12 +62,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const expired = !blob;
   const gist = expired
     ? 'This collection is no longer available'
-    : blob?.gist?.trim() || 'A collection from Agentic Commerce';
+    : blob?.gist?.trim() || 'A collection from Trove';
   const title = expired
-    ? 'Collection unavailable — Agentic Commerce'
-    : `${gist} — Agentic Commerce`;
+    ? 'Collection unavailable — Trove'
+    : `${gist} — Trove`;
   const description = expired
-    ? 'This shared collection has expired or was never created. Start a new one at Agentic Commerce.'
+    ? 'This shared collection has expired or was never created. Start a new one at Trove.'
     : `${blob!.love.length + blob!.maybe.length} items across ${blob!.merchantCount} merchant${blob!.merchantCount === 1 ? '' : 's'}.`;
   // The OG route uses the same `id`, hits the same BE, and renders the
   // expired-fallback card on its own when the blob is gone — so the link
@@ -100,7 +100,7 @@ function ExpiredSummary() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-ink-50 px-6 text-center">
       <div className="text-[10px] uppercase tracking-[0.32em] text-ink-400">
-        Agentic Commerce
+        Trove
       </div>
       <h1 className="mt-6 font-display text-3xl italic leading-tight text-ink-900 sm:text-4xl">
         This collection is no longer available.

@@ -1,4 +1,4 @@
-# PRODUCT — Agentic Commerce
+# PRODUCT — Trove
 
 Owner: Product Owner (sub-agent). This is the canonical product brief. Other agents (architect, design lead, engineers, QA, reviewers) read this before every cycle. Do not edit without an ADR.
 
@@ -16,7 +16,7 @@ A chat-native shopping agent that helps you *decide what to buy*, not just *find
 
 ## 2. Vision
 
-Agentic Commerce is a conversational shopping companion built on the Shopify Catalog MCP that prioritises **trust-led discovery** over checkout speed. It is for people who shop the way they browse Pinterest or read reviews — exploratory, taste-driven, suspicious of opaque AI picks — and who get burned by Amazon's sponsored sludge, ChatGPT's flat link lists, and Klarna's coupon-bot tone. It has to exist now because Shopify just opened the Catalog MCP to anyone (Nov 2025) and no incumbent has matched conversational UX to *visual, memory-aware, transparent* discovery — there is a six-month window before the next wave of clones ships.
+Trove is a conversational shopping companion built on the Shopify Catalog MCP that prioritises **trust-led discovery** over checkout speed. It is for people who shop the way they browse Pinterest or read reviews — exploratory, taste-driven, suspicious of opaque AI picks — and who get burned by Amazon's sponsored sludge, ChatGPT's flat link lists, and Klarna's coupon-bot tone. It has to exist now because Shopify just opened the Catalog MCP to anyone (Nov 2025) and no incumbent has matched conversational UX to *visual, memory-aware, transparent* discovery — there is a six-month window before the next wave of clones ships.
 
 ---
 

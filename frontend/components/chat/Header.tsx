@@ -42,14 +42,16 @@ export function Header() {
         <div className="leading-tight">
           {/* Wordmark — Instrument Serif (`font-display`), per Cycle 7
               Move 2 / §2.4 logotype carve-out. `text-xl` at sub-380px keeps
-              the wordmark on one line inside a 360px viewport (the desktop
-              `text-2xl` overflowed alongside the action row); `text-2xl`
-              from 380px up restores the masthead weight Yuki's R4 audit
-              gave away. `tracking-tight` tightens the serif at display
-              size; `whitespace-nowrap` is the belt-and-suspenders against
-              future copy changes wrapping at the smallest breakpoint. */}
-          <p className="font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-2xl">
-            Agentic Commerce
+              the wordmark on one line inside a 360px viewport. The "Trove"
+              rename (2026-05-14) collapsed the wordmark to one short word,
+              so we bumped the ≥380px size from `text-2xl` to `text-3xl` to
+              restore masthead weight against the action row — verified at
+              1280 and 360 in `tests/e2e/screenshots/wordmark-*.png`.
+              `tracking-tight` tightens the serif at display size;
+              `whitespace-nowrap` is the belt-and-suspenders against future
+              copy changes wrapping at the smallest breakpoint. */}
+          <p className="font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-3xl">
+            Trove
           </p>
         </div>
 

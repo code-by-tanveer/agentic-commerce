@@ -1,4 +1,4 @@
-# Agentic Commerce
+# Trove
 
 A chat-native shopping agent that helps you *decide what to buy*, not just *find* it — visually, transparently, with memory. Built on the Shopify Catalog MCP.
 

@@ -52,7 +52,7 @@ export default function Page() {
             <div className="grain flex min-h-dvh bg-ink-50">
               {/* T1.17 — single page-level <h1> for screen readers. The visual
                   wordmark in <Header> is styled prose (a <p> for layout). */}
-              <h1 className="sr-only">Agentic Commerce</h1>
+              <h1 className="sr-only">Trove</h1>
               <ChatHistoryRail />
               <main className="relative flex min-h-dvh flex-1 flex-col">
                 <Header />

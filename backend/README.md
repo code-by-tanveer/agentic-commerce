@@ -1,4 +1,4 @@
-# Backend — Agentic Commerce
+# Backend — Trove
 
 Fastify + TypeScript service. Hosts the agent loop, the typed SSE stream, the Shopify Catalog MCP client, and the SQLite session/preference store. See `../docs/ARCHITECTURE.md` for design rationale.
 
