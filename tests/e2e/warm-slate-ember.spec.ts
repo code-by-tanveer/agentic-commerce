@@ -25,7 +25,12 @@ import { expect, test, type Page } from '@playwright/test';
 // implementer's brief. The webServer wiring in `playwright.config.ts`
 // handles starting backend + frontend.
 
-const SLATE_HEX = '#e8e6e1';
+// Cycle 9.1 (2026-05-15 PM): the ground deepened from `#e8e6e1` (warm
+// slate, Cycle 9 AM) to `#c9c4ba` (deeper warm taupe) — the AM slate gave
+// the header glass enough chroma to tint but not enough darkness to make
+// the blur visibly refract. See `tests/e2e/glass-options-explore.spec.ts`
+// for the three options considered and DESIGN.md §2.1 for the rationale.
+const SLATE_HEX = '#c9c4ba';
 
 function rgbToHex(rgb: string): string {
   // Accepts `rgb(r, g, b)` or `rgba(r, g, b, a)` and returns `#rrggbb`.

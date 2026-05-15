@@ -35,9 +35,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Cycle 9 (2026-05-15) — `ember-glow` ambient radial. Fixed,
             pointer-events-none, z-index 0; mounted at the root so it
             appears on every page (chat shell, /s/[id] summary, share).
-            The radial paints `accent-500` at 10% alpha in the top-right,
-            giving the header glass a tinted ground to refract. See
-            DESIGN.md §2.13. Decorative — `aria-hidden`. */}
+            Paints `accent-500` at 14% alpha in the top-right (Cycle 9.1
+            bump from 10% — the deeper `#c9c4ba` ground absorbed the
+            softer ember; 14% restores the warmth without crossing into
+            "decorative AI gradient"). See DESIGN.md §2.13. Decorative —
+            `aria-hidden`. */}
         <div className="ember-glow" aria-hidden />
         {children}
       </body>

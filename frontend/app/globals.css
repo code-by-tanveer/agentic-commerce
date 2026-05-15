@@ -14,11 +14,16 @@
 
 html, body {
   /* Mirrors `ink-50` in `tailwind.config.ts`. Hardcoded here so the html/body
-     paints the slate before React hydrates and the inner `bg-ink-50` div
+     paints the ground before React hydrates and the inner `bg-ink-50` div
      takes over — without this the page flashes white on initial load.
-     Cycle 9 (2026-05-15): retuned from `#f7f4ed` (paper-cream) to
-     `#e8e6e1` (warm slate) — see DESIGN.md §2.1. */
-  background: #e8e6e1;
+     Cycle 9.1 (2026-05-15 PM): deepened from `#e8e6e1` (warm slate) to
+     `#c9c4ba` (deeper warm taupe). See DESIGN.md §2.1 and the exploration
+     spec `tests/e2e/glass-options-explore.spec.ts` for the three options
+     considered. The deeper ground is what makes the header glass register
+     — `backdrop-blur-xl` on a near-white ground is technically applied
+     but visually inert; on the taupe it visibly bends a lighter, hazier
+     strip across the top. */
+  background: #c9c4ba;
   color: #101010;
   -webkit-font-smoothing: antialiased;
 }
@@ -27,11 +32,12 @@ html, body {
  *
  * One fixed div, mounted once at the root layout, sits behind every page
  * (`z-index: 0` + `pointer-events: none`). Paints a soft top-right radial
- * of `accent-500` at 10% alpha. The orange remains a commitment-only fill
+ * of `accent-500` at 14% alpha. The orange remains a commitment-only fill
  * color (Buy / Save Outfit CTAs); this is *atmosphere*, not action — see
- * DESIGN.md §2.13. The blur is what makes the header glass register: a
- * cream canvas had nothing to refract; the slate + ember give the header's
- * backdrop-blur a tinted ground to work over.
+ * DESIGN.md §2.13. The 14% alpha is the Cycle-9.1 bump (was 10%) — the
+ * deeper `#c9c4ba` ground absorbed the prior softer ember and made it
+ * read as a faint warm hint; 14% restores the warmth without crossing
+ * into "decorative AI gradient."
  *
  * Motion: an 8s transform-only drift. translate3d() promotes the element
  * to its own compositor layer so the animation runs on the GPU and never
@@ -51,7 +57,7 @@ html, body {
   max-width: 720px;
   height: 60vh;
   max-height: 720px;
-  background: radial-gradient(closest-side, rgba(255, 106, 19, 0.10), transparent 70%);
+  background: radial-gradient(closest-side, rgba(255, 106, 19, 0.14), transparent 70%);
   filter: blur(60px);
   pointer-events: none;
   z-index: 0;

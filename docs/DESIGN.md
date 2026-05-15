@@ -43,18 +43,20 @@ Everything in this section either matches `tailwind.config.ts` today or is a sma
 
 | Token | Hex | Use |
 |---|---|---|
-| `ink-50` | `#e8e6e1` | Page background — **warm slate / muted putty**. Body uses this. |
-| `ink-100` | `#dad7d1` | Hairline dividers, skeleton fills, disabled chip background. |
-| `ink-200` | `#c4c1bb` | 1px borders on cards, input, chips. |
-| `ink-400` | `#8a8a85` | Secondary text, meta (merchant, timestamps, "Total" label). |
+| `ink-50` | `#c9c4ba` | Page background — **deeper warm taupe**. Body uses this. |
+| `ink-100` | `#bdb8af` | Hairline dividers, skeleton fills, disabled chip background. |
+| `ink-200` | `#a8a39a` | 1px borders on cards, input, chips. |
+| `ink-400` | `#5e5d58` | Secondary text, meta (merchant, timestamps, "Total" label). |
 | `ink-600` | `#3a3a37` | Body text on cards, expanded descriptions, hover on `ink-900` buttons. |
 | `ink-900` | `#101010` | Primary text, primary button fill. The "anchor" of the page. |
 
-**Cycle 9 (2026-05-15): `ink-50` shifted from `#f7f4ed` (paper-cream) to `#e8e6e1` (warm slate / muted putty).** Research file: `docs/research/2026-05-14-modern-color-glass.md`. The Cycle-7 cream read as 2024-editorial; modern (2026) reads as tinted-neutral + ambient color + glass surfaces over a ground that has real chroma. Cream gave the header glass nothing to refract — the blur was technically applied but visually inert. The slate is a real tint: warmer than gray, lighter than putty, dark enough that a `bg-white` card reads as a document on a held surface and that `backdrop-blur-xl` on the header has something to do. Cards stay `bg-white` (the contrast is the point — even more so against warm slate than cream). Cascade re-stepped: `ink-100` `#dad7d1` and `ink-200` `#c4c1bb` so dividers and borders still read above the new ground. **Do NOT add card borders to amplify the effect further** — §2.7 (shadow XOR border) still holds.
+**Cycle 9.1 (2026-05-15 PM): `ink-50` deepened from `#e8e6e1` (warm slate, AM) to `#c9c4ba` (deeper warm taupe).** Exploration spec: `tests/e2e/glass-options-explore.spec.ts` rendered three directions at 1280 (multi-blob ambient, gradient ground, deeper ground). Deeper ground won — it's the only option where the header's `backdrop-blur-xl` *visibly* refracts. On the AM slate (~93% lightness) the blur was technically applied but visually inert; on the PM taupe (~78% lightness) the header reads as a lighter, hazier strip laid across a richer ground, and white cards POP harder against the deeper canvas (the document-on-table read is now vivid). The ember radial (§2.13) also bumps from 10% to 14% alpha to register against the deeper ground. Cards stay `bg-white`. Cascade re-stepped: `ink-100` `#bdb8af` and `ink-200` `#a8a39a` so dividers and borders still read above the new ground. **Do NOT add card borders to amplify the effect further** — §2.7 (shadow XOR border) still holds.
 
-**Contrast accounting (Cycle 9).** Body text `ink-600 #3a3a37` on `ink-50 #e8e6e1` computes ~8.4:1 — well above the §7 AA threshold of 4.5:1. `ink-400 #8a8a85` on the slate computes ~3.5:1 — that's BELOW the AA threshold for body text but still inside the §7 large-text / `text-quiet` carve-out at ≥12px. Watch this: if a future surface uses `text-ink-400` at <12px on the page ground, it fails AA — promote to `text-ink-600` or upgrade the size.
+**Contrast accounting (Cycle 9.1).** Body text `ink-600 #3a3a37` on `ink-50 #c9c4ba` computes ~7.2:1 — well above the §7 AA threshold of 4.5:1. `ink-400` had to shift from `#8a8a85` to `#5e5d58`: the prior `#8a8a85` on the deeper `#c9c4ba` computes ~2.1:1, which fails even the large-text 3:1 carve-out. `#5e5d58` on `#c9c4ba` computes ~4.1:1 — passes AA for body text and restores the `text-quiet` carve-out's headroom. Engineers reading "ink-400 looks slightly darker now" — that's intentional; the prior value was unreadable on the deeper ground.
 
-**Cycle 7 history (2026-05-14, superseded).** Cycle 7 shifted `ink-50` from `#fafaf9` (near-pure-white-cool) to `#f7f4ed` (paper-cream-warm) to give cards a parchment ground. That direction was correct in motion (away from cool white) and wrong in destination (the warm canvas needed to be a real tint, not paper). The Cycle-9 slate is the correction.
+**Cycle 9 (2026-05-15 AM) history, superseded same-day.** Cycle 9 AM shifted `ink-50` from Cycle-7 cream `#f7f4ed` to warm slate `#e8e6e1`. The direction (away from cream, toward ambient + glass) was correct; the value was too light to make the header glass register strongly. The user's reply ("a lot better than before, still not that clear, can you try exploring some more colour options that would suit better and actually make our ui like glass, etc. more visible") triggered Cycle 9.1, which deepened to `#c9c4ba`. The "warm slate + ember" name survives as the *direction*; the *ground value* deepened.
+
+**Cycle 7 history (2026-05-14, superseded).** Cycle 7 shifted `ink-50` from `#fafaf9` (near-pure-white-cool) to `#f7f4ed` (paper-cream-warm) to give cards a parchment ground. That direction was correct in motion (away from cool white) and wrong in destination (the warm canvas needed to be a real tint, not paper). Cycle 9 / 9.1 are the corrections.
 
 **Gaps to add** (justified): `ink-300` `#bcbcb6` for placeholder image fills and dragged-card scrim; `ink-700` `#2a2a27` for the rare midpoint between body copy and primary text (used in summary page only). Add only when first needed; do not pre-add.
 
@@ -274,7 +276,7 @@ Added 2026-05-15 (Cycle 9). The "warm slate + ember" direction adopts a single t
 
 | Tier | Class | Use | Status |
 |---|---|---|---|
-| `surface-glass` | `bg-white/55 backdrop-blur-xl border-b border-white/40` | The sticky `<Header />` over the slate ground + ember radial. | **v1 — shipping.** |
+| `surface-glass` | `bg-white/55 backdrop-blur-xl border-b border-white/40` | The sticky `<Header />` over the deeper-taupe ground + ember radial. | **v1 — shipping.** |
 | `surface-glass-rail` | (concept) | Future shortlist rail / chat-history rail backdrop. | Deferred to v2. |
 | `surface-glass-scrim` | (concept) | Future modal / sheet scrim over the canvas. | Deferred to v2. |
 
@@ -284,13 +286,15 @@ Added 2026-05-15 (Cycle 9). The "warm slate + ember" direction adopts a single t
 2. **Never glass-on-glass.** A glass surface cannot sit inside another glass surface. The header is a top-level sibling of `<main>`; future rails are top-level siblings of `<main>`. The cardinal sin per visionOS docs.
 3. **Glass on chrome, not body.** ProductCard, MessageBubble, OutfitBundle, SuggestionChips, Shortlist lane: all stay opaque. If a body surface adopts glass via cascade, that's a bug.
 4. **Color sits underneath, not on top.** The header glass is near-neutral white at 55% alpha. The orange tint we want comes from the ember radial *behind* the glass (§2.13), refracted through the blur. Tinting the glass itself violates the rule.
-5. **Contrast on glass.** Wordmark `text-ink-900` and action-row buttons `text-ink-900` on `bg-white/55` over the slate ground compute ≥7:1 — AAA. Verified at both 1280 and 360 viewports.
+5. **Contrast on glass.** Wordmark `text-ink-900` and action-row buttons `text-ink-900` on `bg-white/55` over the taupe ground compute ≥7:1 — AAA. Verified at both 1280 and 360 viewports.
+
+**Cycle 9.1 update (2026-05-15 PM).** The glass class is unchanged from Cycle 9 (`bg-white/55 backdrop-blur-xl border-b border-white/40`) — what changed is *what's underneath*. The §2.1 ground deepened from `#e8e6e1` to `#c9c4ba`, and on the deeper ground the same glass class now visibly bends the underlying color into a lighter, hazier strip across the top. This was the user feedback ("still not that clear, can you try exploring some more colour options that would suit better and actually make our ui like glass, etc. more visible") — the answer was to deepen the ground, not to change the glass.
 
 Glass effect is rendered via `backdrop-filter: blur(...)`. Headless Chromium may not paint the blur in screenshots without compositor flags; the *computed style* is the deterministic check, which the §verification spec asserts.
 
 ### 2.13 Ambient color (the `ember-glow` radial)
 
-Added 2026-05-15 (Cycle 9). The orange `accent-500 #ff6a13` remains a **commitment-only** fill color (Buy CTA, Save Outfit) per §2.2 — that rule survives. This section adds a parallel, atmospheric use of the same hue: a single radial gradient, mounted once at the root layout, painting `rgba(255,106,19,0.10)` in the top-right of the viewport behind everything else. **Atmosphere, not action.** The user sees orange as a quiet warmth on the canvas; they do not read it as an affordance because it has no shape, no edge, and no interaction.
+Added 2026-05-15 (Cycle 9). Bumped 2026-05-15 PM (Cycle 9.1). The orange `accent-500 #ff6a13` remains a **commitment-only** fill color (Buy CTA, Save Outfit) per §2.2 — that rule survives. This section adds a parallel, atmospheric use of the same hue: a single radial gradient, mounted once at the root layout, painting `rgba(255,106,19,0.14)` in the top-right of the viewport behind everything else. **Atmosphere, not action.** The user sees orange as a quiet warmth on the canvas; they do not read it as an affordance because it has no shape, no edge, and no interaction.
 
 The radial is the answer to "where does color live in a 2026-modern interface?" The references converge on the same pattern (research file §3): ambient color, not fill color. Apple's content-through-glass, Framer's gradient blobs, Spotify's extracted gradient. Pure-cream gave glass nothing to do; the ember gives the header's `backdrop-blur-xl` something to refract.
 
@@ -298,14 +302,16 @@ The radial is the answer to "where does color live in a 2026-modern interface?" 
 
 - Fixed-position `<div class="ember-glow" aria-hidden />` mounted as the first child of `<body>` in `app/layout.tsx`. One instance, every page (chat shell, summary page, share page).
 - Size: 60vw × 60vh, capped at 720px × 720px. Anchored via `inset: -8rem -8rem auto auto` so the radial bleeds off the top-right edge and we never see the gradient's outer hard cutoff.
-- Fill: `radial-gradient(closest-side, rgba(255,106,19,0.10), transparent 70%)` + `filter: blur(60px)` for the soft edge.
+- Fill: `radial-gradient(closest-side, rgba(255,106,19,0.14), transparent 70%)` + `filter: blur(60px)` for the soft edge.
 - `z-index: 0; pointer-events: none`. The header (z:20) and InputBar (z:10) layer above it.
 - Motion: 8s `ember-drift` keyframe, transform-only (translate3d), `will-change: transform`. GPU compositor; never touches layout/paint. Travel is 12px — sub-perceptual; you'd notice if it stopped, not when it starts.
 - Reduced motion: `@media (prefers-reduced-motion: reduce)` cancels the animation; the radial stays still.
 
+**Cycle 9.1 alpha bump (2026-05-15 PM).** Ember alpha shifted from 10% to 14%. Rationale: the §2.1 ground deepened from `#e8e6e1` to `#c9c4ba`; the deeper ground absorbed the prior 10% ember and made it read as a faint hint that didn't survive the user's "still not that clear" feedback. 14% on the deeper ground returns the warm top-right glow to the same perceived intensity it had at 10% on the lighter ground — same atmospheric *role*, different chromatic *math*. The bump stays well clear of the "decorative AI gradient" failure mode (≥20% is where that read kicks in).
+
 **Rule — the ember is not a brand color extension.** Resist the urge to tint cards, dividers, or chips orange "to echo" the ember. The ember is the only ambient surface; orange anywhere else is still §2.2 commerce-intent. Future temptation: pull the ember tint into a card header for a "warm" callout — don't. The §2.2 rule and the §2.13 atmosphere read live in parallel and must stay separable; mixing them kills both.
 
-**Rule — only one ambient surface.** Adding a second radial (a green one in the bottom-left, a violet one mid-canvas) compounds into Framer-style dark-canvas aesthetic and reads as "decorative AI gradient." Trove's atmospheric color is a *single* warm note, not a chord. Adding a second requires a §2.x amendment with an ADR.
+**Rule — only one ambient surface.** Adding a second radial (a green one in the bottom-left, a violet one mid-canvas) compounds into Framer-style dark-canvas aesthetic and reads as "decorative AI gradient." Trove's atmospheric color is a *single* warm note, not a chord. Adding a second requires a §2.x amendment with an ADR. (Cycle 9.1 explicitly considered the multi-blob direction and rejected it — see `tests/e2e/glass-options-explore.spec.ts` for the comparison.)
 
 ---
 

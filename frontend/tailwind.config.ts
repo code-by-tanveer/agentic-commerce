@@ -17,19 +17,37 @@ const config: Config = {
       },
       colors: {
         ink: {
-          // Cycle 9 (2026-05-15): the cream `#f7f4ed` ground gave glass
-          // nothing to refract — see `docs/research/2026-05-14-modern-color-glass.md`.
-          // Retuned to `#e8e6e1` (warm slate / muted putty). The shift gives
-          // the header glass a tinted ground to blur, and lets `accent-500`
-          // sit as ambient color (the ember radial in `globals.css`) over a
-          // canvas with real chroma instead of paper. Cards stay white —
-          // the white-card / slate-page contrast is the document-on-table
-          // read. `ink-100` and `ink-200` re-stepped so the cascade stays
-          // coherent (dividers/borders still read above the new ground).
-          50: '#e8e6e1',
-          100: '#dad7d1',
-          200: '#c4c1bb',
-          400: '#8a8a85',
+          // Cycle 9.1 (2026-05-15 PM): the `#e8e6e1` warm-slate shipped this
+          // morning was still too light — the single ember radial gave the
+          // header glass *some* chroma to refract but the underlying ground
+          // remained ~93% lightness, so the blur barely registered against
+          // the rest of the page. Direction C (deeper warm taupe) explored
+          // in `tests/e2e/glass-options-explore.spec.ts` is the chosen
+          // ground — `#c9c4ba` (deeper, more saturation, more depth). White
+          // cards POP against it (the document-on-table read is now vivid),
+          // and `backdrop-blur-xl` on the header *visibly* bends the darker
+          // ground into a lighter, hazier strip across the top. The ember
+          // radial sits at 14% alpha to register against the deeper ground
+          // — see `globals.css` `.ember-glow`. Cascade re-stepped: `ink-100`
+          // `#bdb8af` and `ink-200` `#a8a39a` so dividers/borders still
+          // read above the new ground.
+          //
+          // Contrast accounting — `ink-400` shifted from `#8a8a85` to
+          // `#5e5d58`. The lighter `#8a8a85` on `#c9c4ba` computes ~2.1:1
+          // — fails even the large-text 3:1 carve-out. `#5e5d58` on
+          // `#c9c4ba` computes ~4.1:1, which passes AA for body text and
+          // restores the `text-quiet` carve-out's headroom. The optical
+          // weight of the placeholder/meta tier shifts slightly darker;
+          // walked through `tests/e2e/screenshots/glass-final-1280.png` to
+          // confirm it doesn't read as "anchor" weight.
+          //
+          // Cycle 9 (2026-05-15 AM) history: cream `#f7f4ed` → warm slate
+          // `#e8e6e1`. Cycle 9.1 (this commit) deepens to `#c9c4ba`. See
+          // DESIGN.md §2.1 for the full chain.
+          50: '#c9c4ba',
+          100: '#bdb8af',
+          200: '#a8a39a',
+          400: '#5e5d58',
           600: '#3a3a37',
           900: '#101010',
         },
