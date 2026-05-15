@@ -41,16 +41,20 @@ Everything in this section either matches `tailwind.config.ts` today or is a sma
 
 ### 2.1 Palette — ink (neutral spine)
 
-| Token | Hex | Use |
-|---|---|---|
-| `ink-50` | `#c9c4ba` | Page background — **deeper warm taupe**. Body uses this. |
-| `ink-100` | `#bdb8af` | Hairline dividers, skeleton fills, disabled chip background. |
-| `ink-200` | `#a8a39a` | 1px borders on cards, input, chips. |
-| `ink-400` | `#5e5d58` | Secondary text, meta (merchant, timestamps, "Total" label). |
-| `ink-600` | `#3a3a37` | Body text on cards, expanded descriptions, hover on `ink-900` buttons. |
-| `ink-900` | `#101010` | Primary text, primary button fill. The "anchor" of the page. |
+**Cycle 9.2 (2026-05-15 PM, this commit): the `ink-*` palette is now BOUND TO CSS VARIABLES** and flips between two themes per `<html data-theme="...">`. The semantic role each token plays is unchanged; the resolved hex flips. See §2.14 for the theme system + the dark palette + the toggle UI.
 
-**Cycle 9.1 (2026-05-15 PM): `ink-50` deepened from `#e8e6e1` (warm slate, AM) to `#c9c4ba` (deeper warm taupe).** Exploration spec: `tests/e2e/glass-options-explore.spec.ts` rendered three directions at 1280 (multi-blob ambient, gradient ground, deeper ground). Deeper ground won — it's the only option where the header's `backdrop-blur-xl` *visibly* refracts. On the AM slate (~93% lightness) the blur was technically applied but visually inert; on the PM taupe (~78% lightness) the header reads as a lighter, hazier strip laid across a richer ground, and white cards POP harder against the deeper canvas (the document-on-table read is now vivid). The ember radial (§2.13) also bumps from 10% to 14% alpha to register against the deeper ground. Cards stay `bg-white`. Cascade re-stepped: `ink-100` `#bdb8af` and `ink-200` `#a8a39a` so dividers and borders still read above the new ground. **Do NOT add card borders to amplify the effect further** — §2.7 (shadow XOR border) still holds.
+| Token | Light hex (cool slate-blue) | Dark hex (deep charcoal) | Use |
+|---|---|---|---|
+| `ink-50` | `#b8c1c8` (`--surface-page`) | `#1c1c1e` | Page background. Body uses this. |
+| `ink-100` | `#9aa5af` (`--border-subtle`) | `#3a3a3c` | Hairline dividers, skeleton fills, disabled chip background. |
+| `ink-200` | `#7c8893` (`--border-strong`) | `#5a5a5c` | 1px borders on cards, input, chips. |
+| `ink-400` | `#5e5d58` (`--text-tertiary`) | `#878684` | Secondary text, meta (merchant, timestamps, "Total" label). |
+| `ink-600` | `#3a3a37` (`--text-secondary`) | `#bbbbb8` | Body text on cards, expanded descriptions, hover on `ink-900` buttons. |
+| `ink-900` | `#101010` (`--text-primary`) | `#f5f5f4` | Primary text, primary button fill. The "anchor" of the page. |
+
+A new `bg-card` utility resolves to `--surface-card` (`#ffffff` light / `#2a2a2c` dark) — components that previously hardcoded `bg-white` for *card surfaces* (ProductCard, MessageBubble, OutfitBundle, Shortlist drawer, Header pill, etc.) use it now. `bg-white` continues to mean literal white for *foreground* glyphs (e.g. `text-white` on the ink-900 button) — only paper-surface usage moved.
+
+**Cycle 9.1 history (2026-05-15 PM, superseded by 9.2 same-day): `ink-50` was a single hex (`#c9c4ba` deeper warm taupe).** Exploration spec: `tests/e2e/glass-options-explore.spec.ts` rendered three directions at 1280 (multi-blob ambient, gradient ground, deeper ground). Deeper ground won — it's the only option where the header's `backdrop-blur-xl` *visibly* refracts. On the AM slate (~93% lightness) the blur was technically applied but visually inert; on the PM taupe (~78% lightness) the header reads as a lighter, hazier strip laid across a richer ground, and white cards POP harder against the deeper canvas (the document-on-table read is now vivid). The ember radial (§2.13) also bumps from 10% to 14% alpha to register against the deeper ground. Cards stay `bg-white`. Cascade re-stepped: `ink-100` `#bdb8af` and `ink-200` `#a8a39a` so dividers and borders still read above the new ground. **Do NOT add card borders to amplify the effect further** — §2.7 (shadow XOR border) still holds.
 
 **Contrast accounting (Cycle 9.1).** Body text `ink-600 #3a3a37` on `ink-50 #c9c4ba` computes ~7.2:1 — well above the §7 AA threshold of 4.5:1. `ink-400` had to shift from `#8a8a85` to `#5e5d58`: the prior `#8a8a85` on the deeper `#c9c4ba` computes ~2.1:1, which fails even the large-text 3:1 carve-out. `#5e5d58` on `#c9c4ba` computes ~4.1:1 — passes AA for body text and restores the `text-quiet` carve-out's headroom. Engineers reading "ink-400 looks slightly darker now" — that's intentional; the prior value was unreadable on the deeper ground.
 
@@ -312,6 +316,54 @@ The radial is the answer to "where does color live in a 2026-modern interface?" 
 **Rule — the ember is not a brand color extension.** Resist the urge to tint cards, dividers, or chips orange "to echo" the ember. The ember is the only ambient surface; orange anywhere else is still §2.2 commerce-intent. Future temptation: pull the ember tint into a card header for a "warm" callout — don't. The §2.2 rule and the §2.13 atmosphere read live in parallel and must stay separable; mixing them kills both.
 
 **Rule — only one ambient surface.** Adding a second radial (a green one in the bottom-left, a violet one mid-canvas) compounds into Framer-style dark-canvas aesthetic and reads as "decorative AI gradient." Trove's atmospheric color is a *single* warm note, not a chord. Adding a second requires a §2.x amendment with an ADR. (Cycle 9.1 explicitly considered the multi-blob direction and rejected it — see `tests/e2e/glass-options-explore.spec.ts` for the comparison.)
+
+**Cycle 9.2 dark-mode alpha (2026-05-15 PM).** Ember alpha is now driven by `--ember-alpha`: `0.14` in light mode (unchanged from 9.1), `0.20` in dark. Orange against the dark `#1c1c1e` ground reads dimmer than the same orange against the cool-slate `#b8c1c8`, so the alpha bumps to keep the *perceived* intensity stable across themes. The 20% ceiling is still below the "decorative AI gradient" failure mode (~25%+ is where that read kicks in on the cool-slate ground; the dark ground has more headroom because the contrast against the chrome is sharper).
+
+### 2.14 Theme system — light + dark
+
+Added 2026-05-15 PM (Cycle 9.2). A 3-state theme system — `system` (follows `prefers-color-scheme`), `light` (cool slate-blue), `dark` (deep charcoal) — managed via a segmented control in `ProfileMenu`. Persists to `localStorage` under `trove-theme`. Implemented in-house (no `next-themes`, no `tailwindcss-themer`) per the brief that the toggle is a 4-line hook, not a dependency.
+
+**Palettes.**
+
+| Token | Light | Dark | Notes |
+|---|---|---|---|
+| `--surface-page` | `#b8c1c8` | `#1c1c1e` | Body bg. Cool slate-blue ↔ iOS-26 dark surface. |
+| `--surface-card` | `#ffffff` | `#2a2a2c` | Cards. White on cool slate ↔ raised dark card. |
+| `--surface-rail` | `#aab4bc` | `#242426` | Chat-history rail. Deeper than the page in both themes. |
+| `--surface-glass-tint` | `rgba(255,255,255,0.55)` | `rgba(40,40,42,0.55)` | Header glass. White ↔ smoked. |
+| `--surface-glass-border` | `rgba(255,255,255,0.40)` | `rgba(255,255,255,0.08)` | Chrome edge demarcation. |
+| `--text-primary` | `#101010` | `#f5f5f4` | Anchor copy. |
+| `--text-secondary` | `#3a3a37` | `#bbbbb8` | Body. |
+| `--text-tertiary` | `#5e5d58` | `#878684` | Meta, captions. |
+| `--border-subtle` | `#9aa5af` | `#3a3a3c` | Hairlines. |
+| `--border-strong` | `#7c8893` | `#5a5a5c` | Card / input borders. |
+| `--ember-alpha` | `0.14` | `0.20` | See §2.13. |
+
+The orange `accent-500 #ff6a13` is identical across themes — commerce signal stays brand-stable per §2.2.
+
+**Implementation contract.**
+
+1. **CSS variables on `<html data-theme="...">`.** `:root` carries the light palette as the SSR default. The inline boot script in `app/layout.tsx` reads `localStorage['trove-theme']` (or `prefers-color-scheme` when no value is stored) and writes `data-theme` *synchronously* before React hydrates, so dark-mode users never see a white flash.
+2. **Tailwind `ink-*` binds to variables.** `bg-ink-50` / `text-ink-900` / etc. flip automatically. Zero per-component rewrites for the most common surfaces.
+3. **`bg-card` utility for the white-paper surface.** A new `.bg-card { background-color: var(--surface-card); }` resolves to `#ffffff` light / `#2a2a2c` dark. Components that hardcoded `bg-white` for a card surface use `bg-card`. The literal `bg-white` continues to mean exactly white (foreground glyph color, e.g. `text-white` on an ink-900 button).
+4. **Glass header reads `--surface-glass-tint` + `--surface-glass-border`** via Tailwind arbitrary-color syntax (`bg-[color:var(--surface-glass-tint)]`). The dark variant is a 55% smoked-grey tint with a 8% white border — the border is what gives the dark glass an edge against the deep page.
+5. **No glass-on-glass in dark either.** §2.12 rule survives — the glass tier is still header-only.
+
+**Toggle UI — `ProfileMenu`.** A "Theme" section sits at the TOP of the popover (above "About you"). 3-pill segmented control — System / Light / Dark — using the same `bg-ink-900 text-white` active treatment as the shipping-speed radios for visual consistency. `role="radiogroup"` + each pill `role="radio"` + `aria-checked`. The first pill in the saved state when `localStorage` is empty is "System".
+
+**Hydration flash.** The pre-hydration script writes `data-theme` before React mounts, so the first paint is in the correct theme. The React hook (`useTheme`) initialises from `system` to keep SSR markup deterministic, then catches up in its first effect tick — the visible UI is correct throughout because the DOM attribute drives the variable resolution, not React state.
+
+**Special dark-mode overrides.**
+
+- **`bg-accent-50` (OutfitBundle frame, discount reasoning chip).** The `#fff4ec` warm cream reads gracefully on cool slate but punches as a near-white panel on `#1c1c1e`. A scoped `[data-theme="dark"] .bg-accent-50` rule in `globals.css` overrides the bg to `#2e251f` (deep warm-tinged surface) so the bundle still reads as "one coordinated object" without dominating the dark canvas. The orange `accent-500` glyph + border tokens stay identical — only the cream wash flips.
+- **ember alpha** bumps to 0.20 (see §2.13 Cycle 9.2 entry).
+
+**Things deliberately NOT done.**
+
+- No `tailwindcss-themer` plugin. The variable-binding approach is smaller (~30 lines of CSS + a 4-line hook).
+- No `next-themes`. Pre-hydration script is 12 lines verbatim.
+- No theming of `accent-500` / state colors (emerald-50 / rose-50 etc.). Brand + state colors are theme-stable on purpose — see §2.2 + §2.3.
+- No second ambient surface for dark (no cyan blob to balance the orange). §2.13 "only one ambient surface" rule survives the theme split.
 
 ---
 

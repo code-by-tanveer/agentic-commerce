@@ -133,7 +133,7 @@ export function Moodboard({
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduced ? 0.1 : 0.25, ease: 'easeOut' }}
-      className="flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-soft"
+      className="flex flex-col gap-2 rounded-2xl bg-card p-3 shadow-soft"
       aria-label="Image attributes"
     >
       <div className="flex items-start gap-3">
@@ -215,7 +215,7 @@ export function Moodboard({
                 onClick={() => setIsAdding(true)}
                 aria-label="Add attribute"
                 className={cn(
-                  'relative inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-xs font-medium text-ink-600 shadow-soft transition hover:text-ink-900',
+                  'relative inline-flex items-center gap-1 rounded-full bg-card px-2 py-1 text-xs font-medium text-ink-600 shadow-soft transition hover:text-ink-900',
                   'before:absolute before:-inset-3 before:content-[""]',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1',
                 )}

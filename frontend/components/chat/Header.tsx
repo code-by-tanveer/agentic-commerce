@@ -55,7 +55,7 @@ export function Header() {
   const canShare = badge > 0 && !!sessionId;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/40 bg-white/55 backdrop-blur-xl">
+    <header className="sticky top-0 z-20 border-b border-[color:var(--surface-glass-border)] bg-[color:var(--surface-glass-tint)] backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
           {/* Wordmark — upright Instrument Serif (`font-display`), no
@@ -108,7 +108,7 @@ export function Header() {
               // T1.2 — sub-380px the label is hidden so the icon + badge are
               // all that survive; the aria-label still carries the count for
               // screen readers.
-              'inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
+              'inline-flex items-center gap-2 rounded-full bg-card px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
             )}
           >

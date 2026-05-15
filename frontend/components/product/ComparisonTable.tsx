@@ -514,7 +514,7 @@ export function ComparisonTable({ products, axes }: Props) {
   // axis name stays visible while scrolling product columns. Per DESIGN.md
   // §4 sticky-leftmost-column.
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-soft">
+    <div className="overflow-hidden rounded-2xl bg-card shadow-soft">
       <div className="flex items-center justify-between gap-3 border-b border-ink-100 px-4 py-2">
         {caption ? (
           <span className="text-xs uppercase tracking-wider text-ink-400">
@@ -545,7 +545,7 @@ export function ComparisonTable({ products, axes }: Props) {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 w-32 bg-white px-4 py-3 text-xs uppercase tracking-wider text-ink-400">
+              <th className="sticky left-0 z-10 w-32 bg-card px-4 py-3 text-xs uppercase tracking-wider text-ink-400">
                 <span className="sr-only">Attribute</span>
               </th>
               {sortedProducts.map((p) => (
@@ -571,7 +571,7 @@ export function ComparisonTable({ products, axes }: Props) {
                 <tr key={row.key} className="border-t border-ink-100">
                   <th
                     scope="row"
-                    className="sticky left-0 z-10 w-32 bg-white px-4 py-3 align-top text-xs uppercase tracking-wider text-ink-400"
+                    className="sticky left-0 z-10 w-32 bg-card px-4 py-3 align-top text-xs uppercase tracking-wider text-ink-400"
                   >
                     {row.sortable ? (
                       <button

@@ -252,7 +252,7 @@ function BundleCell({
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-xl bg-white p-2 shadow-soft',
+        'flex flex-col gap-2 rounded-xl bg-card p-2 shadow-soft',
         className,
       )}
     >

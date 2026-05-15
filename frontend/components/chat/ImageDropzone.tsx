@@ -133,7 +133,7 @@ export function ImageDropzone({ children }: Props) {
             className="pointer-events-auto fixed inset-0 z-50 bg-ink-900/10 backdrop-blur-sm"
             aria-hidden="true"
           >
-            <div className="absolute inset-4 grid place-items-center rounded-3xl border-2 border-dashed border-accent-200 bg-white/50">
+            <div className="absolute inset-4 grid place-items-center rounded-3xl border-2 border-dashed border-accent-200 bg-card/50">
               <p className="text-xs text-ink-400">Drop to attach</p>
             </div>
           </motion.div>

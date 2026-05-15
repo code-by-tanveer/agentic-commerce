@@ -252,7 +252,7 @@ export function ProductCard({ product, index = 0 }: Props) {
       // string-typed for Playwright's `[data-anchor="true"]` selector.
       data-anchor={isAnchor ? 'true' : 'false'}
       className={cn(
-        'group relative overflow-hidden rounded-2xl bg-white shadow-soft transition hover:shadow-lift',
+        'group relative overflow-hidden rounded-2xl bg-card shadow-soft transition hover:shadow-lift',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
       )}
     >
@@ -275,7 +275,7 @@ export function ProductCard({ product, index = 0 }: Props) {
         aria-label={isLoved ? 'Saved to Love' : 'Save to Love'}
         aria-pressed={isLoved}
         className={cn(
-          'absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
+          'absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-card/90 text-ink-400 shadow-soft transition',
           'hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           // Touch (no-hover) devices always see it at full opacity.
           '[@media(hover:none)]:opacity-100',
@@ -520,8 +520,8 @@ export function ProductCard({ product, index = 0 }: Props) {
                       pairing
                         ? 'bg-accent-500 text-white shadow-lift'
                         : isSearching
-                          ? 'bg-white text-ink-400 shadow-soft cursor-not-allowed'
-                          : 'bg-white text-ink-900 shadow-soft hover:bg-ink-50',
+                          ? 'bg-card text-ink-400 shadow-soft cursor-not-allowed'
+                          : 'bg-card text-ink-900 shadow-soft hover:bg-ink-50',
                     )}
                   >
                     {pairing ? (

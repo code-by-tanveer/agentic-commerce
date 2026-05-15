@@ -38,7 +38,7 @@ function ProductCell({ product }: { product: Product }) {
   const hasCheckout = !!product.checkoutUrl;
   const img = product.images?.[0];
   return (
-    <li className="flex gap-4 rounded-2xl bg-white p-4 shadow-soft">
+    <li className="flex gap-4 rounded-2xl bg-card p-4 shadow-soft">
       <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-100">
         {img ? (
           <Image
@@ -126,7 +126,7 @@ function OutfitCell({ outfit }: { outfit: SummaryOutfit }) {
       ) : null}
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {items.map((p) => (
-          <li key={p.id} className="overflow-hidden rounded-xl bg-white">
+          <li key={p.id} className="overflow-hidden rounded-xl bg-card">
             <a
               href={p.checkoutUrl || '#'}
               target={p.checkoutUrl ? '_blank' : undefined}
@@ -173,7 +173,7 @@ export function SummaryProductList({ blob }: Props) {
   if (isEmpty) {
     return (
       <section className="px-4 py-8">
-        <div className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-6 text-sm text-ink-600 shadow-soft">
+        <div className="mx-auto w-full max-w-3xl rounded-2xl bg-card p-6 text-sm text-ink-600 shadow-soft">
           This lookbook is empty. Save a product into Love or Maybe back in
           the chat to fill it in.
         </div>

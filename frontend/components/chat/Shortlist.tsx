@@ -169,7 +169,7 @@ export function Shortlist() {
             role="region"
             aria-labelledby="shortlist-rail-title"
             className={cn(
-              'fixed right-0 top-0 z-30 hidden h-dvh w-[320px] flex-col bg-white shadow-soft lg:flex',
+              'fixed right-0 top-0 z-30 hidden h-dvh w-[320px] flex-col bg-card shadow-soft lg:flex',
             )}
           >
             <RailHeader onClose={closeDrawer} />
@@ -328,7 +328,7 @@ function LaneItem({
   // T4.K (Priya) — locale-aware currency formatting.
   const locale = clientLocale();
   return (
-    <li className="flex items-center gap-2 rounded-xl bg-white p-2 shadow-soft">
+    <li className="flex items-center gap-2 rounded-xl bg-card p-2 shadow-soft">
       <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-ink-100">
         <ProductImage src={p.images?.[0]} alt={p.title} sizes="40px" />
       </div>
@@ -402,7 +402,7 @@ function MobileSheet({
         // clip the Done button. `max()` keeps existing padding floor on
         // devices without a physical inset.
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
-        className="absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-hidden rounded-t-2xl bg-white shadow-soft"
+        className="absolute inset-x-0 bottom-0 max-h-[80dvh] overflow-hidden rounded-t-2xl bg-card shadow-soft"
       >
         <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-ink-100" aria-hidden />
         <MobileHeader onClose={onClose} />

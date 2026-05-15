@@ -135,7 +135,7 @@ export function NoResultsBlock({ query, appliedFilters, onRelax }: Props) {
       initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduce ? 0.1 : 0.25, ease: 'easeOut' }}
-      className="flex flex-col items-start gap-3 rounded-2xl bg-white p-6 shadow-soft"
+      className="flex flex-col items-start gap-3 rounded-2xl bg-card p-6 shadow-soft"
     >
       <SearchX className="h-8 w-8 text-ink-400" aria-hidden />
       <h3 className="text-base font-medium text-ink-900">

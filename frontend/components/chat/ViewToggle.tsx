@@ -35,7 +35,7 @@ export function ViewToggle() {
       role="radiogroup"
       aria-label="Result layout"
       className={cn(
-        'inline-flex items-center gap-1 rounded-full bg-white p-1 shadow-soft',
+        'inline-flex items-center gap-1 rounded-full bg-card p-1 shadow-soft',
       )}
     >
       {SEGMENTS.map(({ mode, label, Icon }) => {

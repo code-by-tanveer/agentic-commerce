@@ -203,7 +203,7 @@ function CollageCard({ product, index }: CardProps) {
       aria-label={`${product.title}, ${formatMoney(price, currency, locale)} from ${product.merchant}`}
       className={cn(
         // §2.7: shadow XOR border. Shadow alone here.
-        'group relative overflow-hidden rounded-2xl bg-white shadow-soft transition hover:shadow-lift',
+        'group relative overflow-hidden rounded-2xl bg-card shadow-soft transition hover:shadow-lift',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
       )}
     >
@@ -225,7 +225,7 @@ function CollageCard({ product, index }: CardProps) {
         aria-label={isLoved ? 'Saved to Love' : 'Save to Love'}
         aria-pressed={isLoved}
         className={cn(
-          'absolute right-2 top-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/90 text-ink-400 shadow-soft transition',
+          'absolute right-2 top-2 z-10 grid h-11 w-11 place-items-center rounded-full bg-card/90 text-ink-400 shadow-soft transition',
           'hover:text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           '[@media(hover:none)]:opacity-100',
           '[@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',

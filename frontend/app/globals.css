@@ -8,23 +8,93 @@
    layout.tsx — every cold visit was paying for the same font twice.
    next/font now owns font loading; this file no longer touches it. */
 
-:root {
+/* ---------------------------------------------------------------------------
+ * Theme tokens — Cycle 9.2 (2026-05-15)
+ *
+ * Two palettes — `light` (cool slate-blue) and `dark` (deep charcoal) —
+ * expressed as CSS custom properties on `<html data-theme="...">`. The
+ * Tailwind `ink-*` and a new `surface`/`text`/`border` semantic group
+ * (see tailwind.config.ts) bind to these vars, so every existing component
+ * `bg-ink-50`/`text-ink-900`/etc. flips with the data-theme attribute —
+ * zero per-component rewrites. The accent (`accent-500 #ff6a13`) is the
+ * brand commerce signal and stays identical across themes; the ember-glow
+ * alpha bumps a touch in dark mode so the orange survives the deeper
+ * ground (see `.ember-glow` below).
+ *
+ * `:root` carries the LIGHT palette as the default so SSR doesn't flash —
+ * the inline script in `app/layout.tsx` writes `data-theme` synchronously
+ * before React hydrates, so on a dark-mode user's machine the dark vars
+ * take over before first paint. See DESIGN.md §2.14.
+ * ------------------------------------------------------------------------- */
+
+:root,
+[data-theme="light"] {
   color-scheme: light;
+  --surface-page: #b8c1c8;           /* cool slate-blue ground */
+  --surface-card: #ffffff;           /* white cards on cool slate */
+  --surface-rail: #aab4bc;           /* deeper than ground for chat-history rail */
+  --surface-glass-tint: rgba(255, 255, 255, 0.55);   /* header glass */
+  --surface-glass-border: rgba(255, 255, 255, 0.40);
+  --text-primary: #101010;
+  --text-secondary: #3a3a37;
+  --text-tertiary: #5e5d58;
+  --border-subtle: #9aa5af;          /* slightly darker than the ground */
+  --border-strong: #7c8893;
+  --ember-alpha: 0.14;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-page: #1c1c1e;           /* Apple iOS-26 dark surface */
+  --surface-card: #2a2a2c;           /* raised dark card */
+  --surface-rail: #242426;
+  --surface-glass-tint: rgba(40, 40, 42, 0.55);      /* smoked dark glass */
+  --surface-glass-border: rgba(255, 255, 255, 0.08); /* very subtle white edge */
+  --text-primary: #f5f5f4;           /* high-contrast off-white */
+  --text-secondary: #bbbbb8;
+  --text-tertiary: #878684;
+  --border-subtle: #3a3a3c;
+  --border-strong: #5a5a5c;
+  /* Orange against the dark ground reads dimmer; bump alpha so the
+   * ember still registers without crossing into "decorative gradient". */
+  --ember-alpha: 0.20;
+}
+
+/* Dark-mode legibility fix for the `bg-ink-900 text-white` anchor button
+ * pattern. In dark mode `ink-900` maps to `--text-primary` `#f5f5f4`
+ * (off-white) — so the standard "primary action" pill (New chat, Send,
+ * Pair-with, summary CTA) becomes light-on-light and reads as washed
+ * out. The semantic of the anchor button is "the highest-contrast
+ * affordance on the page" — that role wants to invert in dark mode:
+ * the button stays light, but the text inside flips to dark for
+ * readability. We override `text-white` ONLY when it's a sibling of a
+ * `bg-ink-900` element via a structural selector, so accent-500 buttons
+ * (Buy CTA — orange + white text) stay untouched. */
+[data-theme="dark"] .bg-ink-900.text-white,
+[data-theme="dark"] .bg-ink-900 .text-white {
+  color: var(--surface-page);
+}
+
+/* OutfitBundle / discount-reasoning-chip frame override in dark mode.
+ * `accent-50 #fff4ec` is a warm cream that reads gracefully on the cool
+ * slate light ground; on `#1c1c1e` it would punch as a near-white panel
+ * and shatter the dark-mode contract. We override the bg color (only —
+ * the orange `accent-500` glyph/border tokens stay identical) to a deep
+ * warm-tinged surface so the bundle still reads as "one coordinated
+ * object" without dominating the canvas. DESIGN.md §2.14. */
+[data-theme="dark"] .bg-accent-50 {
+  background-color: #2e251f;
 }
 
 html, body {
-  /* Mirrors `ink-50` in `tailwind.config.ts`. Hardcoded here so the html/body
-     paints the ground before React hydrates and the inner `bg-ink-50` div
-     takes over — without this the page flashes white on initial load.
-     Cycle 9.1 (2026-05-15 PM): deepened from `#e8e6e1` (warm slate) to
-     `#c9c4ba` (deeper warm taupe). See DESIGN.md §2.1 and the exploration
-     spec `tests/e2e/glass-options-explore.spec.ts` for the three options
-     considered. The deeper ground is what makes the header glass register
-     — `backdrop-blur-xl` on a near-white ground is technically applied
-     but visually inert; on the taupe it visibly bends a lighter, hazier
-     strip across the top. */
-  background: #c9c4ba;
-  color: #101010;
+  /* Mirrors `--surface-page` / `ink-50` in `tailwind.config.ts`. The body
+     paints the ground via CSS var so the html/body itself flips with the
+     theme — without a hardcoded fallback the page would flash white on
+     initial load on the few platforms that strip the inline theme script.
+     The pre-hydration script in `layout.tsx` sets `data-theme` before
+     paint; this var resolves against that attribute. */
+  background: var(--surface-page);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -32,12 +102,11 @@ html, body {
  *
  * One fixed div, mounted once at the root layout, sits behind every page
  * (`z-index: 0` + `pointer-events: none`). Paints a soft top-right radial
- * of `accent-500` at 14% alpha. The orange remains a commitment-only fill
- * color (Buy / Save Outfit CTAs); this is *atmosphere*, not action — see
- * DESIGN.md §2.13. The 14% alpha is the Cycle-9.1 bump (was 10%) — the
- * deeper `#c9c4ba` ground absorbed the prior softer ember and made it
- * read as a faint warm hint; 14% restores the warmth without crossing
- * into "decorative AI gradient."
+ * of `accent-500` at `--ember-alpha` (14% light, 20% dark). The orange
+ * remains a commitment-only fill color (Buy / Save Outfit CTAs); this is
+ * *atmosphere*, not action — see DESIGN.md §2.13. The light-mode 14% alpha
+ * is the Cycle-9.1 baseline; dark mode bumps to 20% because the deeper
+ * ground absorbs the warm radial more aggressively.
  *
  * Motion: an 8s transform-only drift. translate3d() promotes the element
  * to its own compositor layer so the animation runs on the GPU and never
@@ -57,7 +126,7 @@ html, body {
   max-width: 720px;
   height: 60vh;
   max-height: 720px;
-  background: radial-gradient(closest-side, rgba(255, 106, 19, 0.14), transparent 70%);
+  background: radial-gradient(closest-side, rgba(255, 106, 19, var(--ember-alpha, 0.14)), transparent 70%);
   filter: blur(60px);
   pointer-events: none;
   z-index: 0;
@@ -69,6 +138,21 @@ html, body {
 }
 
 @layer utilities {
+  /* `bg-card` — the only semantic surface utility introduced for the theme
+     system. Components that previously hardcoded `bg-white` for card
+     surfaces (ProductCard, MessageBubble, OutfitBundle, Shortlist drawer,
+     Header floating pill, etc.) switch to `bg-card` so the card surface
+     flips between `#ffffff` (light) and `#2a2a2c` (dark) automatically.
+     `bg-white` continues to mean literal white for foreground glyphs
+     (e.g. `text-white` on the ink-900 button); only background-of-paper
+     usage moved. See DESIGN.md §2.14. */
+  .bg-card { background-color: var(--surface-card); }
+  .hover\:bg-card:hover { background-color: var(--surface-card); }
+  .bg-card\/90 { background-color: color-mix(in srgb, var(--surface-card) 90%, transparent); }
+  .bg-card\/60 { background-color: color-mix(in srgb, var(--surface-card) 60%, transparent); }
+  .bg-card\/50 { background-color: color-mix(in srgb, var(--surface-card) 50%, transparent); }
+  .hover\:bg-card\/60:hover { background-color: color-mix(in srgb, var(--surface-card) 60%, transparent); }
+
   .grain {
     position: relative;
   }

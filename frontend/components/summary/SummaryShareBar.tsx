@@ -85,7 +85,7 @@ export function SummaryShareBar({ sessionId, gist }: Props) {
               type="button"
               onClick={onNativeShare}
               aria-label="Share via your device"
-              className="relative inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 before:absolute before:inset-[-10px] before:content-['']"
+              className="relative inline-flex items-center gap-2 rounded-full bg-card px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 before:absolute before:inset-[-10px] before:content-['']"
             >
               <Share2 className="h-3.5 w-3.5 text-ink-400" aria-hidden />
               Share

@@ -136,7 +136,7 @@ export function ChatHistoryRail() {
           (too subtle on cream) per the 2026-05-14 user-test pass. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col border-r border-ink-200 bg-ink-50"
+        className="hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col border-r border-ink-200 bg-surface-rail"
       >
         <RailPanel
           activeId={sessionId}
@@ -153,7 +153,7 @@ export function ChatHistoryRail() {
           lives in <Header /> instead. Sticky + `h-dvh` same as desktop. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[641px]:flex min-[1025px]:hidden sticky top-0 h-dvh w-14 flex-shrink-0 flex-col items-center gap-2 border-r border-ink-200 bg-ink-50 py-3"
+        className="hidden min-[641px]:flex min-[1025px]:hidden sticky top-0 h-dvh w-14 flex-shrink-0 flex-col items-center gap-2 border-r border-ink-200 bg-surface-rail py-3"
       >
         <button
           type="button"
@@ -219,7 +219,7 @@ export function ChatHistoryRail() {
               animate={reduced ? { opacity: 1 } : { x: 0, opacity: 1 }}
               exit={reduced ? { opacity: 0 } : { x: -16, opacity: 0 }}
               transition={overlayT}
-              className="fixed left-0 top-0 z-30 h-screen w-[260px] border-r border-ink-100 bg-white shadow-lift"
+              className="fixed left-0 top-0 z-30 h-screen w-[260px] border-r border-ink-100 bg-surface-rail shadow-lift"
             >
               <RailPanel
                 activeId={sessionId}

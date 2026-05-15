@@ -60,7 +60,7 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                 active
                   ? 'border-ink-900 bg-ink-900 text-white'
-                  : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
+                  : 'border-ink-200 bg-card text-ink-600 hover:border-ink-400',
                 !v.available && 'cursor-not-allowed text-ink-400 line-through opacity-60',
               )}
             >
@@ -126,7 +126,7 @@ export function VariantPicker({ variants, selectedId, onSelect }: Props) {
                     'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                     active
                       ? 'border-ink-900 bg-ink-900 text-white'
-                      : 'border-ink-200 bg-white text-ink-600 hover:border-ink-400',
+                      : 'border-ink-200 bg-card text-ink-600 hover:border-ink-400',
                     isUnavailable && 'text-ink-400 line-through',
                   )}
                 >

@@ -114,7 +114,7 @@ export function InputBar() {
         <label id={labelId} htmlFor={`${labelId}-input`} className="sr-only">
           Message
         </label>
-        <div className="relative flex w-full items-end rounded-3xl bg-white px-3 py-2 shadow-soft transition focus-within:shadow-lift">
+        <div className="relative flex w-full items-end rounded-3xl bg-card px-3 py-2 shadow-soft transition focus-within:shadow-lift">
           <input
             ref={fileInputRef}
             type="file"

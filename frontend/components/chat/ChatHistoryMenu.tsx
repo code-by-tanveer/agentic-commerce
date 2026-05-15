@@ -146,7 +146,7 @@ export function ChatHistoryMenu() {
         // The parent in Header.tsx gates the wrapper with `min-[641px]:hidden`
         // so the trigger only renders on phone.
         className={cn(
-          'inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
+          'inline-flex items-center gap-2 rounded-full bg-card px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
         )}
       >
@@ -266,7 +266,7 @@ function HistoryPopover({
         exit={reduced ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
         transition={popoverT}
         className={cn(
-          'fixed z-40 rounded-2xl bg-white p-3 shadow-soft',
+          'fixed z-40 rounded-2xl bg-card p-3 shadow-soft',
           'inset-x-2 bottom-2',
           'sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-16 sm:w-[20rem] sm:max-w-sm',
         )}

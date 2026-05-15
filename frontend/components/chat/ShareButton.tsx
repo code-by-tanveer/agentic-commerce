@@ -80,7 +80,7 @@ export function ShareButton({ sessionId }: Props) {
         className={cn(
           // Cycle 6 — snap to canonical §2.5 spacing (gap-2 / py-2); the
           // §2.5 lucide carve-out covers icon sizes only, not gap/padding.
-          'inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
+          'inline-flex items-center gap-2 rounded-full bg-card px-3 py-2 text-xs text-ink-900 shadow-soft transition hover:bg-ink-50',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
           status === 'sharing' && 'opacity-70',
         )}

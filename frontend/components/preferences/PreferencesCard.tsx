@@ -306,7 +306,7 @@ function AddPicker({
           type="button"
           onClick={() => onPick(k)}
           className={cn(
-            'rounded-full px-2 py-1 text-xs text-ink-600 transition hover:bg-white',
+            'rounded-full px-2 py-1 text-xs text-ink-600 transition hover:bg-card',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
           )}
         >
@@ -397,7 +397,7 @@ function EditableChip({
               }}
               aria-label={`${PREFERENCE_LABEL[k]} value`}
               className={cn(
-                'w-24 rounded-md bg-white px-1 py-1 text-xs text-ink-900',
+                'w-24 rounded-md bg-card px-1 py-1 text-xs text-ink-900',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900',
               )}
             />
@@ -420,7 +420,7 @@ function EditableChip({
             exit={{ opacity: 0 }}
             transition={transition}
             className={cn(
-              'rounded-md px-1 text-ink-900 transition hover:bg-white',
+              'rounded-md px-1 text-ink-900 transition hover:bg-card',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-ink-50',
             )}
             aria-label={`Edit ${PREFERENCE_LABEL[k]}`}
@@ -436,7 +436,7 @@ function EditableChip({
         aria-label={`Remove ${PREFERENCE_LABEL[k]}`}
         // Pseudo-element extends the hit area to ≥44px tall on coarse pointers.
         className={cn(
-          'relative inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-400 transition hover:bg-white hover:text-ink-900',
+          'relative inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-400 transition hover:bg-card hover:text-ink-900',
           'before:absolute before:inset-x-0 before:-inset-y-3 before:content-[""]',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-ink-50',
         )}
@@ -530,7 +530,7 @@ function EthicsChip({
           animate={{ opacity: 1 }}
           transition={transition}
           className={cn(
-            'rounded-md px-1 text-ink-900 transition hover:bg-white',
+            'rounded-md px-1 text-ink-900 transition hover:bg-card',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-ink-50',
           )}
           aria-label={`Edit ${PREFERENCE_LABEL.ethics}`}
@@ -542,7 +542,7 @@ function EthicsChip({
           onClick={onRemove}
           aria-label={`Remove ${PREFERENCE_LABEL.ethics}`}
           className={cn(
-            'relative inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-400 transition hover:bg-white hover:text-ink-900',
+            'relative inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-400 transition hover:bg-card hover:text-ink-900',
             'before:absolute before:inset-x-0 before:-inset-y-3 before:content-[""]',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-1 focus-visible:ring-offset-ink-50',
           )}
@@ -588,7 +588,7 @@ function EthicsChip({
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
                 active
                   ? 'bg-emerald-50 text-emerald-600 ring-2 ring-emerald-300'
-                  : 'bg-ink-100 text-ink-600 hover:bg-white',
+                  : 'bg-ink-100 text-ink-600 hover:bg-card',
               )}
             >
               {ETHICS_OPTION_LABEL[v]}
@@ -601,7 +601,7 @@ function EthicsChip({
           type="button"
           onClick={onCancel}
           className={cn(
-            'inline-flex h-8 items-center rounded-full px-3 text-xs text-ink-600 transition hover:bg-white',
+            'inline-flex h-8 items-center rounded-full px-3 text-xs text-ink-600 transition hover:bg-card',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
           )}
         >
@@ -913,7 +913,7 @@ export function DefaultFiltersSection() {
             aria-describedby={budgetHelperId}
             placeholder="No default"
             className={cn(
-              'h-9 w-full rounded-2xl border border-ink-100 bg-white py-2 pl-7 pr-3 text-sm text-ink-900 placeholder:text-ink-400',
+              'h-9 w-full rounded-2xl border border-ink-100 bg-card py-2 pl-7 pr-3 text-sm text-ink-900 placeholder:text-ink-400',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
             )}
           />
@@ -944,8 +944,8 @@ export function DefaultFiltersSection() {
                   'flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition',
                   'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
                   active
-                    ? 'bg-white text-ink-900 shadow-soft'
-                    : 'text-ink-600 hover:bg-white/60',
+                    ? 'bg-card text-ink-900 shadow-soft'
+                    : 'text-ink-600 hover:bg-card/60',
                 )}
               >
                 {opt.label}
@@ -969,7 +969,7 @@ export function DefaultFiltersSection() {
           onChange={(e) => void commitShoppingFor(e.target.value)}
           aria-label="Default shopping for"
           className={cn(
-            'h-9 w-full rounded-2xl border border-ink-100 bg-white px-3 text-sm text-ink-900',
+            'h-9 w-full rounded-2xl border border-ink-100 bg-card px-3 text-sm text-ink-900',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
           )}
         >

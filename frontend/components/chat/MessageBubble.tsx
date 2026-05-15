@@ -191,7 +191,7 @@ export function MessageBubble({ message }: Props) {
         transition={transition}
         className="flex w-full justify-start"
       >
-        <div className="rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-soft">
+        <div className="rounded-2xl rounded-bl-md bg-card px-4 py-3 shadow-soft">
           <TypingIndicator />
         </div>
       </motion.div>
@@ -221,7 +221,7 @@ export function MessageBubble({ message }: Props) {
       {bubbleBlocks.length > 0 ? (
         <div
           className={cn(
-            'max-w-[80%] rounded-2xl rounded-bl-md bg-white px-4 py-3 text-sm leading-relaxed text-ink-900 shadow-soft',
+            'max-w-[80%] rounded-2xl rounded-bl-md bg-card px-4 py-3 text-sm leading-relaxed text-ink-900 shadow-soft',
           )}
         >
           <MessageRenderer

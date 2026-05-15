@@ -17,41 +17,54 @@ const config: Config = {
       },
       colors: {
         ink: {
-          // Cycle 9.1 (2026-05-15 PM): the `#e8e6e1` warm-slate shipped this
-          // morning was still too light — the single ember radial gave the
-          // header glass *some* chroma to refract but the underlying ground
-          // remained ~93% lightness, so the blur barely registered against
-          // the rest of the page. Direction C (deeper warm taupe) explored
-          // in `tests/e2e/glass-options-explore.spec.ts` is the chosen
-          // ground — `#c9c4ba` (deeper, more saturation, more depth). White
-          // cards POP against it (the document-on-table read is now vivid),
-          // and `backdrop-blur-xl` on the header *visibly* bends the darker
-          // ground into a lighter, hazier strip across the top. The ember
-          // radial sits at 14% alpha to register against the deeper ground
-          // — see `globals.css` `.ember-glow`. Cascade re-stepped: `ink-100`
-          // `#bdb8af` and `ink-200` `#a8a39a` so dividers/borders still
-          // read above the new ground.
+          // Cycle 9.2 (2026-05-15 PM) — the `ink-*` palette is now bound to
+          // CSS custom properties so it flips between the light cool-slate
+          // and dark deep-charcoal themes per `<html data-theme>`. The
+          // literal hex history is preserved in DESIGN.md §2.1 and §2.14.
+          // Components that wrote `bg-ink-50` / `text-ink-900` / etc. don't
+          // change; the resolved color flips at the variable layer.
           //
-          // Contrast accounting — `ink-400` shifted from `#8a8a85` to
-          // `#5e5d58`. The lighter `#8a8a85` on `#c9c4ba` computes ~2.1:1
-          // — fails even the large-text 3:1 carve-out. `#5e5d58` on
-          // `#c9c4ba` computes ~4.1:1, which passes AA for body text and
-          // restores the `text-quiet` carve-out's headroom. The optical
-          // weight of the placeholder/meta tier shifts slightly darker;
-          // walked through `tests/e2e/screenshots/glass-final-1280.png` to
-          // confirm it doesn't read as "anchor" weight.
+          // Mapping (see globals.css `:root` + `[data-theme="dark"]`):
+          //   ink-50  → --surface-page    (page bg)
+          //   ink-100 → --border-subtle   (hairlines / skeletons)
+          //   ink-200 → --border-strong   (card / input borders)
+          //   ink-400 → --text-tertiary   (meta, captions)
+          //   ink-600 → --text-secondary  (body)
+          //   ink-900 → --text-primary    (anchor)
           //
-          // Cycle 9 (2026-05-15 AM) history: cream `#f7f4ed` → warm slate
-          // `#e8e6e1`. Cycle 9.1 (this commit) deepens to `#c9c4ba`. See
-          // DESIGN.md §2.1 for the full chain.
-          50: '#c9c4ba',
-          100: '#bdb8af',
-          200: '#a8a39a',
-          400: '#5e5d58',
-          600: '#3a3a37',
-          900: '#101010',
+          // Cycle 9.1 history: literal `#c9c4ba` / `#bdb8af` / `#a8a39a` /
+          // `#5e5d58` / `#3a3a37` / `#101010` shipped warm-taupe. Cycle 9.2
+          // shifts the LIGHT palette to a cool slate-blue (`#b8c1c8`) per
+          // user direction and adds a dark mode.
+          50: 'var(--surface-page)',
+          100: 'var(--border-subtle)',
+          200: 'var(--border-strong)',
+          400: 'var(--text-tertiary)',
+          600: 'var(--text-secondary)',
+          900: 'var(--text-primary)',
+        },
+        // New semantic group introduced 2026-05-15 PM (Cycle 9.2). Use
+        // `bg-surface-card` / `bg-surface-rail` / `text-text-primary` in
+        // new code. Existing `ink-*` continues to work; the surface group
+        // is the named layer for component authors who want explicit
+        // semantic intent (a "card" vs "page" surface).
+        surface: {
+          page: 'var(--surface-page)',
+          card: 'var(--surface-card)',
+          rail: 'var(--surface-rail)',
+        },
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
+        },
+        border: {
+          subtle: 'var(--border-subtle)',
+          strong: 'var(--border-strong)',
         },
         accent: {
+          // Accent stays brand-stable across themes — orange is the
+          // commerce-intent signal (§2.2). Same hex, light and dark.
           50: '#fff4ec',
           200: '#ffd4b8',
           500: '#ff6a13',
