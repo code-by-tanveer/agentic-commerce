@@ -24,6 +24,15 @@ export function InputBar() {
   const { upload, isUploading } = useUpload();
   const labelId = useId();
   const [value, setValue] = useState('');
+  const [focused, setFocused] = useState(false);
+  // Detect Mac vs other so the ⌘K hint renders the right glyph. Computed
+  // once on mount because navigator.platform doesn't change during a
+  // session. SSR-safe (typeof check).
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform));
+  }, []);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // R2/T2.8 — publish the outer wrapper's height to `--input-bar-height` so
@@ -165,6 +174,8 @@ export function InputBar() {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             rows={1}
             placeholder="What are you looking for?"
             aria-label="Message"
@@ -175,6 +186,21 @@ export function InputBar() {
             // hugging the bottom edge.
             className="w-full resize-none bg-transparent py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:outline-none"
           />
+          {/* ⌘K hint — Cycle 11 (2026-05-15). Subtle keyboard-affordance
+              chip that surfaces the command palette shortcut. Hidden
+              while the textarea is focused (so it doesn't distract from
+              composing) AND while the user has typed something (so the
+              chip never competes with the Send button). Also hidden on
+              narrow widths so it doesn't crowd the compose pill. */}
+          {!focused && value.length === 0 ? (
+            <kbd
+              aria-hidden
+              className="pointer-events-none absolute right-14 top-1/2 hidden -translate-y-1/2 select-none items-center gap-0.5 rounded border border-ink-200 bg-ink-50/80 px-1.5 py-0.5 text-[10px] font-medium text-ink-600 sm:inline-flex"
+            >
+              <span>{isMac ? '⌘' : 'Ctrl'}</span>
+              <span>K</span>
+            </kbd>
+          ) : null}
           <button
             type="submit"
             disabled={!value.trim() || isSearching}
@@ -190,16 +216,16 @@ export function InputBar() {
           </button>
         </div>
       </form>
-      {/* Trust-promise disclosure — Round 2 polish (Mara). Source-of-truth +
-          ranking policy stated where the user composes, so the commitment is
-          visible at point-of-action rather than inferred from anti-goal #5 in
-          the PM doc. T4.D (Round 5) — bumped from text-[11px] to text-xs (12px)
-          so trust-critical copy clears the §7 legibility floor; both lines
-          share the treatment so the line break reads as one paragraph. */}
-      <p className="pb-3 text-center text-xs text-ink-400">
-        Prices and availability come from Shopify merchants.
-        <br />
-        Ranking is preference-driven, not paid placement.
+      {/* Trust-promise disclosure — collapsed to a single quiet line
+          (2026-05-15 night) per user feedback that the two-line version ate
+          too much vertical space below the input. The full statement still
+          lives in PRODUCT.md anti-goal #5; this footer is a pointer, not
+          the full thing. Hover/focus reveals the long form via title attr. */}
+      <p
+        className="pb-2 text-center text-[11px] text-ink-400"
+        title="Prices and availability come from Shopify merchants. Ranking is preference-driven, not paid placement."
+      >
+        Shopify merchants · preference-driven ranking · no paid placement
       </p>
     </div>
   );

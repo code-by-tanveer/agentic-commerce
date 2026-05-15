@@ -134,13 +134,16 @@ export function ChatHistoryRail() {
           rail and page share `bg-ink-50`, so the `border-r-ink-200`
           hairline is the only panel-break signal — bumped from `ink-100`
           (too subtle on cream) per the 2026-05-14 user-test pass. */}
-      {/* Cycle 10 (2026-05-15 night) — rail surface is now
-          `.surface-glass-rail` (translucent over the page gradient + 20px
-          blur + 1.4 saturate + 1px white right-edge). The opaque
-          `bg-surface-rail` + ink-200 border combo was a 2024-editorial
-          read; the glass treatment is the Liquid Dawn sidebar move
-          (see DESIGN.md §2.15). The right-edge border is the rail's
-          glass edge — no separate `border-r` needed. */}
+      {/* Cycle 10 (2026-05-15 night) — rail surface is `.surface-glass-rail`.
+          2026-05-15 cohesion pass: the rail's blur (was 20px), saturate
+          (was 1.4) and tint alpha (was 0.45) were bumped to MATCH the
+          header EXACTLY (40px / 1.6 / 0.42). User feedback "the chat
+          tray strangely feels not part of the app" diagnosed as a glass-
+          family mismatch where the rail and header met at the top-left
+          with a visible step in haze. The hard `border-right` was also
+          replaced with a soft inset-shadow specular edge so the rail
+          fades into the canvas rather than cutting it off. See
+          DESIGN.md §2.15. */}
       <nav
         aria-label="Chat history"
         className="surface-glass-rail hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col"
@@ -312,7 +315,7 @@ function RailPanel({
       {grouped.today.length === 0 &&
       grouped.yesterday.length === 0 &&
       grouped.earlier.length === 0 ? (
-        <p className="px-3 pt-4 text-xs leading-snug text-ink-400">
+        <p className="px-3 pt-4 text-xs leading-snug text-ink-600">
           Your chat history shows up here. Send a message to start one.
         </p>
       ) : null}
@@ -336,7 +339,12 @@ function RailGroup({
   if (entries.length === 0) return null;
   return (
     <div className="flex flex-col">
-      <p className="mt-3 px-3 text-[11px] uppercase tracking-wider text-ink-400">
+      {/* Group header — Cycle 10 polish (2026-05-15). `text-ink-400` over
+          the new lighter rail glass washed into the gradient; bumped to
+          `text-ink-600` so the section breaks read clearly without
+          competing with the row labels. Same meta-text weight used in
+          DESIGN §2.11 quiet recovery surfaces. */}
+      <p className="mt-3 px-3 text-[11px] font-medium uppercase tracking-wider text-ink-600">
         {label}
       </p>
       <ul className="flex flex-col gap-0.5" role="list">

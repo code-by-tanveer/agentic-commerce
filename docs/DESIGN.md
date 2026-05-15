@@ -418,6 +418,49 @@ Added 2026-05-15 night (Cycle 10). Supersedes §2.14. Companion research: `docs/
 - No glass on the Buy button itself. Glass is structural; commitment is opaque.
 - No multi-stop gradient on individual cards. Glass tint is white, not chromatic — the chromaticity comes through from behind, never painted on the glass.
 
+**2026-05-15 cohesion pass (Liquid Dawn polish).** User feedback: *"the chat tray strangely feels not part of the app, I would like you to actually look at it."* Diagnosis: the rail shipped with a different blur radius (20px), saturate boost (1.4) and tint alpha (0.45) than the header (40px / 1.6 / 0.42), so the two surfaces met at the top-left of the canvas with a visible step in haze + chroma — Apple's Liquid Glass spec calls this a "glass family" break. Plus the hard `border-right: 1px solid` cut the rail off from the canvas at a sharp vertical edge, sealing the "tacked-on panel" read. Four moves restored cohesion in `globals.css`: (1) rail blur 20px → 40px to match the header; (2) rail saturate 1.4 → 1.6 to match the header; (3) rail tint alpha 0.45 → 0.42 to match the header; (4) hard `border-right` replaced with `box-shadow: inset 1px 0 0 / inset -1px 0 0 / inset 0 1px 0` so the rail's specular edges dissipate symmetrically (same treatment now covers both the left ChatHistoryRail and the right Shortlist rail). The rail's group headers (`text-ink-400`) and empty-state copy were also lifted to `text-ink-600` because over the lighter, hazier glass the 400-weight neutrals washed into the gradient.
+
+---
+
+### 2.16 Selective Radix UI adoption + `cmdk` (Cycle 11)
+
+Added 2026-05-15. Companion: the three migrated components (`ProfileMenu`, `ChatHistoryMenu`, `Shortlist`) + the new `CommandPalette`.
+
+**Decision.** User asked "should we use shadcn or something, it could help with lots plus lots of key shortcuts for pc will already be there." The right move is **selective Radix UI adoption** — replace the three hand-rolled popovers/dialogs the app already shipped with the Radix primitives that solve the focus-trap / outside-click / Escape / Tab-cycling problem correctly, and add `cmdk` for the ⌘K / Ctrl+K command palette that has become standard prosumer chrome (Linear, Vercel, GitHub, Notion, Raycast). We deliberately do NOT bring in the rest of the shadcn ecosystem; only the four named packages.
+
+**Packages added.**
+
+- `@radix-ui/react-dialog` — used by `Shortlist` (mobile = `modal={true}`, desktop rail = `modal={false}`) and by the `CommandPalette` shell.
+- `@radix-ui/react-popover` — used by `ProfileMenu` and `ChatHistoryMenu`.
+- `@radix-ui/react-tooltip` — installed for forthcoming consumers (reasoning-chip hover, future kbd hints); not load-bearing in Cycle 11 itself but cheap to keep alongside the other Radix imports.
+- `cmdk` — the Pacocoursey command-palette primitive that powers Vercel/Linear. Painted with our glass-family classes; no extra design tokens imported.
+
+**What Radix replaces (per migrated component).**
+
+- `createPortal` to `<body>` — Radix's `<Popover.Portal>` / `<Dialog.Portal>` handles this and bypasses the header's `backdrop-filter` containing-block trap (CSS §2).
+- `useFocusTrap(ref, { ... })` — Radix's built-in focus-scope traps Tab/Shift-Tab inside the surfaced content, handles initial focus, and returns focus to the trigger on close.
+- Hand-rolled `mousedown` / `pointerdown` outside-click listeners — Radix's `PointerDownOutside` event. `Shortlist`'s desktop rail uses `onInteractOutside` to keep the existing "ignore clicks on the header trigger" behaviour so toggle-from-trigger doesn't double-fire.
+- `onKey` Escape handler — Radix's `EscapeKeyDown` event.
+- `aria-haspopup` / `aria-expanded` / `aria-controls` / `role="dialog"` plumbing — wired automatically.
+
+**Net effect.** ~200 lines of hand-rolled scaffolding deleted across the three components; the visual treatment is byte-identical (same `.surface-glass-card` surface, same chip layouts, same trigger pills). The `useFocusTrap` hook is RETAINED in `hooks/useFocusTrap.tsx` because future surfaces may still want it; only the three migrated callsites stop importing it.
+
+**CommandPalette (`components/chat/CommandPalette.tsx`).** A `cmdk` listbox inside a Radix Dialog. Centered modal, glass card, backdrop-blur scrim. Wired actions:
+
+- *New chat* — `useConversationActions().createNewSession()`.
+- *Open shortlist* — `useShortlist().toggleDrawer()`.
+- *Profile / About you* — dispatches the existing `open-profile-menu` CustomEvent so the avatar's `<Popover.Root>` opens without coupling.
+- *Search the catalog* — focuses the InputBar's textarea (DOM query — pragmatic; the InputBar doesn't expose a ref).
+- *Switch to list/collage view* — `useShortlist().setViewMode()`.
+- *Share this session* — clicks the existing `ShareButton` (when present); preserves the round-trip + clipboard semantics.
+- *Switch to chat <label>* — `useConversationActions().switchSession(id)` for each non-current entry in the cookie history.
+
+Mounted in `app/page.tsx` outside the flex shell so the centered modal positions against the viewport.
+
+**Keyboard contract.** ⌘K (Mac) / Ctrl+K (Win/Linux) toggles. ESC closes. ↑/↓ navigate. Enter selects. A subtle `<kbd>⌘ K</kbd>` chip lives inside the InputBar's compose pill (right edge, before the Send button) and is suppressed when the textarea has focus OR has any value so it doesn't compete with composing.
+
+**Tooltip primitive (`@radix-ui/react-tooltip`) is installed but unused in Cycle 11.** Reserved for the next polish wave (reasoning-chip hover details + the planned `⌘K` long-form caption on chrome elements that don't have room for a visible `<kbd>`). Calling it out so the next engineer doesn't re-add it.
+
 ---
 
 ## 3. Principles

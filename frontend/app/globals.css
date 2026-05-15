@@ -67,9 +67,14 @@
   /* Rail / InputBar — slightly more transparent because they're larger
    * structural surfaces (sidebar + sticky footer). Glass on glass is
    * avoided per Apple's Liquid Glass docs; the rail and input never
-   * overlap each other or the cards. */
-  --surface-rail-rgba:   rgba(255, 255, 255, 0.45);
-  --surface-rail-border: rgba(255, 255, 255, 0.30);
+   * overlap each other or the cards.
+   *
+   * 2026-05-15 cohesion pass — the rail's tint was bumped from 0.45 →
+   * 0.42 so it matches the header's tint EXACTLY. The two surfaces meet
+   * at the top-left of the canvas and any alpha delta there read as
+   * "two different panels" rather than one continuous glass plane. */
+  --surface-rail-rgba:   rgba(255, 255, 255, 0.42);
+  --surface-rail-border: rgba(255, 255, 255, 0.45);
   --surface-input-rgba:  rgba(255, 255, 255, 0.55);
 
   /* Header glass — the most prominent glass surface; sits over the top
@@ -172,14 +177,44 @@ html, body {
       0 24px 48px -12px rgba(16, 16, 16, 0.22);
   }
 
-  /* `.surface-glass-rail` — sidebar treatment. Lighter alpha than the
-   * card because the rail is a larger structural surface; the right-edge
-   * border (1px white at 30%) is the glass edge. */
+  /* `.surface-glass-rail` — sidebar treatment.
+   *
+   * 2026-05-15 cohesion pass (Liquid Dawn polish). User feedback: "the
+   * chat tray strangely feels not part of the app". Diagnosis: the rail
+   * shipped with a *different* blur (20px) and saturation (1.4) than the
+   * header (40px / 1.6), so the two surfaces met at the top-left corner
+   * with a visible step in haze + chroma. The hard `border-right: 1px
+   * solid` also cut the rail off from the canvas at a sharp vertical
+   * edge, which sealed the "tacked-on panel" read.
+   *
+   * Apple's Liquid Glass spec calls for "glass family consistency"
+   * across structural surfaces. The four moves to restore it:
+   *   1. Match the header's blur radius (40px) so the haze is continuous
+   *      where the two surfaces meet.
+   *   2. Match the header's saturate boost (1.6) so chroma pulls through
+   *      equally on both surfaces.
+   *   3. Match the header's tint alpha (now 0.42 via --surface-rail-rgba)
+   *      so they're literally the same glass.
+   *   4. Replace the hard `border-right` with a soft gradient-fade edge
+   *      via `box-shadow inset` — the 1px specular highlight along the
+   *      right edge dissipates instead of cutting. Same edge treatment
+   *      as `.surface-glass-card`'s inner-white highlight (§2.15). */
   .surface-glass-rail {
     background-color: var(--surface-rail-rgba);
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
-    border-right: 1px solid var(--surface-rail-border);
+    backdrop-filter: blur(40px) saturate(1.6);
+    -webkit-backdrop-filter: blur(40px) saturate(1.6);
+    /* Soft gradient-fade edges instead of a hard border. The inset
+     * shadow lays a faint white specular highlight along BOTH vertical
+     * inner edges of the rail; this lets the same class work for both
+     * the left ChatHistoryRail (canvas-facing edge on the right) and the
+     * right Shortlist rail (canvas-facing edge on the left) without
+     * either rail terminating in a hairline cut against the gradient.
+     * The 1px top-inner highlight is the same specular "wet" edge the
+     * cards use — it sells the rail as a glass plane, not a panel. */
+    box-shadow:
+      inset 1px 0 0 var(--surface-rail-border),
+      inset -1px 0 0 var(--surface-rail-border),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
 
   /* `.surface-glass-input` — sticky InputBar surface. Border-top is the

@@ -6,6 +6,7 @@ import { PreferencesProvider } from '@/hooks/usePreferences';
 import { SessionProvider, useSession } from '@/hooks/useSession';
 import { ShortlistProvider } from '@/hooks/useShortlist';
 import { ChatHistoryRail } from '@/components/chat/ChatHistoryRail';
+import { CommandPalette } from '@/components/chat/CommandPalette';
 import { Header } from '@/components/chat/Header';
 import { ConversationCanvas } from '@/components/chat/ConversationCanvas';
 import { ImageDropzone } from '@/components/chat/ImageDropzone';
@@ -79,6 +80,12 @@ export default function Page() {
                 <Shortlist />
               </main>
             </div>
+            {/* CommandPalette — Cycle 11 (2026-05-15). Global ⌘K / Ctrl+K
+                launcher; mounted outside the flex shell so its centered
+                modal positions against the viewport, not the canvas. The
+                palette is a Radix Dialog so it portals to <body> on open
+                and traps focus inside the cmdk listbox. See DESIGN §2.16. */}
+            <CommandPalette />
           </ConversationProvider>
         </PreferencesShell>
       </ShortlistProvider>
