@@ -10,23 +10,28 @@ Agentic Commerce should feel like flipping through a thoughtful magazine with a 
 
 ---
 
-## 1.1 Brand identity (the Trove mark)
+## 1.1 Brand identity (the Trove wordmark)
 
-Added 2026-05-14 after the Cycle 7 elevation pass shipped seven polish moves and the user feedback was still "no identity — Trove should be in brand like." The serif wordmark (Move 2) was a typographic *choice*, not a brand *mark*; the app read as a styled string, not a logo. Survey of premium chat + commerce brands in `docs/research/2026-05-14-brand-identity.md` showed three constants: one distinctive primitive (Granola's dot, Goyard's chevron, MR PORTER's full-stop), punctuation-as-logo (small glyph beside or above the wordmark), and restraint as the move (Mucca / Aritzia / Notion all earned identity by subtraction). The Trove answer sits in that vocabulary.
+Rewritten 2026-05-15 (Cycle 9) after the cut-T direction was rejected and the broader cycle direction shifted to "warm slate + ember" (see `docs/research/2026-05-14-modern-color-glass.md`). The Cycle-7 custom-cut "T" mark (drawer-pull terminal serif + finial dot, rendered inline as SVG left of the wordmark) was rejected by the user same-day on 2026-05-14: *"trove T sign looks straight bad."* Bricked. The mark now is the wordmark itself.
 
-**The mark.** A custom-cut serif "T" rendered inline as SVG, sitting to the LEFT of the wordmark. Drawn from the Instrument Serif italic skeleton with one deliberate identity alteration: the TOP serif extends asymmetrically LEFT past the vertical stroke (a drawer-pull / tag-handle terminal), and the LEFT tip carries a tiny circular finial — the *trove* signature. Reads as a clasp on a small box, or a key's bow, or the handle of a drawer that's about to be opened. The semantic is the word itself: *a collection of valuable or delightful things, often found*. You don't see a trove; you open one.
+**The wordmark.** "Trove" set in **Instrument Serif regular, upright, no italic, no custom glyph**, followed by a single trailing middle-dot (`·` / U+00B7) sized at ~0.85em in `text-ink-400`. The MR PORTER move adapted: punctuation is the signature. The middle-dot reads as "Trove · [continues]" — a comma in a thought, an invitation, not a full-stop conclusion. It is also typographically rare enough (most brands use a period or nothing) to register as deliberate, not as a stray glyph. The visible signature is the dot; the wordmark itself is otherwise unadorned.
 
-**Geometry.** viewBox 24×32 (4:3 portrait, matches a tall serif T's optical bounds). Vertical stem skewed ~5° to the right (Instrument Serif italic angle). Top serif `H 3→20`, asymmetric: the left extension is the drawer-pull; the right is a traditional Didone serif. Finial circle r=1.15 at the LEFT tip (cx=3, cy=5.3). Bottom serif compact and symmetric. Filled in `currentColor` so it inherits `text-ink-900` and any future theme shift with no JS plumbing. Sized in `em` (`height: 1em`) so it tracks the wordmark's responsive `text-xl` ↔ `text-3xl` shift without a second media query.
+**Composition.** Single `<p>` element. `aria-label="Trove"` carries the brand name for assistive tech and search. The middle-dot lives in a nested `<span aria-hidden>` with `text-ink-400` so it reads quieter than the word — the eye lands on "Trove", then settles on the dot as a quiet exhalation. Responsive shift: `text-xl` below the 380px breakpoint, `text-3xl` above, so the wordmark stays on one line in a 360px viewport. `tracking-tight`, `leading-none`, `whitespace-nowrap` complete the type spec.
 
-**Rule — where the mark appears.** Masthead only. Specifically: `Header.tsx` is the *single* surface in the app where the mark renders. The mark is the wordmark's identity signature, not a brand badge — repeating it on every card or button would dilute it from logo to ornament. Future surfaces that need a brand signal (the OG image, the favicon, a future shareable PDF cover) inherit the mark from `Header.tsx`'s SVG via copy-paste; they do not import a shared component, because the mark is a *single instance*, not a reusable primitive.
+**Rule — where the wordmark appears.** Masthead only. `Header.tsx` is the single surface where the wordmark renders. Future surfaces that need a brand signal (OG image, favicon, share-page cover) inherit the typography via copy-paste; they do not import a shared component, because the wordmark is a *single instance*, not a reusable primitive.
 
-**Rule — where the mark must NOT appear.** Never in body content. Never inside a ProductCard, MessageBubble, ToolStatus line, or Shortlist lane. Never as a bullet, divider, or list marker. Never on the SummaryHero page (the hero's serif italic gist is the page's authorial moment; the mark would compete). Never animated — the mark is a static mark; if a future identity move needs motion, it goes through a §1.x amendment, not by adding `animate-spin` to this SVG.
+**Rule — where the wordmark must NOT appear.** Never in body content. Never inside a ProductCard, MessageBubble, ToolStatus line, or Shortlist lane. Never as a bullet, divider, or list marker. Never on the SummaryHero page — the hero's serif italic gist is the page's authorial moment; the wordmark would compete. Never animated. If a future identity move needs motion, it goes through a §1.x amendment, not by adding `animate-spin` to this `<p>`.
 
-**Rule — the mark and the wordmark are one logotype.** The mark is `aria-hidden`; the `<p>` carries `aria-label="Trove"` so screen readers and search engines see the brand name as text. The mark is decorative chrome that lives inside the same `<p>` as the word "Trove". A future refactor that moves the mark into its own `<span>` for layout flexibility is fine; a refactor that splits it into its own React component imported elsewhere violates the masthead-only rule.
+**Rule — color.** Wordmark is `text-ink-900`; the middle-dot is `text-ink-400`. Neither takes `accent-500`. Orange is the color of commitment (§2.2); the brand is not a commitment affordance. Future temptation: light the dot in orange to make it "pop". Resist. The dot must read as ink to keep §2.2 clean.
 
-**Rule — color.** The mark inherits `text-ink-900` from its parent `<p>`. It does NOT take `accent-500`. Orange is the color of commitment (§2.2); the brand mark is not a commitment affordance. Future temptation: light the finial dot in orange to make it "pop". Resist. The mark must read as ink to keep the §2.2 rule clean.
+**Rule — italic.** Upright only. Italic is *content voice* — reserved for the SummaryHero gist and the four §2.4 content homes. The wordmark is *brand voice*, which is upright. Reverting to italic (a Cycle-7 holdover, dropped 2026-05-15) requires a §1.x amendment.
 
-**Versioning.** This is v1 of the Trove identity. v2 candidates (deferred): a dual-color identity rule (a moss-green or ink-blue companion to orange at specific signature moments — see research §"Synthesis"), and a one-shot mount animation (a settle, a serif-tail elongation). v2 is unlocked by the user asking for "more identity, not different identity"; until then, the static mark is the brand.
+**Rejected directions (kill log).**
+
+- 2026-05-14 — *custom-cut "T" mark*. Asymmetric Didone T with a drawer-pull left serif extension and a finial dot on the tip. Reads as 2010-era e-commerce; the clever-clever is the opposite of a 2026 modern brand. Dropped same-day per user.
+- 2026-05-14 — *italic wordmark*. Italic is content voice; brand goes upright. Dropped 2026-05-15 as part of the cycle-9 reset.
+
+**Versioning.** This is v2 of the Trove identity (v1 was the styled string; v1.5 was the cut-T mark, killed). v3 candidates (deferred): a tiny non-letter mark in the bottom-right corner of the page as a sign-off — a 6×6px filled circle echoing the wordmark's dot. Never pre-pended to the wordmark; only as a corner-of-page brand exhale. Deferred to Cycle 10+ pending user signal that the dot alone is not enough.
 
 ---
 
@@ -38,14 +43,18 @@ Everything in this section either matches `tailwind.config.ts` today or is a sma
 
 | Token | Hex | Use |
 |---|---|---|
-| `ink-50` | `#f7f4ed` | Page background — paper-cream. Body uses this. |
-| `ink-100` | `#ededea` | Hairline dividers, skeleton fills, disabled chip background. |
-| `ink-200` | `#d6d6d1` | 1px borders on cards, input, chips. |
+| `ink-50` | `#e8e6e1` | Page background — **warm slate / muted putty**. Body uses this. |
+| `ink-100` | `#dad7d1` | Hairline dividers, skeleton fills, disabled chip background. |
+| `ink-200` | `#c4c1bb` | 1px borders on cards, input, chips. |
 | `ink-400` | `#8a8a85` | Secondary text, meta (merchant, timestamps, "Total" label). |
 | `ink-600` | `#3a3a37` | Body text on cards, expanded descriptions, hover on `ink-900` buttons. |
 | `ink-900` | `#101010` | Primary text, primary button fill. The "anchor" of the page. |
 
-**Cycle 7 (2026-05-14): `ink-50` shifted from `#fafaf9` (near-pure-white-cool) to `#f7f4ed` (paper-cream-warm).** The white-to-cream move is to give the white cards on the page enough contrast to read as "documents on parchment." For brand context, the Trove app's premise is curatorial — content sitting on a held surface — and the prior near-pure-white page bg flattened the entire canvas into one undifferentiated white mass. Cards stay `bg-white` (the contrast IS the point). Don't add card borders to amplify the effect further — §2.7 (shadow XOR border) still holds; the shadow retune in §2.7 carries the rest of the lift. The cream remains a single `ink-50` token — no separate `ink-cream`. The 4.5:1 body-text rule in §7 still holds with `ink-600 (#3a3a37)` on `ink-50 (#f7f4ed)` (calculated 9.6:1 — well above AA); `ink-400 (#8a8a85)` on the new cream computes 4.05:1 — still inside the §7 carve-out ("acceptable for `text-quiet` only at ≥12px"), with a hair less margin than before. Watch this on any text-quiet near 12px.
+**Cycle 9 (2026-05-15): `ink-50` shifted from `#f7f4ed` (paper-cream) to `#e8e6e1` (warm slate / muted putty).** Research file: `docs/research/2026-05-14-modern-color-glass.md`. The Cycle-7 cream read as 2024-editorial; modern (2026) reads as tinted-neutral + ambient color + glass surfaces over a ground that has real chroma. Cream gave the header glass nothing to refract — the blur was technically applied but visually inert. The slate is a real tint: warmer than gray, lighter than putty, dark enough that a `bg-white` card reads as a document on a held surface and that `backdrop-blur-xl` on the header has something to do. Cards stay `bg-white` (the contrast is the point — even more so against warm slate than cream). Cascade re-stepped: `ink-100` `#dad7d1` and `ink-200` `#c4c1bb` so dividers and borders still read above the new ground. **Do NOT add card borders to amplify the effect further** — §2.7 (shadow XOR border) still holds.
+
+**Contrast accounting (Cycle 9).** Body text `ink-600 #3a3a37` on `ink-50 #e8e6e1` computes ~8.4:1 — well above the §7 AA threshold of 4.5:1. `ink-400 #8a8a85` on the slate computes ~3.5:1 — that's BELOW the AA threshold for body text but still inside the §7 large-text / `text-quiet` carve-out at ≥12px. Watch this: if a future surface uses `text-ink-400` at <12px on the page ground, it fails AA — promote to `text-ink-600` or upgrade the size.
+
+**Cycle 7 history (2026-05-14, superseded).** Cycle 7 shifted `ink-50` from `#fafaf9` (near-pure-white-cool) to `#f7f4ed` (paper-cream-warm) to give cards a parchment ground. That direction was correct in motion (away from cool white) and wrong in destination (the warm canvas needed to be a real tint, not paper). The Cycle-9 slate is the correction.
 
 **Gaps to add** (justified): `ink-300` `#bcbcb6` for placeholder image fills and dragged-card scrim; `ink-700` `#2a2a27` for the rare midpoint between body copy and primary text (used in summary page only). Add only when first needed; do not pre-add.
 
@@ -101,13 +110,12 @@ Inter, weights `400 / 500 / 600 / 700`. Tracking default; no display-letter-spac
 2. The **summary page hero** (`text-3xl font-display italic` for the session's one-line gist, e.g. *"A quiet desk for a slow morning."*).
 3. The **section headers in the lookbook** (`text-2xl font-display` — "What you loved", "What you saved", "Merchants").
 4. The **CollageView caption overlay** when an item is hovered — the price floats in serif over the image's lower-left.
-5. The **ProfileMenu "About you" eyebrow** (`font-display text-xl italic text-ink-900`, added Cycle 7 — see amendment below). Sibling block "Default filters (optional)" in the same panel keeps its `text-[11px] uppercase tracking-wider` eyebrow; that block is utility, not authorial.
 
-Nowhere else. No serif in the chat stream. No serif on the buy button. No serif on settings-grade chrome (Default filters eyebrow, chip labels). The serif is *earned* by moments of authorial voice. The cap is now **five** content homes — not four, and not six. Adding a sixth requires a fresh §2.x amendment with an ADR.
+Nowhere else. No serif in the chat stream. No serif on the buy button. No serif on settings-grade chrome (Default filters eyebrow, chip labels, ProfileMenu eyebrow). The serif is *earned* by moments of authorial voice. The cap is **four** content homes — not three, and not five. Adding a fifth requires a fresh §2.x amendment with an ADR.
 
-**§2.4 amendment (Cycle 7, 2026-05-14): the LOGOTYPE carve-out.** The wordmark is a **logotype**, not a content serif home. The four enumerated homes above are *content* sites — moments where the app speaks with an authorial voice. A logotype is a brand mark. It does not compete with the content serif gift because the user reads it as identity ("Agentic Commerce"), not as voice ("a quiet desk for a slow morning"). Logotype is therefore granted as a **separate category** from the four content homes so brand can read in serif without inflating the serif-home count. Future engineers: when you reach for a sixth serif site, ask whether it is content (counts against the cap, requires a §2.x amendment) or logotype (does not). The wordmark in `Header.tsx` is the only logotype today and is therefore the only thing this carve-out covers.
+**§2.4 amendment (Cycle 7, 2026-05-14): the LOGOTYPE carve-out.** The wordmark is a **logotype**, not a content serif home. The four enumerated homes above are *content* sites — moments where the app speaks with an authorial voice. A logotype is a brand mark. It does not compete with the content serif gift because the user reads it as identity ("Trove"), not as voice ("a quiet desk for a slow morning"). Logotype is therefore granted as a **separate category** from the four content homes so brand can read in serif without inflating the serif-home count. The wordmark in `Header.tsx` is the only logotype today and is therefore the only thing this carve-out covers.
 
-**§2.4 amendment (Cycle 7, 2026-05-14): the PROFILEMENU eyebrow promotion (5th content home).** This is the *deliberate* expansion of the content cap from four to five — not a rule violation. The ProfileMenu / PreferencesCard panel is the single most authorial surface outside SummaryHero: it carries the first-person promise "I'll remember", and the user reaches it by tapping their own avatar — the most personal affordance in the header. A `text-[11px] uppercase tracking-wider` eyebrow read this panel as a Settings sheet; `font-display text-xl italic text-ink-900` reads it as a personal note. The italic specifically (we don't italicise the other four homes' eyebrows) carries the "promise, not category" voicing. The sibling `DefaultFiltersSection` in the same panel does NOT inherit this serif — that block is utility (numeric budget cap, shipping speed segmented control) and keeps the 11px uppercase eyebrow. **The cap is now five, not four.** Adding a sixth requires a fresh §2.x amendment with an ADR. Engineers reaching for a sixth: the bar is "is this the app speaking with authorial voice, or is this chrome?" — if the answer requires a paragraph of justification, it's chrome.
+**§2.4 amendment (Cycle 9, 2026-05-15): the ProfileMenu eyebrow promotion (Cycle 7) is REVERTED.** Cycle 7 promoted the ProfileMenu / PreferencesCard "About you" eyebrow from `text-[11px] uppercase tracking-wider text-ink-400` to `font-display text-xl italic text-ink-900`, expanding the content-serif cap from four to five. That move read the surface as "authorial promise" and was internally consistent with the Cycle-7 2024-editorial direction. The Cycle-9 reset shifted away from 2024-editorial toward 2026-modern (warm slate + ambient color + glass — see §2.1, §2.12, §2.13), which lowered the serif's role generally — the brand is now carried by the wordmark + middle-dot signature, not by a serif scattering through the chrome. The fifth home was part of the Cycle-7 inflation we are walking back. **The cap returns to four.** The ProfileMenu eyebrow is `text-[11px] uppercase tracking-wider text-ink-400` again. The sibling `DefaultFiltersSection` block already used that treatment and is unchanged. Engineers reaching for a fifth content home: the bar is "is this the app speaking with authorial voice, or is this chrome?" — if the answer requires a paragraph of justification, it's chrome.
 
 ### 2.5 Spacing scale
 
@@ -259,6 +267,45 @@ interface ZeroResultsBlockProps {
 - Filtered Shortlist tab (mobile) where the selected lane is empty but other lanes have items — the existing per-lane `emptyHint` text is the degenerate version of this block; in Cycle 7 promote it to use the same iconography (`SearchX` icon and `text-xs text-ink-400` copy at minimum).
 
 The single rule that ties §2.10 and §2.11: **never let a surface fall through to "nothing".** Loading shows a skeleton; missing shows a `ZeroResultsBlock`; the only state where the canvas is blank is the welcome screen, and that has its own composition (`SuggestionChips` starters).
+
+### 2.12 Glass surfaces
+
+Added 2026-05-15 (Cycle 9). The "warm slate + ember" direction adopts a single tier of glass on the app's floating chrome — the header. Glass is *functional and tiered*, never decorative; the rule is borrowed from Apple's Liquid Glass docs (iOS 26 / macOS Tahoe 26) and visionOS materials, which both warn against stacking translucent layers and reserve glass for surfaces that *float* over content (nav, popovers, sidebars), not for body cards. The single shipping tier in v1 is `surface-glass`, applied to `<Header />` only. Cards stay opaque white documents — the contrast (glass header above, opaque cards below) is the point.
+
+| Tier | Class | Use | Status |
+|---|---|---|---|
+| `surface-glass` | `bg-white/55 backdrop-blur-xl border-b border-white/40` | The sticky `<Header />` over the slate ground + ember radial. | **v1 — shipping.** |
+| `surface-glass-rail` | (concept) | Future shortlist rail / chat-history rail backdrop. | Deferred to v2. |
+| `surface-glass-scrim` | (concept) | Future modal / sheet scrim over the canvas. | Deferred to v2. |
+
+**Rules.**
+
+1. **One tier per surface.** A surface chooses `surface-glass` or it doesn't. There is no "lighter glass" or "heavier glass" mix-in.
+2. **Never glass-on-glass.** A glass surface cannot sit inside another glass surface. The header is a top-level sibling of `<main>`; future rails are top-level siblings of `<main>`. The cardinal sin per visionOS docs.
+3. **Glass on chrome, not body.** ProductCard, MessageBubble, OutfitBundle, SuggestionChips, Shortlist lane: all stay opaque. If a body surface adopts glass via cascade, that's a bug.
+4. **Color sits underneath, not on top.** The header glass is near-neutral white at 55% alpha. The orange tint we want comes from the ember radial *behind* the glass (§2.13), refracted through the blur. Tinting the glass itself violates the rule.
+5. **Contrast on glass.** Wordmark `text-ink-900` and action-row buttons `text-ink-900` on `bg-white/55` over the slate ground compute ≥7:1 — AAA. Verified at both 1280 and 360 viewports.
+
+Glass effect is rendered via `backdrop-filter: blur(...)`. Headless Chromium may not paint the blur in screenshots without compositor flags; the *computed style* is the deterministic check, which the §verification spec asserts.
+
+### 2.13 Ambient color (the `ember-glow` radial)
+
+Added 2026-05-15 (Cycle 9). The orange `accent-500 #ff6a13` remains a **commitment-only** fill color (Buy CTA, Save Outfit) per §2.2 — that rule survives. This section adds a parallel, atmospheric use of the same hue: a single radial gradient, mounted once at the root layout, painting `rgba(255,106,19,0.10)` in the top-right of the viewport behind everything else. **Atmosphere, not action.** The user sees orange as a quiet warmth on the canvas; they do not read it as an affordance because it has no shape, no edge, and no interaction.
+
+The radial is the answer to "where does color live in a 2026-modern interface?" The references converge on the same pattern (research file §3): ambient color, not fill color. Apple's content-through-glass, Framer's gradient blobs, Spotify's extracted gradient. Pure-cream gave glass nothing to do; the ember gives the header's `backdrop-blur-xl` something to refract.
+
+**Implementation.**
+
+- Fixed-position `<div class="ember-glow" aria-hidden />` mounted as the first child of `<body>` in `app/layout.tsx`. One instance, every page (chat shell, summary page, share page).
+- Size: 60vw × 60vh, capped at 720px × 720px. Anchored via `inset: -8rem -8rem auto auto` so the radial bleeds off the top-right edge and we never see the gradient's outer hard cutoff.
+- Fill: `radial-gradient(closest-side, rgba(255,106,19,0.10), transparent 70%)` + `filter: blur(60px)` for the soft edge.
+- `z-index: 0; pointer-events: none`. The header (z:20) and InputBar (z:10) layer above it.
+- Motion: 8s `ember-drift` keyframe, transform-only (translate3d), `will-change: transform`. GPU compositor; never touches layout/paint. Travel is 12px — sub-perceptual; you'd notice if it stopped, not when it starts.
+- Reduced motion: `@media (prefers-reduced-motion: reduce)` cancels the animation; the radial stays still.
+
+**Rule — the ember is not a brand color extension.** Resist the urge to tint cards, dividers, or chips orange "to echo" the ember. The ember is the only ambient surface; orange anywhere else is still §2.2 commerce-intent. Future temptation: pull the ember tint into a card header for a "warm" callout — don't. The §2.2 rule and the §2.13 atmosphere read live in parallel and must stay separable; mixing them kills both.
+
+**Rule — only one ambient surface.** Adding a second radial (a green one in the bottom-left, a violet one mid-canvas) compounds into Framer-style dark-canvas aesthetic and reads as "decorative AI gradient." Trove's atmospheric color is a *single* warm note, not a chord. Adding a second requires a §2.x amendment with an ADR.
 
 ---
 

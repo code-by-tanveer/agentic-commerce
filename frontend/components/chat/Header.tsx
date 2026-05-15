@@ -10,32 +10,35 @@ import { ChatHistoryMenu } from './ChatHistoryMenu';
 import { ShareButton } from './ShareButton';
 import { ViewToggle } from './ViewToggle';
 
-// Wordmark renders in Instrument Serif (`font-display`) — Cycle 7 Move 2.
-// The cycle-4 revert to `font-sans` over a "fifth serif home" concern was a
-// misread of DESIGN.md §2.4: the four enumerated homes are *content* serif
-// sites (ProductCard total, SummaryHero gist, SummaryProductList headers,
-// CollageView hover). A wordmark is a LOGOTYPE — a brand mark, not body
-// content — and the §2.4 amendment in Cycle 7 carves logotype out as a
-// separate category. The serif masthead is the single biggest reason the
-// app reads "magazine" instead of "app", per the 2026-05-14 elevation pass.
-// No italic: italic is reserved for the SummaryHero gist. Mobile narrows
-// to `text-xl` below the 380px breakpoint so the wordmark stays on one
-// line in the 360px viewport without competing with the action row.
+// Wordmark renders in Instrument Serif (`font-display`) — upright, no
+// italic, no custom glyph. The single signature is a trailing middle-dot
+// (`·` / U+00B7), sized at ~0.85em and rendered in `text-ink-400` so it
+// reads as deliberate punctuation rather than a stray full-stop. The MR
+// PORTER move adapted: a single piece of typographic punctuation converts
+// the styled string into a brand mark.
 //
-// §1.1 BRAND IDENTITY (2026-05-14) — the wordmark gained a *mark*. A
-// custom-cut "T" sits LEFT of the wordmark, drawn from the Instrument
-// Serif italic skeleton but with a deliberate identity alteration: the
-// TOP-LEFT serif extends past the vertical stroke as a drawer-pull /
-// tag-handle terminal, and the tip carries a tiny circular finial — the
-// "trove" signature (a held thing, a thing you pull open, a clasp on a
-// box of valuables). This is the MR PORTER full-stop equivalent: one
-// piece of typographic punctuation that converts a styled string into
-// a brand mark. The mark is rendered inline as an SVG (no asset file,
-// no FOUT risk — it ships with the JS bundle) and is sized in `em` so
-// it tracks the wordmark's responsive `text-xl` / `text-3xl` shift
-// without a second media query. The mark is masthead-only — never in
-// body content, never in the summary page hero, never as a favicon
-// stand-in. See DESIGN.md §1.1 for the full identity rule.
+// History notes (so the next engineer doesn't re-litigate this):
+//   - Cycle 7 (2026-05-14) shipped a custom-cut "T" mark left of the
+//     wordmark (drawer-pull serif + finial dot). User rejected same-day:
+//     "trove T sign looks straight bad". The SVG was removed.
+//   - Cycle 7 also italicised the wordmark. The italic is also dropped:
+//     italic is *content voice* (reserved for the SummaryHero gist), not
+//     brand voice.
+//   - Cycle 9 (2026-05-15) — research direction "warm slate + ember"
+//     approved. The middle-dot suffix is the brand mark; no SVG, no
+//     custom glyph. See DESIGN.md §1.1 and the research file
+//     `docs/research/2026-05-14-modern-color-glass.md`.
+//
+// The wordmark is a logotype (§2.4 carve-out) — it doesn't count against
+// the four content-serif homes. Mobile narrows to `text-xl` below 380px
+// so the wordmark stays on one line in the 360px viewport without
+// competing with the action row.
+//
+// CHROME — Cycle 9 (2026-05-15). The header surface is `surface-glass`
+// (`bg-white/55 backdrop-blur-xl border-b border-white/40`), the only
+// glass tier shipped in v1. See DESIGN.md §2.12. The slate ground + the
+// ember radial behind it (mounted in `layout.tsx`) is what makes the
+// blur read — on the prior cream canvas the glass had nothing to refract.
 export function Header() {
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
@@ -52,30 +55,20 @@ export function Header() {
   const canShare = badge > 0 && !!sessionId;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-ink-100 bg-ink-50/80 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-white/40 bg-white/55 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
-          {/* Wordmark + identity mark — Instrument Serif (`font-display`),
-              per Cycle 7 Move 2 / §2.4 logotype carve-out and §1.1 brand
-              identity. The mark (inline SVG, `aria-hidden`) sits LEFT of
-              the wordmark and is sized in `em` so it tracks the responsive
-              `text-xl` ↔ `text-3xl` shift; `flex items-baseline` aligns the
-              mark's optical baseline to the wordmark's. The mark is a
-              custom-cut "T" with a drawer-pull terminal serif extending
-              left past the vertical stroke, and a finial dot on the tip —
-              the "trove" signature (held thing / clasp on a box). The
-              <p> reads "Trove" as text so screen readers and search engines
-              see the brand name (the mark is decorative chrome). */}
-          {/* 2026-05-14: dropped the cut-T mark per user feedback ("trove
-              T sign looks straight bad"). Reverted to plain serif wordmark
-              while a fresh research+design pass works on a proper modern
-              identity (glass / color direction). Don't ship custom marks
-              unless they pass a real eyes-on bar. */}
+          {/* Wordmark — upright Instrument Serif (`font-display`), no
+              italic, no custom mark. The `·` middle-dot suffix (U+00B7)
+              is the brand signature — rendered in `text-ink-400` at ~0.85em
+              so it reads as deliberate punctuation. `aria-label="Trove"`
+              keeps assistive tech on the brand name; the dot is
+              `aria-hidden`. See DESIGN.md §1.1. */}
           <p
             aria-label="Trove"
-            className="font-display text-xl italic tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-3xl"
+            className="font-display text-xl tracking-tight leading-none whitespace-nowrap text-ink-900 min-[380px]:text-3xl"
           >
-            Trove
+            Trove<span className="text-ink-400" aria-hidden>·</span>
           </p>
         </div>
 

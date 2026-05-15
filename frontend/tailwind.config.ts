@@ -17,13 +17,18 @@ const config: Config = {
       },
       colors: {
         ink: {
-          // Cycle 7 (2026-05-14): retuned from #f7f7f5 (near-pure-white-cool)
-          // to #f7f4ed (paper-cream-warm). The shift gives the white cards
-          // on the page enough contrast to read as "documents on parchment".
-          // Single token — no separate `ink-cream`. See DESIGN.md §2.1.
-          50: '#f7f4ed',
-          100: '#ededea',
-          200: '#d6d6d1',
+          // Cycle 9 (2026-05-15): the cream `#f7f4ed` ground gave glass
+          // nothing to refract — see `docs/research/2026-05-14-modern-color-glass.md`.
+          // Retuned to `#e8e6e1` (warm slate / muted putty). The shift gives
+          // the header glass a tinted ground to blur, and lets `accent-500`
+          // sit as ambient color (the ember radial in `globals.css`) over a
+          // canvas with real chroma instead of paper. Cards stay white —
+          // the white-card / slate-page contrast is the document-on-table
+          // read. `ink-100` and `ink-200` re-stepped so the cascade stays
+          // coherent (dividers/borders still read above the new ground).
+          50: '#e8e6e1',
+          100: '#dad7d1',
+          200: '#c4c1bb',
           400: '#8a8a85',
           600: '#3a3a37',
           900: '#101010',
