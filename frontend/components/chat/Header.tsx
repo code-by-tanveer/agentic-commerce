@@ -34,11 +34,18 @@ import { ViewToggle } from './ViewToggle';
 // so the wordmark stays on one line in the 360px viewport without
 // competing with the action row.
 //
-// CHROME — Cycle 9 (2026-05-15). The header surface is `surface-glass`
-// (`bg-white/55 backdrop-blur-xl border-b border-white/40`), the only
-// glass tier shipped in v1. See DESIGN.md §2.12. The slate ground + the
-// ember radial behind it (mounted in `layout.tsx`) is what makes the
-// blur read — on the prior cream canvas the glass had nothing to refract.
+// CHROME — Cycle 10 (2026-05-15 night). Header surface is now
+// `.surface-glass-header` — the strongest glass tier (40px blur, 1.6
+// saturate, ~42% white tint, white inner border at 45%). The chromatic
+// page gradient (`globals.css :root --page-gradient`: indigo → fuchsia →
+// coral) gives the blur something rich to refract; the header reads as a
+// hazier, lighter strip across the top of the saturated ground. The
+// Liquid Dawn composition uses glass on three surfaces (header, rail,
+// InputBar) over the gradient — see DESIGN.md §2.15. Cards are tinted
+// glass too (`.surface-glass-card`), so the contrast is glass-tier
+// (header, strongest) vs glass-surface (cards, mid) vs glass-chrome
+// (rail/input, lightest). Apple's "no glass-on-glass" rule survives — the
+// surfaces never stack vertically on each other.
 export function Header() {
   const { sessionId } = useSession();
   const { shortlist, isOpen: shortlistOpen, toggleDrawer } = useShortlist();
@@ -55,7 +62,7 @@ export function Header() {
   const canShare = badge > 0 && !!sessionId;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-[color:var(--surface-glass-border)] bg-[color:var(--surface-glass-tint)] backdrop-blur-xl">
+    <header className="surface-glass-header sticky top-0 z-20">
       <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
         <div className="leading-tight">
           {/* Wordmark — upright Instrument Serif (`font-display`), no

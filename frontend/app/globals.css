@@ -3,117 +3,108 @@
 @tailwind utilities;
 
 /* 2026-05-14: removed `@import url('https://fonts.googleapis.com/...')`.
-   That import was render-blocking (CSS @import blocks first paint until
-   the stylesheet resolves), AND it duplicated next/font's loading in
-   layout.tsx — every cold visit was paying for the same font twice.
-   next/font now owns font loading; this file no longer touches it. */
+   That import was render-blocking. next/font now owns font loading; this
+   file no longer touches it. */
 
 /* ---------------------------------------------------------------------------
- * Theme tokens — Cycle 9.2 (2026-05-15)
+ * Theme tokens — Cycle 10 (2026-05-15 night) — "Liquid Dawn"
  *
- * Two palettes — `light` (cool slate-blue) and `dark` (deep charcoal) —
- * expressed as CSS custom properties on `<html data-theme="...">`. The
- * Tailwind `ink-*` and a new `surface`/`text`/`border` semantic group
- * (see tailwind.config.ts) bind to these vars, so every existing component
- * `bg-ink-50`/`text-ink-900`/etc. flips with the data-theme attribute —
- * zero per-component rewrites. The accent (`accent-500 #ff6a13`) is the
- * brand commerce signal and stays identical across themes; the ember-glow
- * alpha bumps a touch in dark mode so the orange survives the deeper
- * ground (see `.ember-glow` below).
+ * ONE palette, no `[data-theme]` switching. The previous cycle (9.2) shipped
+ * a 3-state System/Light/Dark picker; user feedback was that the picker
+ * solved the wrong problem ("you made the cards white and black, I was
+ * talking about overall theme"). Cycle 10 collapses to ONE opinionated
+ * 2026 composition: chromatic page gradient + tinted-glass cards + glass
+ * rail + glass input bar. See `docs/research/2026-05-15-decisive-modern.md`
+ * and DESIGN.md §2.15.
  *
- * `:root` carries the LIGHT palette as the default so SSR doesn't flash —
- * the inline script in `app/layout.tsx` writes `data-theme` synchronously
- * before React hydrates, so on a dark-mode user's machine the dark vars
- * take over before first paint. See DESIGN.md §2.14.
+ * Reference: Apple iOS 26 / macOS Tahoe 26 Liquid Glass, Daydream iOS 26
+ * shopping app, 2026 glassmorphism best-practices (vibrant color *behind*
+ * the glass is mandatory for the blur to read).
+ *
+ * The accent (`accent-500 #ff6a13`) is the commitment color and survives
+ * untouched per §2.2. Body text on tinted-glass cards holds AAA contrast
+ * against every region of the gradient (≥8.5:1 worst case at the indigo
+ * end). See research file §5 for the contrast accounting.
  * ------------------------------------------------------------------------- */
 
-:root,
-[data-theme="light"] {
+:root {
   color-scheme: light;
-  --surface-page: #b8c1c8;           /* cool slate-blue ground */
-  --surface-card: #ffffff;           /* white cards on cool slate */
-  --surface-rail: #aab4bc;           /* deeper than ground for chat-history rail */
-  --surface-glass-tint: rgba(255, 255, 255, 0.55);   /* header glass */
-  --surface-glass-border: rgba(255, 255, 255, 0.40);
-  --text-primary: #101010;
-  --text-secondary: #3a3a37;
-  --text-tertiary: #5e5d58;
-  --border-subtle: #9aa5af;          /* slightly darker than the ground */
-  --border-strong: #7c8893;
+
+  /* Chromatic page ground — three-stop linear from deep indigo (top-left)
+   * through fuchsia to coral (bottom-right). Apple Tahoe "sunrise" lineage.
+   * The gradient covers the whole viewport including under the sticky
+   * InputBar so glass surfaces always have color to refract. */
+  --page-gradient:
+    linear-gradient(
+      135deg,
+      #3b2a8f 0%,
+      #6a3aa0 22%,
+      #a23ea0 48%,
+      #d6588a 72%,
+      #ff8a5b 100%
+    );
+
+  /* Ink tokens — semantic role unchanged from prior cycles, single
+   * resolved value (no theme switching). Body text stays near-black so
+   * AAA holds across every region of the gradient through the 72%-white
+   * tinted-glass card surface (worst-case ≈8.5:1 against the indigo
+   * region; ≈17:1 against coral). */
+  --text-primary:   #101010;   /* near-black body */
+  --text-secondary: #2a2a2a;   /* slightly lifted body */
+  --text-tertiary:  #4a4a4a;   /* meta / captions — stays AA on white-72 */
+  --border-subtle:  rgba(16, 16, 16, 0.08);
+  --border-strong:  rgba(16, 16, 16, 0.16);
+
+  /* Card surface — TINTED GLASS, not opaque white. The 72% white over the
+   * chromatic gradient is the load-bearing decision: high enough for AAA
+   * body-text contrast against the darkest indigo region, low enough that
+   * the gradient bleeds through the edges so the card reads as glass.
+   * `backdrop-filter: saturate(1.5) blur(20px)` pulls the gradient's
+   * chroma through the frost. */
+  --surface-card-rgba:   rgba(255, 255, 255, 0.72);
+  --surface-card-border: rgba(255, 255, 255, 0.55);
+
+  /* Rail / InputBar — slightly more transparent because they're larger
+   * structural surfaces (sidebar + sticky footer). Glass on glass is
+   * avoided per Apple's Liquid Glass docs; the rail and input never
+   * overlap each other or the cards. */
+  --surface-rail-rgba:   rgba(255, 255, 255, 0.45);
+  --surface-rail-border: rgba(255, 255, 255, 0.30);
+  --surface-input-rgba:  rgba(255, 255, 255, 0.55);
+
+  /* Header glass — the most prominent glass surface; sits over the top
+   * of the gradient where the indigo is densest. Slightly heavier alpha
+   * and a stronger inner border so the chrome reads as one tier even on
+   * the deepest region. */
+  --surface-glass-tint:   rgba(255, 255, 255, 0.42);
+  --surface-glass-border: rgba(255, 255, 255, 0.45);
+
+  /* Ember atmosphere — kept from §2.13. The radial now reinforces the
+   * gradient's coral terminus rather than fighting a neutral ground; the
+   * 0.14 alpha is unchanged because the underlying coral already carries
+   * the warmth and pushing higher would tip into "decorative AI gradient". */
   --ember-alpha: 0.14;
 }
 
-[data-theme="dark"] {
-  color-scheme: dark;
-  --surface-page: #1c1c1e;           /* Apple iOS-26 dark surface */
-  --surface-card: #2a2a2c;           /* raised dark card */
-  --surface-rail: #242426;
-  --surface-glass-tint: rgba(40, 40, 42, 0.55);      /* smoked dark glass */
-  --surface-glass-border: rgba(255, 255, 255, 0.08); /* very subtle white edge */
-  --text-primary: #f5f5f4;           /* high-contrast off-white */
-  --text-secondary: #bbbbb8;
-  --text-tertiary: #878684;
-  --border-subtle: #3a3a3c;
-  --border-strong: #5a5a5c;
-  /* Orange against the dark ground reads dimmer; bump alpha so the
-   * ember still registers without crossing into "decorative gradient". */
-  --ember-alpha: 0.20;
-}
-
-/* Dark-mode legibility fix for the `bg-ink-900 text-white` anchor button
- * pattern. In dark mode `ink-900` maps to `--text-primary` `#f5f5f4`
- * (off-white) — so the standard "primary action" pill (New chat, Send,
- * Pair-with, summary CTA) becomes light-on-light and reads as washed
- * out. The semantic of the anchor button is "the highest-contrast
- * affordance on the page" — that role wants to invert in dark mode:
- * the button stays light, but the text inside flips to dark for
- * readability. We override `text-white` ONLY when it's a sibling of a
- * `bg-ink-900` element via a structural selector, so accent-500 buttons
- * (Buy CTA — orange + white text) stay untouched. */
-[data-theme="dark"] .bg-ink-900.text-white,
-[data-theme="dark"] .bg-ink-900 .text-white {
-  color: var(--surface-page);
-}
-
-/* OutfitBundle / discount-reasoning-chip frame override in dark mode.
- * `accent-50 #fff4ec` is a warm cream that reads gracefully on the cool
- * slate light ground; on `#1c1c1e` it would punch as a near-white panel
- * and shatter the dark-mode contract. We override the bg color (only —
- * the orange `accent-500` glyph/border tokens stay identical) to a deep
- * warm-tinged surface so the bundle still reads as "one coordinated
- * object" without dominating the canvas. DESIGN.md §2.14. */
-[data-theme="dark"] .bg-accent-50 {
-  background-color: #2e251f;
-}
-
+/* The body paints the chromatic gradient. `min-height: 100dvh` so the
+ * gradient survives short pages (welcome state) without the bottom edge
+ * showing through. `background-attachment: fixed` keeps the gradient
+ * stable as content scrolls underneath — Liquid Glass surfaces above
+ * refract the *same* color regardless of scroll position, which is the
+ * platform contract. */
 html, body {
-  /* Mirrors `--surface-page` / `ink-50` in `tailwind.config.ts`. The body
-     paints the ground via CSS var so the html/body itself flips with the
-     theme — without a hardcoded fallback the page would flash white on
-     initial load on the few platforms that strip the inline theme script.
-     The pre-hydration script in `layout.tsx` sets `data-theme` before
-     paint; this var resolves against that attribute. */
-  background: var(--surface-page);
+  background: var(--page-gradient);
+  background-attachment: fixed;
+  background-size: cover;
   color: var(--text-primary);
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Cycle 9 (2026-05-15) — the `ember-glow` ambient radial.
- *
- * One fixed div, mounted once at the root layout, sits behind every page
- * (`z-index: 0` + `pointer-events: none`). Paints a soft top-right radial
- * of `accent-500` at `--ember-alpha` (14% light, 20% dark). The orange
- * remains a commitment-only fill color (Buy / Save Outfit CTAs); this is
- * *atmosphere*, not action — see DESIGN.md §2.13. The light-mode 14% alpha
- * is the Cycle-9.1 baseline; dark mode bumps to 20% because the deeper
- * ground absorbs the warm radial more aggressively.
- *
- * Motion: an 8s transform-only drift. translate3d() promotes the element
- * to its own compositor layer so the animation runs on the GPU and never
- * touches the main-thread layout or paint pipelines. `will-change: transform`
- * is the hint that lets the browser keep the layer warm. The travel is
- * 12px — sub-perceptual; you'd notice if it stopped, not when it starts.
- */
+/* Cycle 9 (2026-05-15) — the `ember-glow` ambient radial. Survives Cycle
+ * 10 unchanged in role: it's the warm pull anchor in the top-right. Now
+ * it reinforces the gradient's coral terminus instead of fighting a
+ * neutral ground. Same 8s drift, same will-change layer promotion. */
 @keyframes ember-drift {
   0%   { transform: translate3d(0, 0, 0); }
   50%  { transform: translate3d(-12px, 8px, 0); }
@@ -138,20 +129,82 @@ html, body {
 }
 
 @layer utilities {
-  /* `bg-card` — the only semantic surface utility introduced for the theme
-     system. Components that previously hardcoded `bg-white` for card
-     surfaces (ProductCard, MessageBubble, OutfitBundle, Shortlist drawer,
-     Header floating pill, etc.) switch to `bg-card` so the card surface
-     flips between `#ffffff` (light) and `#2a2a2c` (dark) automatically.
-     `bg-white` continues to mean literal white for foreground glyphs
-     (e.g. `text-white` on the ink-900 button); only background-of-paper
-     usage moved. See DESIGN.md §2.14. */
-  .bg-card { background-color: var(--surface-card); }
-  .hover\:bg-card:hover { background-color: var(--surface-card); }
-  .bg-card\/90 { background-color: color-mix(in srgb, var(--surface-card) 90%, transparent); }
-  .bg-card\/60 { background-color: color-mix(in srgb, var(--surface-card) 60%, transparent); }
-  .bg-card\/50 { background-color: color-mix(in srgb, var(--surface-card) 50%, transparent); }
-  .hover\:bg-card\/60:hover { background-color: color-mix(in srgb, var(--surface-card) 60%, transparent); }
+  /* `bg-card` — bound to the tinted-glass surface. Components that wrote
+   * `bg-card` for the card surface (ProductCard, MessageBubble,
+   * OutfitBundle, Shortlist drawer, etc.) now resolve to the glass tint
+   * automatically. The `backdrop-filter` is applied via the dedicated
+   * `.surface-glass-card` class below for full glass treatment; `bg-card`
+   * alone is the fallback when a surface wants the tint but not the blur
+   * (e.g. inline pill backgrounds where blur would over-spend). */
+  .bg-card { background-color: var(--surface-card-rgba); }
+  .hover\:bg-card:hover { background-color: var(--surface-card-rgba); }
+  .bg-card\/90 { background-color: color-mix(in srgb, var(--surface-card-rgba) 90%, transparent); }
+  .bg-card\/60 { background-color: color-mix(in srgb, var(--surface-card-rgba) 60%, transparent); }
+  .bg-card\/50 { background-color: color-mix(in srgb, var(--surface-card-rgba) 50%, transparent); }
+  .hover\:bg-card\/60:hover { background-color: color-mix(in srgb, var(--surface-card-rgba) 60%, transparent); }
+
+  /* `.surface-glass-card` — the structural card surface. Tinted-white
+   * over the gradient + backdrop-filter blur + saturate boost to pull
+   * the underlying chroma through the frost + 1px inner-white border
+   * for the glass edge. The `box-shadow` is the same layered
+   * paper-shadow from Cycle 7 (§2.7) — preserves the shadow XOR border
+   * rule because the border is on the *glass* (a defining property of
+   * glassmorphism per the 2026 best practices), not a competing
+   * elevation hairline. */
+  .surface-glass-card {
+    background-color: var(--surface-card-rgba);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid var(--surface-card-border);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.45) inset,
+      0 4px 12px -4px rgba(16, 16, 16, 0.10),
+      0 16px 40px -12px rgba(16, 16, 16, 0.18);
+  }
+  /* Lift state — slightly stronger shadow on hover. The 1px inner-white
+   * highlight on top is what gives the glass its specular "wet" edge
+   * (mirrors Apple's Liquid Glass specular treatment). */
+  .surface-glass-card:hover,
+  .hover\:surface-glass-card-lift:hover {
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.55) inset,
+      0 6px 16px -4px rgba(16, 16, 16, 0.14),
+      0 24px 48px -12px rgba(16, 16, 16, 0.22);
+  }
+
+  /* `.surface-glass-rail` — sidebar treatment. Lighter alpha than the
+   * card because the rail is a larger structural surface; the right-edge
+   * border (1px white at 30%) is the glass edge. */
+  .surface-glass-rail {
+    background-color: var(--surface-rail-rgba);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-right: 1px solid var(--surface-rail-border);
+  }
+
+  /* `.surface-glass-input` — sticky InputBar surface. Border-top is the
+   * glass edge. Heavier alpha than the rail because the InputBar needs
+   * to hold the textarea text legibly without the gradient bleeding
+   * through into the placeholder area. */
+  .surface-glass-input {
+    background-color: var(--surface-input-rgba);
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border-top: 1px solid var(--surface-rail-border);
+  }
+
+  /* `.surface-glass-header` — header chrome. The most-prominent glass
+   * surface in the app; sits over the indigo region where the gradient
+   * is densest, so the backdrop-blur visibly bends color into a lighter,
+   * hazier strip across the top. `backdrop-blur-2xl` (Tailwind = 40px)
+   * is the strongest blur tier we use; reserved for the chrome that
+   * announces the app's identity on every page. */
+  .surface-glass-header {
+    background-color: var(--surface-glass-tint);
+    backdrop-filter: blur(40px) saturate(1.6);
+    -webkit-backdrop-filter: blur(40px) saturate(1.6);
+    border-bottom: 1px solid var(--surface-glass-border);
+  }
 
   .grain {
     position: relative;
@@ -161,11 +214,11 @@ html, body {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.035;
-    mix-blend-mode: multiply;
+    opacity: 0.025;
+    mix-blend-mode: overlay;
     background-image:
-      radial-gradient(rgba(16, 16, 16, 1) 1px, transparent 1px),
-      radial-gradient(rgba(16, 16, 16, 1) 1px, transparent 1px);
+      radial-gradient(rgba(255, 255, 255, 1) 1px, transparent 1px),
+      radial-gradient(rgba(0, 0, 0, 1) 1px, transparent 1px);
     background-size: 3px 3px, 7px 7px;
     background-position: 0 0, 1px 2px;
   }
@@ -173,11 +226,10 @@ html, body {
     width: 8px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(16, 16, 16, 0.12);
+    background: rgba(16, 16, 16, 0.18);
     border-radius: 999px;
   }
-  /* AI typing indicator — three dots pulsing in sequence. Pure CSS so it
-     runs on the compositor thread (no React reconcile per frame). */
+  /* AI typing indicator — three dots pulsing in sequence. Compositor-only. */
   @keyframes tool-dot-pulse {
     0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
     30% { opacity: 1; transform: translateY(-1px); }

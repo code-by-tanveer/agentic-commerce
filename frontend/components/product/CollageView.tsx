@@ -202,9 +202,11 @@ function CollageCard({ product, index }: CardProps) {
       onKeyDown={onKeyDown}
       aria-label={`${product.title}, ${formatMoney(price, currency, locale)} from ${product.merchant}`}
       className={cn(
-        // §2.7: shadow XOR border. Shadow alone here.
-        'group relative overflow-hidden rounded-2xl bg-card shadow-soft transition hover:shadow-lift',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
+        // Cycle 10 — tinted-glass collage card. The `.surface-glass-card`
+        // utility carries the layered shadow + inner-white specular edge,
+        // replacing the prior `shadow-soft hover:shadow-lift` pair.
+        'group surface-glass-card relative overflow-hidden rounded-2xl transition',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white/40',
       )}
     >
       {/* aria-live region — announces lane assignment for keyboard users

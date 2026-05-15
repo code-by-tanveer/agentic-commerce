@@ -8,50 +8,43 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // CSS-var first so next/font's loader controls the font face (display:
-        // swap, subset narrowing, hash-stable filenames). Georgia / Times stay
-        // as the cascade fallback for the brief moment before next/font hands
-        // back the buffer — see `app/layout.tsx` for the next/font wiring.
         sans: ['var(--font-sans)', '"Inter"', 'system-ui', 'sans-serif'],
         display: ['var(--font-display)', '"Instrument Serif"', 'Georgia', 'serif'],
       },
       colors: {
         ink: {
-          // Cycle 9.2 (2026-05-15 PM) — the `ink-*` palette is now bound to
-          // CSS custom properties so it flips between the light cool-slate
-          // and dark deep-charcoal themes per `<html data-theme>`. The
-          // literal hex history is preserved in DESIGN.md §2.1 and §2.14.
-          // Components that wrote `bg-ink-50` / `text-ink-900` / etc. don't
-          // change; the resolved color flips at the variable layer.
+          // Cycle 10 (2026-05-15 night) — single palette, no theme switching.
+          // The Cycle 9.2 `[data-theme]`/CSS-var swap is collapsed to ONE
+          // resolved set: the body paints a chromatic gradient (see
+          // `globals.css :root --page-gradient`) and the ink tokens carry
+          // the text + border roles ONLY. `ink-50` is no longer the "page
+          // background" — the page ground is the gradient. We keep
+          // `ink-50` mapped to a near-white that's only used as a CHIP
+          // background (Add picker, segmented control) — anywhere else
+          // that wrote `bg-ink-50` for a "page" surface needs to be
+          // audited; the chip use-sites are fine on a glass card because
+          // they pop slightly cooler than the card tint.
           //
-          // Mapping (see globals.css `:root` + `[data-theme="dark"]`):
-          //   ink-50  → --surface-page    (page bg)
-          //   ink-100 → --border-subtle   (hairlines / skeletons)
-          //   ink-200 → --border-strong   (card / input borders)
-          //   ink-400 → --text-tertiary   (meta, captions)
-          //   ink-600 → --text-secondary  (body)
-          //   ink-900 → --text-primary    (anchor)
-          //
-          // Cycle 9.1 history: literal `#c9c4ba` / `#bdb8af` / `#a8a39a` /
-          // `#5e5d58` / `#3a3a37` / `#101010` shipped warm-taupe. Cycle 9.2
-          // shifts the LIGHT palette to a cool slate-blue (`#b8c1c8`) per
-          // user direction and adds a dark mode.
-          50: 'var(--surface-page)',
-          100: 'var(--border-subtle)',
-          200: 'var(--border-strong)',
+          // History: Cycle 9.1 was `#c9c4ba` warm taupe; Cycle 9.2 was
+          // `var(--surface-page) #b8c1c8` cool slate (with a dark twin).
+          // Cycle 10 cuts both — ink-50 is a chip surface, not a page.
+          50:  '#f3f1ee',
+          100: 'var(--border-subtle)',  // hairlines / chip skeletons
+          200: 'var(--border-strong)',  // card / input borders
           400: 'var(--text-tertiary)',
           600: 'var(--text-secondary)',
           900: 'var(--text-primary)',
         },
-        // New semantic group introduced 2026-05-15 PM (Cycle 9.2). Use
-        // `bg-surface-card` / `bg-surface-rail` / `text-text-primary` in
-        // new code. Existing `ink-*` continues to work; the surface group
-        // is the named layer for component authors who want explicit
-        // semantic intent (a "card" vs "page" surface).
+        // Cycle 9.2 introduced the `surface-*` semantic group. Cycle 10
+        // keeps the names but flattens to single resolved values; the
+        // surface-card now resolves to the tinted-glass alpha (see
+        // `--surface-card-rgba` in globals.css), and surface-rail resolves
+        // to its sibling. Components prefer the `.surface-glass-*` utility
+        // classes for the full glass treatment (blur + saturate + border);
+        // these tokens are the fallback when only the tint is needed.
         surface: {
-          page: 'var(--surface-page)',
-          card: 'var(--surface-card)',
-          rail: 'var(--surface-rail)',
+          card: 'var(--surface-card-rgba)',
+          rail: 'var(--surface-rail-rgba)',
         },
         text: {
           primary: 'var(--text-primary)',
@@ -63,8 +56,8 @@ const config: Config = {
           strong: 'var(--border-strong)',
         },
         accent: {
-          // Accent stays brand-stable across themes — orange is the
-          // commerce-intent signal (§2.2). Same hex, light and dark.
+          // Accent stays brand-stable — orange is the commerce-intent
+          // signal (§2.2). Unchanged through every cycle.
           50: '#fff4ec',
           200: '#ffd4b8',
           500: '#ff6a13',
@@ -72,15 +65,16 @@ const config: Config = {
         },
       },
       boxShadow: {
-        // Cycle 7 (2026-05-14): `soft` retuned for the paper-on-parchment
-        // paradigm — the cream page bg needs a slightly heavier card shadow
-        // for the document-on-parchment read. Layered: a tight contact
-        // shadow + a broader 12px-blur lift. Still shadow-only — §2.7
-        // (shadow XOR border) is preserved; do NOT add a 1px border to
-        // cards to "amp it up further".
-        soft: '0 4px 12px -4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
-        lift: '0 2px 4px rgba(16,16,16,0.06), 0 16px 40px -12px rgba(16,16,16,0.14)',
-        glow: '0 0 0 6px rgba(255,106,19,0.12), 0 8px 24px -8px rgba(255,106,19,0.45)',
+        // Cycle 10 (2026-05-15 night): `soft` retuned for tinted-glass
+        // cards on a chromatic ground. Slightly deeper contact + a stronger
+        // lift shadow because the gradient ground absorbs softer shadows.
+        // The `.surface-glass-card` utility carries its own composite
+        // box-shadow including an inner white highlight for the specular
+        // glass edge — `shadow-soft` remains the fallback for components
+        // that opt out of the full glass treatment.
+        soft: '0 4px 12px -4px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)',
+        lift: '0 6px 16px -4px rgba(16,16,16,0.14), 0 24px 48px -12px rgba(16,16,16,0.22)',
+        glow: '0 0 0 6px rgba(255,106,19,0.18), 0 8px 24px -8px rgba(255,106,19,0.55)',
       },
       borderRadius: {
         '2xl': '1rem',

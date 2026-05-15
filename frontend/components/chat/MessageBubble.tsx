@@ -191,7 +191,7 @@ export function MessageBubble({ message }: Props) {
         transition={transition}
         className="flex w-full justify-start"
       >
-        <div className="rounded-2xl rounded-bl-md bg-card px-4 py-3 shadow-soft">
+        <div className="surface-glass-card rounded-2xl rounded-bl-md px-4 py-3">
           <TypingIndicator />
         </div>
       </motion.div>
@@ -221,7 +221,10 @@ export function MessageBubble({ message }: Props) {
       {bubbleBlocks.length > 0 ? (
         <div
           className={cn(
-            'max-w-[80%] rounded-2xl rounded-bl-md bg-card px-4 py-3 text-sm leading-relaxed text-ink-900 shadow-soft',
+            // Cycle 10 — assistant bubble becomes a tinted-glass surface
+            // on the Liquid Dawn gradient. Body text stays `text-ink-900`
+            // for AAA against the 72%-white frost.
+            'surface-glass-card max-w-[80%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-ink-900',
           )}
         >
           <MessageRenderer

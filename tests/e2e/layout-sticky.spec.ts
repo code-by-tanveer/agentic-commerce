@@ -62,10 +62,14 @@ test('bug 2: rail has a visible border-r separating it from the canvas', async (
   const desktopRail = page.locator('nav[aria-label="Chat history"]').first();
   await expect(desktopRail).toBeVisible();
 
-  // Post-fix, the rail's `border-right-color` resolves to the `ink-200`
-  // token (#d6d6d1). Pre-fix it was `ink-100` (#ededea), which read as
-  // ~invisible on the cream bg. The numeric assertion: the resolved
-  // border-right-color is darker than ink-100.
+  // Cycle 10 (2026-05-15 night) — the rail is now a tinted-glass surface
+  // (`.surface-glass-rail`) over the chromatic page gradient. The
+  // border-right is the *glass edge* — 1px translucent white (~30% alpha)
+  // that reads as a specular highlight on the glass, not a dark divider
+  // hairline. The original test asserted a dark `ink-200` channel-sum
+  // ≤700; the new contract asserts the border is present, 1px, and is
+  // light (white-leaning) so the glass edge is visible against the
+  // gradient. See DESIGN.md §2.15.
   const { borderRightColor, borderRightWidth } = await desktopRail.evaluate(
     (el) => {
       const s = window.getComputedStyle(el);
@@ -76,14 +80,19 @@ test('bug 2: rail has a visible border-r separating it from the canvas', async (
     },
   );
   expect(borderRightWidth).toBe('1px');
-  // ink-200 = #d6d6d1 = rgb(214, 214, 209). ink-100 = #ededea = rgb(237,
-  // 237, 234). The fix asserts the channel sum is at most 700 (ink-200's
-  // sum is 637; ink-100's is 708). This is a quiet but decisive check.
-  const m = borderRightColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  // Glass edge — translucent white. Either rgb(255, 255, 255) at some
+  // alpha, or rgba(255, 255, 255, ~0.30). Either way, channels are all
+  // high (light), not all low (dark).
+  const m = borderRightColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
   expect(m).not.toBeNull();
   if (m) {
-    const sum = Number(m[1]) + Number(m[2]) + Number(m[3]);
-    expect(sum).toBeLessThanOrEqual(700);
+    const r = Number(m[1]);
+    const g = Number(m[2]);
+    const b = Number(m[3]);
+    // Each channel ≥200 (light-leaning); sum ≥600 (white-ish glass edge).
+    expect(r).toBeGreaterThanOrEqual(200);
+    expect(g).toBeGreaterThanOrEqual(200);
+    expect(b).toBeGreaterThanOrEqual(200);
   }
 
   await page.screenshot({

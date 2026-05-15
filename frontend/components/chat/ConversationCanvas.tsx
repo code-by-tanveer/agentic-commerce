@@ -170,19 +170,24 @@ export function ConversationCanvas() {
             the trust-promise sentence drops to a quiet caption beneath. No
             bubble, no chrome — the headline IS the held shape. */}
         {onlyWelcome ? (
-          // 2026-05-14: dropped the framer-motion entrance — first paint
-          // should be instant. The welcome state is the user's first
-          // impression; any motion delay here reads as "slow load," not
-          // "deliberate craft." Held shape, no animation.
+          // Cycle 10 (2026-05-15 night) — the welcome held-shape now sits
+          // inside a wide tinted-glass cartouche over the Liquid Dawn
+          // gradient. Without the glass surface the serif headline would
+          // sit directly on the fuchsia region of the gradient (~50%
+          // lightness); ink-900 there reads ≈3.5:1 which fails AAA.
+          // Wrapping in `.surface-glass-card` lifts the text to the same
+          // 72%-white frost the chat bubbles sit on (AAA holds at
+          // ≥8.5:1). 2026-05-14's "held shape, no animation" decision
+          // survives — the cartouche is still a static composition.
           <div
-            className="flex flex-col items-start gap-6 py-8 sm:py-16"
+            className="surface-glass-card flex flex-col items-start gap-6 rounded-3xl p-8 sm:p-12 my-6 sm:my-10"
           >
             <h2 className="font-display text-3xl italic leading-[1.05] tracking-tight text-ink-900 sm:text-4xl md:text-5xl">
               What are you{' '}
               <span className="text-ink-600">looking for</span>
               <span className="text-accent-500">?</span>
             </h2>
-            <p className="max-w-md text-sm leading-relaxed text-ink-400">
+            <p className="max-w-md text-sm leading-relaxed text-ink-600">
               Shopify merchants, ranked by your preferences — not paid placement.
             </p>
             <div className="pt-1">

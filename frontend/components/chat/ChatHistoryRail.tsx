@@ -134,9 +134,16 @@ export function ChatHistoryRail() {
           rail and page share `bg-ink-50`, so the `border-r-ink-200`
           hairline is the only panel-break signal — bumped from `ink-100`
           (too subtle on cream) per the 2026-05-14 user-test pass. */}
+      {/* Cycle 10 (2026-05-15 night) — rail surface is now
+          `.surface-glass-rail` (translucent over the page gradient + 20px
+          blur + 1.4 saturate + 1px white right-edge). The opaque
+          `bg-surface-rail` + ink-200 border combo was a 2024-editorial
+          read; the glass treatment is the Liquid Dawn sidebar move
+          (see DESIGN.md §2.15). The right-edge border is the rail's
+          glass edge — no separate `border-r` needed. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col border-r border-ink-200 bg-surface-rail"
+        className="surface-glass-rail hidden min-[1025px]:flex sticky top-0 h-dvh w-[260px] flex-shrink-0 flex-col"
       >
         <RailPanel
           activeId={sessionId}
@@ -153,7 +160,7 @@ export function ChatHistoryRail() {
           lives in <Header /> instead. Sticky + `h-dvh` same as desktop. */}
       <nav
         aria-label="Chat history"
-        className="hidden min-[641px]:flex min-[1025px]:hidden sticky top-0 h-dvh w-14 flex-shrink-0 flex-col items-center gap-2 border-r border-ink-200 bg-surface-rail py-3"
+        className="surface-glass-rail hidden min-[641px]:flex min-[1025px]:hidden sticky top-0 h-dvh w-14 flex-shrink-0 flex-col items-center gap-2 py-3"
       >
         <button
           type="button"
@@ -219,7 +226,7 @@ export function ChatHistoryRail() {
               animate={reduced ? { opacity: 1 } : { x: 0, opacity: 1 }}
               exit={reduced ? { opacity: 0 } : { x: -16, opacity: 0 }}
               transition={overlayT}
-              className="fixed left-0 top-0 z-30 h-screen w-[260px] border-r border-ink-100 bg-surface-rail shadow-lift"
+              className="surface-glass-rail fixed left-0 top-0 z-30 h-screen w-[260px] shadow-lift"
             >
               <RailPanel
                 activeId={sessionId}

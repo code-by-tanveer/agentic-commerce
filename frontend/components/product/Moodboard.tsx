@@ -133,7 +133,7 @@ export function Moodboard({
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduced ? 0.1 : 0.25, ease: 'easeOut' }}
-      className="flex flex-col gap-2 rounded-2xl bg-card p-3 shadow-soft"
+      className="surface-glass-card flex flex-col gap-2 rounded-2xl p-3"
       aria-label="Image attributes"
     >
       <div className="flex items-start gap-3">

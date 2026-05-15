@@ -49,7 +49,15 @@ export default function Page() {
                 <main> remains the grain/min-h-dvh scaffold but now also
                 owns `flex-1` so the canvas + InputBar take the remaining
                 width to the right of the rail. */}
-            <div className="grain flex min-h-dvh bg-ink-50">
+            {/* Cycle 10 (2026-05-15 night) — `bg-ink-50` removed from the
+                outer flex wrapper. The body now paints the chromatic
+                Liquid Dawn gradient (`globals.css :root --page-gradient`);
+                a solid-color background here would block the gradient
+                from showing through under the rail / canvas / InputBar.
+                The `grain` utility (subtle dot texture overlay) stays —
+                it adds a faint optical-grain to the entire shell that
+                grounds the gradient against pure-CSS banding. */}
+            <div className="grain flex min-h-dvh">
               {/* T1.17 — single page-level <h1> for screen readers. The visual
                   wordmark in <Header> is styled prose (a <p> for layout). */}
               <h1 className="sr-only">Trove</h1>

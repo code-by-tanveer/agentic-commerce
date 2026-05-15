@@ -319,7 +319,9 @@ The radial is the answer to "where does color live in a 2026-modern interface?" 
 
 **Cycle 9.2 dark-mode alpha (2026-05-15 PM).** Ember alpha is now driven by `--ember-alpha`: `0.14` in light mode (unchanged from 9.1), `0.20` in dark. Orange against the dark `#1c1c1e` ground reads dimmer than the same orange against the cool-slate `#b8c1c8`, so the alpha bumps to keep the *perceived* intensity stable across themes. The 20% ceiling is still below the "decorative AI gradient" failure mode (~25%+ is where that read kicks in on the cool-slate ground; the dark ground has more headroom because the contrast against the chrome is sharper).
 
-### 2.14 Theme system — light + dark
+### 2.14 Theme system — light + dark (SUPERSEDED by §2.15)
+
+> **2026-05-15 night — SUPERSEDED by Cycle 10 / §2.15 "Liquid Dawn".** The 3-state System / Light / Dark picker shipped in Cycle 9.2 (this section) was rejected same-day: *"what did you did, you made the cards white and black, I was talking about overall theme of the app, research and fix this."* The user was not asking for a toggleable theme — they were asking for ONE opinionated 2026 composition. Cycle 10 (§2.15) collapses this entire system to a single palette and a single Liquid-Glass-over-chromatic-gradient composition; the `ThemePicker` UI is removed from `ProfileMenu`, the `[data-theme]` CSS branches are collapsed to `:root` only, and the inline `THEME_BOOT_SCRIPT` is removed from `layout.tsx`. The `useTheme` hook in `hooks/useTheme.ts` is retained as an unused internal API for a future cycle but no UI exposes it. The historical content below is preserved for the cycle archive only — do not implement against this section.
 
 Added 2026-05-15 PM (Cycle 9.2). A 3-state theme system — `system` (follows `prefers-color-scheme`), `light` (cool slate-blue), `dark` (deep charcoal) — managed via a segmented control in `ProfileMenu`. Persists to `localStorage` under `trove-theme`. Implemented in-house (no `next-themes`, no `tailwindcss-themer`) per the brief that the toggle is a 4-line hook, not a dependency.
 
@@ -364,6 +366,57 @@ The orange `accent-500 #ff6a13` is identical across themes — commerce signal s
 - No `next-themes`. Pre-hydration script is 12 lines verbatim.
 - No theming of `accent-500` / state colors (emerald-50 / rose-50 etc.). Brand + state colors are theme-stable on purpose — see §2.2 + §2.3.
 - No second ambient surface for dark (no cyan blob to balance the orange). §2.13 "only one ambient surface" rule survives the theme split.
+
+### 2.15 "Liquid Dawn" — single composition (Cycle 10)
+
+Added 2026-05-15 night (Cycle 10). Supersedes §2.14. Companion research: `docs/research/2026-05-15-decisive-modern.md`.
+
+**Decision.** Trove ships ONE opinionated 2026 visual composition. The reference shelf converges on the same move (Apple iOS 26 / macOS Tahoe Liquid Glass, Daydream iOS 26 shopping app, 2026 glassmorphism best practices, Phia, Mercury): **chromatic page ground + tinted-glass structural surfaces + one commerce accent.** There is no user-facing toggle.
+
+**Composition layers.**
+
+1. **Page ground — chromatic gradient.** A three-stop linear gradient (top-left to bottom-right): deep indigo `#3b2a8f` → fuchsia `#a23ea0` → coral `#ff8a5b`. Apple Tahoe sunrise lineage. Painted on `html, body` with `background-attachment: fixed` so the gradient stays put while content scrolls and every glass surface refracts the same color regardless of scroll position. The `--page-gradient` CSS var lives on `:root` in `globals.css`.
+2. **Ember atmosphere.** The §2.13 radial survives unchanged in role (warm top-right pull). Alpha unchanged at `0.14`. The radial now reinforces the gradient's coral terminus rather than fighting a neutral ground.
+3. **Glass header — `.surface-glass-header`.** `background-color: rgba(255,255,255,0.42); backdrop-filter: blur(40px) saturate(1.6); border-bottom: 1px solid rgba(255,255,255,0.45);`. The strongest blur tier. Sits over the indigo region where the gradient is densest, so the blur visibly bends color into a lighter, hazier strip across the top.
+4. **Glass rail — `.surface-glass-rail`.** `background-color: rgba(255,255,255,0.45); backdrop-filter: blur(20px) saturate(1.4); border-right: 1px solid rgba(255,255,255,0.30);`. Used by both `ChatHistoryRail` (left) and the desktop `Shortlist` rail (right). The pair frames the canvas in glass.
+5. **Glass input — `.surface-glass-input`.** `background-color: rgba(255,255,255,0.55); backdrop-filter: blur(24px) saturate(1.5); border-top: 1px solid rgba(255,255,255,0.30);`. The sticky InputBar floor.
+6. **Tinted-glass cards — `.surface-glass-card`.** `background-color: rgba(255,255,255,0.72); backdrop-filter: blur(20px) saturate(1.5); border: 1px solid rgba(255,255,255,0.55);` plus a layered box-shadow with an inner-white specular highlight for the "wet" glass edge. **This is the load-bearing change vs. Cycle 9.2:** cards are no longer opaque white documents. They are tinted-white over the gradient — the gradient bleeds through the edges, the saturate boost pulls chroma through the frost, and the 72% white opacity holds AAA body-text contrast against every region of the gradient (worst case ≈8.5:1 against the darkest indigo; ≈17:1 against coral).
+
+**Accent (unchanged).** `accent-500 #ff6a13` stays the commerce-intent color per §2.2. The orange against tinted-glass cards reads as a hot commitment fill regardless of which gradient region the card occupies.
+
+**Cards-are-glass rule.** Every card-tier surface in the app uses `.surface-glass-card`: `ProductCard`, `MessageBubble` (assistant + typing), `CollageView`, `Shortlist` item rows, `Shortlist` mobile sheet, `Shortlist` desktop rail (uses the lighter `.surface-glass-rail`), `Moodboard`, `ComparisonTable`, `OutfitBundle.ProductTile`, `NoResultsBlock`, `ProfileMenu` popover, `InputBar` compose pill, and the welcome held-shape cartouche. The single exception is `OutfitBundle`'s outer frame which keeps `bg-accent-50` (the "one coordinated object" warm tint from §2.2) plus a 1px white border for glass-family consistency.
+
+**Apple's no-glass-on-glass rule survives.** Surfaces never stack vertically — the header sits above the rail which sits beside the canvas which sits above the InputBar; cards live IN the canvas; the popover floats ABOVE the canvas but is never inside the rail. The hierarchy reads in one direction (down/forward) and glass never overlaps glass at the same z-tier.
+
+**Welcome cartouche.** The welcome held-shape (`ConversationCanvas`'s `onlyWelcome` branch) now sits inside a `.surface-glass-card` cartouche. Without the cartouche the serif headline would sit directly on the fuchsia region of the gradient (~50% lightness) where `ink-900` reads ≈3.5:1 — below AAA. The cartouche restores contrast to the same ≥8.5:1 floor every other card holds.
+
+**What was killed in this cycle.**
+
+- The `[data-theme="light"]` / `[data-theme="dark"]` CSS branches in `globals.css`.
+- The `ThemePicker` segmented control in `ProfileMenu`.
+- The inline `THEME_BOOT_SCRIPT` injected via `dangerouslySetInnerHTML` in `app/layout.tsx`.
+- The `headers().get('x-nonce')` lookup in `app/layout.tsx` (no inline script remains to nonce).
+- The "warm slate ground" decision from Cycle 9.1 (`#c9c4ba`).
+- The "cool slate-blue ground" decision from Cycle 9.2 (`#b8c1c8`).
+- The `bg-ink-50` page-bg semantic role — `ink-50` is now a chip-only surface (`#f3f1ee`).
+
+**What survives.**
+
+- `accent-500 #ff6a13` and the §2.2 commitment-only rule.
+- The Instrument Serif `Trove·` wordmark with middle-dot per §1.1.
+- The ember radial (§2.13) — same alpha, same drift, same role.
+- The shadow XOR border rule (§2.7) — note the `.surface-glass-card` border is a *defining glass property* (the glass edge), not a competing elevation hairline, so the rule reads cleanly.
+- The four-content-serif-homes cap (§2.4) — the welcome headline still counts as the welcome home.
+
+**Accessibility floor (re-stated).** Body text `ink-900 #101010` on `.surface-glass-card` over the worst-case indigo region resolves to ≈8.5:1 — passes AAA for body and large text. Body text on the unblurred page-gradient itself (no glass surface) is never used — every text-carrying element sits on a glass card or the deep `ink-900` user-bubble.
+
+**Things deliberately NOT done.**
+
+- No light/dark toggle. ONE composition.
+- No second ambient gradient (no cyan blob to "balance" the coral). §2.13 single-ambient rule holds.
+- No accent gradient on the Buy CTA. Orange stays a fill, not a sweep.
+- No glass on the Buy button itself. Glass is structural; commitment is opaque.
+- No multi-stop gradient on individual cards. Glass tint is white, not chromatic — the chromaticity comes through from behind, never painted on the glass.
 
 ---
 

@@ -101,7 +101,17 @@ export function InputBar() {
     // physical inset (desktop / Android with on-screen nav).
     <div
       ref={stickyRef}
-      className="sticky bottom-0 z-10 border-t border-ink-100 bg-ink-50/80 backdrop-blur"
+      // Cycle 10 (2026-05-15 night) — InputBar surface is now
+      // `.surface-glass-input` (24px backdrop-blur, 1.5 saturate, 55%
+      // white tint, 1px white top edge). Sits over the bottom edge of
+      // the chromatic gradient, so the blur visibly bends the coral
+      // terminus into a softer band beneath the textarea. Replaces the
+      // prior `bg-ink-50/80 backdrop-blur border-t border-ink-100`
+      // treatment — that surface was a near-neutral wash over a
+      // near-neutral ground; on the gradient the new glass treatment
+      // gives the InputBar real presence as a structural floor surface.
+      // See DESIGN.md §2.15.
+      className="surface-glass-input sticky bottom-0 z-10"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
     >
       <form
@@ -114,7 +124,13 @@ export function InputBar() {
         <label id={labelId} htmlFor={`${labelId}-input`} className="sr-only">
           Message
         </label>
-        <div className="relative flex w-full items-end rounded-3xl bg-card px-3 py-2 shadow-soft transition focus-within:shadow-lift">
+        {/* Cycle 10 — the textarea container becomes a tinted-glass pill
+            inside the glass InputBar. The pill is one tier "tighter"
+            (higher contrast, lighter blur) than the structural InputBar
+            surface so the composing affordance reads as a distinct
+            object inside the chrome — Apple's pattern for the iMessage
+            compose pill over the Messages glass floor. */}
+        <div className="surface-glass-card relative flex w-full items-end rounded-3xl px-3 py-2 transition focus-within:shadow-lift">
           <input
             ref={fileInputRef}
             type="file"

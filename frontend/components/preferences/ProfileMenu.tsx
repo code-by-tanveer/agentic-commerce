@@ -7,7 +7,6 @@ import { User } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { usePreferences } from '@/hooks/usePreferences';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
-import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 import { DefaultFiltersSection, PreferencesCard } from './PreferencesCard';
 
 // ---------------------------------------------------------------------------
@@ -188,7 +187,13 @@ function ProfilePopover({
         exit={reduced ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.98 }}
         transition={popoverT}
         className={cn(
-          'fixed z-40 rounded-2xl bg-card p-4 shadow-soft',
+          // Cycle 10 — popover surface uses the tinted-glass card treatment
+          // so it matches every other floating panel in the app. The
+          // `.surface-glass-card` utility includes the inner-white-highlight
+          // border, backdrop blur, and saturate boost; no separate
+          // `shadow-soft` needed (the utility's box-shadow already layers
+          // the contact + lift shadows).
+          'surface-glass-card fixed z-40 rounded-2xl p-4',
           // Mobile bottom sheet
           'inset-x-2 bottom-2 rounded-2xl',
           // Desktop: anchored to top-right under the header
@@ -201,15 +206,13 @@ function ProfilePopover({
           aria-hidden
           className="mx-auto mb-2 h-1 w-12 rounded-full bg-ink-100 sm:hidden"
         />
-        {/* Cycle 9.2 (2026-05-15 PM) — theme picker. Sits above the
-            identity block because it's the most-likely-discoverable spot
-            for "where do I switch to dark mode?" and because it's the
-            ONLY chrome that flips the whole app's appearance — it earns
-            top placement. Rendered in both empty + populated states so
-            a first-time user can pick dark mode before ever telling us
-            their size. See DESIGN.md §2.14. */}
-        <ThemePicker />
-        <div aria-hidden className="my-3 h-px bg-ink-100" />
+        {/* Cycle 10 (2026-05-15 night) — the Cycle-9.2 `ThemePicker` is
+            removed. The app ships ONE composition (Liquid Dawn — see
+            `globals.css` and `docs/research/2026-05-15-decisive-modern.md`);
+            there is no user-facing theme toggle. The `useTheme` hook is
+            retained as internal API for a future cycle but no UI exposes
+            it. See DESIGN.md §2.14 (marked superseded) + §2.15 for the
+            single-composition rationale. */}
         {hasPrefs || isLoading ? (
           <PreferencesCard />
         ) : (
@@ -261,69 +264,11 @@ function EmptyExplainer({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// ThemePicker — Cycle 9.2 (2026-05-15 PM)
-//
-// 3-pill segmented control: System / Light / Dark. The active pill uses
-// the same `bg-ink-900 text-white` treatment as the rest of the app's
-// "selected" affordances (Shortlist Love/Maybe pills, shipping radios)
-// so the visual grammar stays consistent. Behaves as a radiogroup so
-// screen-reader users hear "Theme, radiogroup, three options" rather
-// than three loose buttons.
-//
-// Hooked to `useTheme`. The hook owns persistence (localStorage) and
-// the `data-theme` attribute on <html>; this component is presentation
-// only. The eyebrow ("Theme") matches the rest of the popover's
-// "About you" / "Default filters (optional)" rhythm so the picker reads
-// as a sibling block, not a foreign chrome graft.
-// ---------------------------------------------------------------------------
-
-const THEME_OPTIONS: ReadonlyArray<{ value: ThemeMode; label: string }> = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
-
-function ThemePicker() {
-  const { mode, setMode } = useTheme();
-  return (
-    <section aria-label="Theme" className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between">
-        <p className="text-[11px] uppercase tracking-wider text-ink-400">
-          Theme
-        </p>
-        <p className="text-xs text-ink-400">
-          {mode === 'system' ? 'Follows your device' : `${mode[0].toUpperCase()}${mode.slice(1)}`}
-        </p>
-      </div>
-      <div
-        role="radiogroup"
-        aria-label="Theme"
-        className="inline-flex w-full items-center gap-1 rounded-full bg-ink-50 p-1"
-      >
-        {THEME_OPTIONS.map((opt) => {
-          const active = mode === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              data-theme-option={opt.value}
-              onClick={() => setMode(opt.value)}
-              className={cn(
-                'flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
-                active
-                  ? 'bg-ink-900 text-white shadow-soft'
-                  : 'text-ink-600 hover:bg-card/60',
-              )}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
+// Cycle 9.2's `ThemePicker` (System/Light/Dark segmented control) was
+// removed in Cycle 10 (2026-05-15 night). User feedback ("you made the
+// cards white and black, I was talking about overall theme") rejected
+// the toggle as solving the wrong problem; the app now ships ONE
+// opinionated composition (Liquid Dawn). The `useTheme` hook in
+// `hooks/useTheme.ts` is retained as internal API for a future cycle
+// but no UI exposes it. See `docs/research/2026-05-15-decisive-modern.md`
+// and DESIGN.md §2.15.

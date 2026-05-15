@@ -514,7 +514,7 @@ export function ComparisonTable({ products, axes }: Props) {
   // axis name stays visible while scrolling product columns. Per DESIGN.md
   // §4 sticky-leftmost-column.
   return (
-    <div className="overflow-hidden rounded-2xl bg-card shadow-soft">
+    <div className="surface-glass-card overflow-hidden rounded-2xl">
       <div className="flex items-center justify-between gap-3 border-b border-ink-100 px-4 py-2">
         {caption ? (
           <span className="text-xs uppercase tracking-wider text-ink-400">

@@ -119,9 +119,16 @@ export function OutfitBundle({ anchorProductId, items, rationales, rationale }: 
       aria-label="Outfit bundle"
       data-pulse-state={savedAt ? 'on' : 'off'}
       className={cn(
-        // `accent-50` tint reads as a single coordinated object. Shadow only
-        // (§2.7) — no border to compound the tint.
-        'rounded-2xl bg-accent-50 p-4 shadow-soft',
+        // Cycle 10 — OutfitBundle keeps its warm `accent-50` tint as the
+        // "one coordinated object" signal (§2.2/§2.7), but now layers it
+        // OVER the tinted-glass surface so the bundle reads as a warm
+        // frosted panel against the Liquid Dawn gradient. The accent-50
+        // tint shows through the 72% white frost as a subtle warm cast —
+        // distinguishes "the outfit" from individual product cards
+        // without breaking the glass family. Backdrop blur is reduced
+        // (the bundle is already an opaque-ish accent-50 layer) by using
+        // the simpler `shadow-soft` here.
+        'rounded-2xl bg-accent-50 p-4 shadow-soft border border-white/40',
       )}
     >
       <header className="mb-3 flex items-start justify-between gap-3">
@@ -252,7 +259,7 @@ function BundleCell({
   return (
     <div
       className={cn(
-        'flex flex-col gap-2 rounded-xl bg-card p-2 shadow-soft',
+        'surface-glass-card flex flex-col gap-2 rounded-xl p-2',
         className,
       )}
     >

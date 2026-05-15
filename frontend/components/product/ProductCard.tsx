@@ -252,8 +252,19 @@ export function ProductCard({ product, index = 0 }: Props) {
       // string-typed for Playwright's `[data-anchor="true"]` selector.
       data-anchor={isAnchor ? 'true' : 'false'}
       className={cn(
-        'group relative overflow-hidden rounded-2xl bg-card shadow-soft transition hover:shadow-lift',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50',
+        // Cycle 10 (2026-05-15 night) — ProductCard surface is now
+        // tinted glass (`.surface-glass-card`). The 72% white over the
+        // Liquid Dawn gradient + 20px blur + 1.5 saturate pulls the
+        // underlying chroma through the frost so the card reads as a
+        // real glass surface, not a plain white document. The utility
+        // includes a layered box-shadow with an inner-white specular
+        // highlight (Apple's Liquid Glass "wet" edge) and the lift
+        // shadow on hover — no separate `shadow-soft hover:shadow-lift`
+        // needed. AAA body-text contrast holds against every region of
+        // the gradient (worst case ≈8.5:1 against the indigo). See
+        // DESIGN.md §2.15.
+        'group surface-glass-card relative overflow-hidden rounded-2xl transition',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white/40',
       )}
     >
       {/* aria-live region for the L/M/S fallback (DESIGN.md §7). */}
